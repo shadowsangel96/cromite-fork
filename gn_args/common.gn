@@ -1,0 +1,3 @@
+# Argomenti GN del fork, comuni a tutte le piattaforme. Vanno sopra build/cromite.gn_args:
+# una chiave definita qui sostituisce quella di Cromite (solo a livello principale,
+# non dentro i blocchi `if` di Cromite). Anteprima: python3 tools/forkctl.py gn-args --os mac --cpu arm64

@@ -1,0 +1,6 @@
+# cache dei download (Cromite, file Chromium da Gitiles)
+/.cache/
+# mini-albero di lavoro di forkctl
+/.work/
+__pycache__/
+.DS_Store

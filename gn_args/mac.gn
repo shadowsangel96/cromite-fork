@@ -1,0 +1,3 @@
+# macOS: Cromite non lo compila. Nella prima fase di porting gli avvisi del compilatore
+# sul codice di Cromite non devono fermare la build; lo rimettiamo a true quando è pulita.
+treat_warnings_as_errors = false

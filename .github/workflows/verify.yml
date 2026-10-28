@@ -1,0 +1,28 @@
+# A ogni push e PR: test di forkctl e controllo che tutte le patch si applichino
+# sulla versione di Cromite bloccata in upstream.lock.
+name: Verifica patch
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache dei download (Cromite, file di Chromium)
+        uses: actions/cache@v4
+        with:
+          path: .cache
+          key: forkctl-${{ github.run_id }}
+          restore-keys: forkctl-
+
+      - name: Test di forkctl
+        run: python3 tests/test_forkctl.py
+
+      - name: Le patch si applicano?
+        run: python3 tools/forkctl.py verify

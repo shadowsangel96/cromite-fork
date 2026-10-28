@@ -1,0 +1,105 @@
+# Ogni giorno controlla se Cromite ha una nuova release stabile e riapplica le nostre patch.
+# - tutto pulito (o conflitti già risolti in passato, via rerere): PR + merge + build
+# - conflitto o patch diventata vuota: si ferma e apre una issue con il report
+name: Aggiornamento da Cromite
+
+on:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag Cromite (vuoto = ultima release stabile)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: upstream-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache dei download (Cromite, file di Chromium)
+        uses: actions/cache@v4
+        with:
+          path: .cache
+          key: forkctl-${{ github.run_id }}
+          restore-keys: forkctl-
+
+      - name: C'è un Cromite nuovo?
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: python3 tools/forkctl.py check --github-output ${TAG:+--to "$TAG"}
+
+      - name: Riapplica le nostre patch
+        id: update
+        if: steps.check.outputs.update == 'true'
+        run: |
+          set +e
+          python3 tools/forkctl.py update --to "${{ steps.check.outputs.tag }}"
+          rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          # 2 = conflitto, 3 = patch diventata vuota: li gestisce lo step dell'issue
+          if [ $rc -ne 0 ] && [ $rc -ne 2 ] && [ $rc -ne 3 ]; then exit $rc; fi
+
+      - name: Report
+        if: steps.check.outputs.update == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ steps.check.outputs.version }}
+          path: reports/update-${{ steps.check.outputs.version }}.md
+
+      - name: PR dell'aggiornamento (e merge se pulito)
+        if: steps.update.outputs.rc == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.check.outputs.tag }}
+          VERSION: ${{ steps.check.outputs.version }}
+          AUTO_MERGE: ${{ vars.AUTO_MERGE_CLEAN || 'true' }}
+          BASE: ${{ github.event.repository.default_branch }}
+        run: |
+          branch="upstream/$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add -A upstream.lock patches state reports
+          git commit -m "Aggiorna a Cromite $VERSION" -m "Tag: $TAG"
+          git push -f origin "$branch"
+          if ! gh pr view "$branch" --json number >/dev/null 2>&1; then
+            gh pr create --base "$BASE" --head "$branch" \
+              --title "Aggiorna a Cromite $VERSION" --body-file "reports/update-$VERSION.md"
+          fi
+          if [ "$AUTO_MERGE" = "true" ]; then
+            gh pr merge "$branch" --squash --delete-branch
+            gh workflow run build.yml --ref "$BASE"
+          fi
+
+      - name: Issue se serve una decisione
+        if: steps.update.outputs.rc == '2' || steps.update.outputs.rc == '3'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          title="Aggiornamento a Cromite $VERSION: le patch richiedono una decisione"
+          existing=$(gh issue list --state open --limit 100 --json number,title \
+            --jq ".[] | select(.title == \"$title\") | .number" | head -1)
+          if [ -z "$existing" ]; then
+            gh issue create --title "$title" --body-file "reports/update-$VERSION.md"
+          fi
+          echo "::error::Aggiornamento a $VERSION fermo: serve una decisione sulle patch (vedi issue)"
+          exit 1

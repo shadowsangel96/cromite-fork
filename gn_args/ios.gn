@@ -1,0 +1,12 @@
+# forkctl: senza-args-cromite
+# iOS usa WebKit (regola Apple): gli argomenti Blink/Android di Cromite qui non valgono,
+# quindi partiamo da un set minimo nostro.
+is_debug = false
+is_component_build = false
+is_official_build = false
+symbol_level = 0
+target_environment = "device"
+ios_enable_code_signing = false
+use_official_google_api_keys = false
+enable_reporting = false
+treat_warnings_as_errors = false

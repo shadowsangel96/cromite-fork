@@ -1,0 +1,113 @@
+# Build completa e release. Gira su runner self-hosted (Chromium non entra nei runner GitHub
+# gratuiti): un host Linux x86-64 per Windows, un Mac Apple Silicon per macOS e iOS.
+# Ogni piattaforma parte solo se la variabile del suo host è "true" (Settings > Variables).
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: "Piattaforme (separate da virgola)"
+        default: "windows,macos,ios"
+      publish:
+        description: "Pubblica una release GitHub"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      release: ${{ steps.meta.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("upstream.lock"))["chromium_version"])')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release=v$version-$(git rev-parse --short=10 HEAD)" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: meta
+    if: contains(inputs.targets || 'windows,macos,ios', 'windows') && vars.LINUX_BUILD_HOST == 'true'
+    runs-on: [self-hosted, linux, x64, chromium]
+    timeout-minutes: 1440
+    steps:
+      - uses: actions/checkout@v4
+      - run: tools/build/build-windows.sh
+        env:
+          ACCEPT_MSVC_LICENSE: ${{ vars.ACCEPT_MSVC_LICENSE }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*.zip
+
+  macos:
+    needs: meta
+    if: contains(inputs.targets || 'windows,macos,ios', 'macos') && vars.MAC_BUILD_HOST == 'true'
+    runs-on: [self-hosted, macOS, ARM64, chromium]
+    timeout-minutes: 1440
+    steps:
+      - uses: actions/checkout@v4
+      - run: tools/build/build-macos.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*-macos-*.zip
+
+  ios:
+    needs: [meta, macos]
+    # dopo macOS: stesso Mac, una build per volta
+    if: >-
+      always() && needs.meta.result == 'success' && vars.MAC_BUILD_HOST == 'true' &&
+      contains(inputs.targets || 'windows,macos,ios', 'ios')
+    runs-on: [self-hosted, macOS, ARM64, chromium]
+    timeout-minutes: 1440
+    steps:
+      - uses: actions/checkout@v4
+      - run: tools/build/build-ios.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: dist/*.ipa
+
+  release:
+    needs: [meta, windows, macos, ios]
+    if: >-
+      always() && (inputs.publish == null || inputs.publish) &&
+      (needs.windows.result == 'success' || needs.macos.result == 'success' || needs.ios.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Manifest per gli aggiornamenti in-app
+        env:
+          RELEASE: ${{ needs.meta.outputs.release }}
+          VERSION: ${{ needs.meta.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'EOF'
+          import json, os, pathlib
+          release, repo = os.environ["RELEASE"], os.environ["REPO"]
+          assets = {p.name: f"https://github.com/{repo}/releases/download/{release}/{p.name}"
+                    for p in sorted(pathlib.Path("dist").iterdir()) if p.is_file()}
+          manifest = {"version": os.environ["VERSION"], "release": release,
+                      "cromite": json.load(open("upstream.lock"))["cromite_tag"], "assets": assets}
+          pathlib.Path("dist/update.json").write_text(json.dumps(manifest, indent=2) + "\n")
+          EOF
+      - name: Pubblica la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE: ${{ needs.meta.outputs.release }}
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          notes="Basato su Cromite $(python3 -c 'import json; print(json.load(open("upstream.lock"))["cromite_tag"])')"
+          if [ -f "reports/update-$VERSION.md" ]; then notes=$(cat "reports/update-$VERSION.md"); fi
+          gh release create "$RELEASE" dist/* --title "$RELEASE" --notes "$notes"

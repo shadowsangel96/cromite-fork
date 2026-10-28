@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Wed, 28 Oct 2026 10:37:38 +0100
+Subject: [PATCH] Branding: nome del fork e bundle id per macOS/iOS
+
+Nome provvisorio: sostituire NomeBrowser e org.nomebrowser quando scegliamo il nome definitivo.
+
+Fork-Patch: common/0001-branding-nome-del-fork-e-bundle-id-per-macos-ios.patch
+
+diff --git a/chrome/app/theme/chromium/BRANDING b/chrome/app/theme/chromium/BRANDING
+index 9f98aa4bf543920b9d4c9916df7f6b71928ca933..576b3937d39f8bc742ff97e2efae322623742708 100644
+--- a/chrome/app/theme/chromium/BRANDING
++++ b/chrome/app/theme/chromium/BRANDING
+@@ -1,10 +1,10 @@
+ COMPANY_FULLNAME=The Chromium Authors
+ COMPANY_SHORTNAME=The Chromium Authors
+-PRODUCT_FULLNAME=Cromite
+-PRODUCT_SHORTNAME=Cromite
+-PRODUCT_INSTALLER_FULLNAME=Cromite Installer
+-PRODUCT_INSTALLER_SHORTNAME=Cromite Installer
++PRODUCT_FULLNAME=NomeBrowser
++PRODUCT_SHORTNAME=NomeBrowser
++PRODUCT_INSTALLER_FULLNAME=NomeBrowser Installer
++PRODUCT_INSTALLER_SHORTNAME=NomeBrowser Installer
+ COPYRIGHT=Copyright @LASTCHANGE_YEAR@ The Chromium Authors. All rights reserved.
+-MAC_BUNDLE_ID=org.chromium.Chromium
++MAC_BUNDLE_ID=org.nomebrowser.NomeBrowser
+ MAC_CREATOR_CODE=Cr24
+ MAC_TEAM_ID=

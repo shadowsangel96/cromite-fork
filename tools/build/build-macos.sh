@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Build macOS (arm64 di default, FORK_MAC_CPU=x64 per Intel). Cromite non supporta macOS:
+# le correzioni per farlo compilare e funzionare vanno in patches/macos/ (titolo "mac: ...").
+# Requisiti host: Mac Apple Silicon, Xcode completo, ~32 GB RAM, ~250 GB su volume APFS.
+source "$(dirname "$0")/common.sh"
+
+[ "$(uname -s)" = Darwin ] || die "macOS si compila solo su un Mac"
+xcodebuild -version >/dev/null 2>&1 || die "serve Xcode completo (non solo i Command Line Tools)"
+CPU="${FORK_MAC_CPU:-arm64}"
+
+prepare_source "" 'target_os = ["mac"]'
+
+OUT="out/mac-$CPU"
+gn_gen mac "$CPU" "$OUT"
+build "$OUT" chrome
+
+say "impacchetto"
+APP="$SRC/$OUT/$(product_name).app"
+[ -d "$APP" ] || die "app non trovata: $APP"
+# Firma ad-hoc: si avvia su questo Mac; per distribuirla ad altri serve un Developer ID + notarizzazione.
+codesign --force --deep --sign - "$APP"
+mkdir -p "$DIST"
+ZIP="$DIST/$FORK_NAME-macos-$CPU.zip"
+rm -f "$ZIP"
+ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
+say "pronto: $ZIP"
