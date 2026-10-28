@@ -433,8 +433,9 @@ spento come già in Cromite (`Do-not-store-passwords-by-default.patch`,
   - **Piano B**, quando Chromium toglierà del tutto MV2 e la patch di Cromite non basterà più:
     il motore nativo `adblock-rust` di Brave (MPL-2.0), che legge le liste e gli scriptlet di
     uBlock Origin. Nel frattempo, uBlock Origin Lite (MV3).
-- **Estensioni: solo quelle approvate.** Un elenco di estensioni ammesse, all'inizio solo uBlock
-  Origin (più "Password di iCloud" se serve la riserva); le altre si valutano una per una. Spente
+- **Estensioni: solo quelle approvate.** Un elenco di estensioni ammesse, all'inizio solo Claude in
+  Chrome (più "Password di iCloud" se serve la riserva; uBlock Origin è integrato e non conta);
+  le altre si valutano una per una. Spente
   di default in incognito. I motivi: fingerprinting (le estensioni che inseriscono elementi nelle
   pagine si vedono), sicurezza (accesso a tutti i siti, aggiornamenti che possono diventare
   malevoli) e il fatto che le funzioni più comuni sono già nel browser.
@@ -483,20 +484,35 @@ che un'estensione non può avere.
 - **Le tue chat di claude.ai:** claude.ai dentro il pannello, con il tuo account, quindi chat,
   progetti e artifact come nell'app. Non risulta un'API ufficiale per leggere le chat di claude.ai,
   quindi niente scorciatoie non ufficiali: le chat si usano da claude.ai stesso.
-- **Ponte con gli altri Claude:** il browser espone i suoi strumenti (leggere una pagina, cliccare,
-  compilare, fare screenshot) come server MCP locale, così Claude Code e l'app Claude sul Mac
-  possono usarlo, come già fa Claude in Chrome.
+- **Ponte con gli altri Claude:** lo fa già Claude in Chrome con Claude Code. Se servirà di più
+  (per esempio per l'app Claude sul Mac), il browser espone i suoi strumenti come server MCP
+  locale.
 - **Voce:** dettatura e lettura delle risposte con i servizi vocali del sistema.
 
 **Come funziona**
 
-- **Due canali, perché si pagano in modo diverso:** claude.ai (abbonamento) per le chat nel
-  pannello; l'API di Anthropic (chiave API, a consumo) per tutto ciò che legge o usa il browser.
-  La chiave sta nel portachiavi del sistema, mai in chiaro.
+- **Claude in Chrome integrato, con l'abbonamento claude.ai** (decisione). L'estensione ufficiale
+  di Anthropic si installa da sola al primo avvio dal Chrome Web Store: non la ridistribuiamo,
+  perché è software di Anthropic. Il browser poi la integra:
+  - il pulsante Claude apre il suo pannello nel pannello laterale del browser;
+  - la sua icona non compare tra le estensioni;
+  - una regola del browser (`ExtensionSettings`, `runtime_blocked_hosts`) le impedisce di leggere
+    e usare i siti esclusi (banche, sanità).
+  Con l'abbonamento: chat sulle pagine, "Fallo tu" (l'agente) e le altre funzioni di Claude in
+  Chrome, compreso il collegamento con Claude Code.
+- **Funzioni extra, a consumo con l'API di Anthropic** (chiave nel portachiavi del sistema, mai in
+  chiaro; limite di spesa sotto): puntatore magico, cerchia e cerca, "Chiedi a Claude" dalla
+  barra, scrittura nei campi di testo, menu sul testo selezionato, schede e cronologia in
+  linguaggio naturale. Le risposte compaiono dove le chiedi (fumetto accanto all'elemento, menu
+  della barra), senza aprire un'altra chat.
+- **Da verificare con la prima build:** che Claude in Chrome funzioni su un browser basato su
+  Chromium che non è Chrome, e che usarlo così rispetti i termini di Anthropic. Se non va, chat e
+  agente passano anch'essi all'API, con gli strumenti nativi descritti sotto.
 - **Modelli:** Claude Opus 5.5 (`claude-opus-5-5`) per l'agente e le domande difficili. Per i
   compiti veloci e frequenti (riassunti, suggerimenti di scrittura) si può valutare Claude Haiku
   5.5 (`claude-haiku-5-5`), molto più economico: da decidere misurando la qualità.
-- **Strumenti dell'agente** scritti in C++ nel browser e dati a Claude con il tool use: l'albero di
+- **Strumenti dell'agente** (per le funzioni a consumo, e per chat e agente se Claude in Chrome
+  non va) scritti in C++ nel browser e dati a Claude con il tool use: l'albero di
   accessibilità della pagina (testo e riferimenti agli elementi, più affidabile e più economico
   degli screenshot), clic e testo come eventi di input veri, navigazione, schede. Screenshot e
   `computer_toolset_20260801` solo per le pagine disegnate in canvas.
@@ -522,8 +538,8 @@ che un'estensione non può avere.
 - Registro di ogni azione dell'agente, leggibile dal pannello.
 - **iOS:** pannello come foglio dal basso. L'agente lì passa da script iniettati in WebKit, quindi
   è più limitato e visibile ai siti: si parte dalle funzioni di lettura e scrittura.
-- **Ponte temporaneo:** finché non è pronto, l'estensione ufficiale Claude in Chrome tra le
-  estensioni approvate, se funziona sui browser basati su Chromium.
+- Claude in Chrome è l'unica estensione installata in automatico oltre a uBlock Origin, e resta
+  nell'elenco delle estensioni approvate (task 12).
 
 ## Windows
 
