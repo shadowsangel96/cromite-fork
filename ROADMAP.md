@@ -270,20 +270,42 @@ condiviso con altri utenti della VPN.
   (`WKWebsiteDataStore.proxyConfigurations`).
 - **Limite:** la VPN nasconde l'IP, non l'identità quando si fa login a un account.
 
-## 8. macOS
+## 8. Tema scuro dei siti (come Dark Reader)
+
+Con il browser in modalità scura, i siti che non hanno un tema scuro diventano scuri da soli;
+quelli che ce l'hanno usano il loro. Vale per tutte e tre le piattaforme.
+
+- **Impostazione:** "Tema scuro dei siti": Automatico (predefinito: solo con il browser scuro e
+  solo sui siti senza tema scuro), Sempre, Mai. Eccezioni per sito dal pannello informazioni sul
+  sito ("Tema scuro del sito").
+- **Mac e Windows:** Chromium ha già un motore nativo (Blink, flag `#enable-force-dark`, "Auto
+  Dark Mode for Web Contents") che scurisce la pagina mentre la disegna e lascia stare foto e
+  video. La patch lo trasforma in un'impostazione vera, legata al tema del browser, con le
+  eccezioni per sito. Da verificare sulla build che salti davvero i siti che dichiarano un tema
+  scuro (`color-scheme` o `prefers-color-scheme`); se non lo fa, quel controllo lo aggiungiamo noi.
+- **Privacy:** il motore nativo lavora in fase di disegno, quindi la pagina non vede stili
+  aggiunti. Un'estensione come Dark Reader invece inserisce i suoi stili nella pagina, e un sito
+  può accorgersene: è un piccolo segnale di fingerprinting in più.
+- **iOS:** WebKit non ha un motore equivalente. Serve uno script iniettato, partendo dal motore
+  di Dark Reader (licenza MIT), in un mondo JavaScript separato dalla pagina. Gli stili restano
+  comunque visibili alla pagina, quindi lì vale la regola "solo se il sito non ha un tema suo".
+
+## 9. macOS
 
 - Porting: Cromite non compila per Mac, le correzioni vanno in `patches/macos/`.
 - **Tema "Liquid Glass" come Safari:** barra delle schede e degli strumenti traslucide con
   l'effetto vetro di sistema di macOS 26 (`NSGlassEffectView`) dietro la UI di Chromium,
   forme e spaziature in stile Safari, modalità chiara e scura, rispetto di "Riduci trasparenza".
+- **Schede a scelta** nelle impostazioni: nella barra degli strumenti (compatte, come Safari) o in
+  una riga separata sopra (come Chromium).
 - Aggiornamento in-app da `update.json`, firma ad-hoc (Developer ID più avanti).
 
-## 9. Cookie centralizzati
+## 10. Cookie centralizzati
 
 Dopo il sync: sincronizzazione dei cookie solo cifrata e solo per i siti scelti (alcuni siti
 legano la sessione al dispositivo e non funzionerebbero comunque).
 
-## 10. iOS
+## 11. iOS
 
 - Base: Chromium per iOS (WebKit, regola Apple).
 - Funzioni di Cromite da reimplementare in `ios/`: adblock con le regole di contenuto di
