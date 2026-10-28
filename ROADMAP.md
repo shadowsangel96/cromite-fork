@@ -488,6 +488,40 @@ che un'estensione non può avere.
   (per esempio per l'app Claude sul Mac), il browser espone i suoi strumenti come server MCP
   locale.
 - **Voce:** dettatura e lettura delle risposte con i servizi vocali del sistema.
+- **Traduci la pagina con Claude** (dettagli sotto): sostituisce il testo della pagina con la
+  traduzione, come il traduttore di Chrome ma con la qualità di Claude.
+
+**Traduci la pagina con Claude** (a consumo, con l'API)
+
+Il traduttore di Google è spento in Cromite (`ungoogled-chromium-Disable-translate-integration.patch`):
+al suo posto, la stessa esperienza ma con Claude, che capisce il contesto della pagina e traduce
+in modo naturale invece che frase per frase.
+
+- **Quando:** il browser riconosce la lingua della pagina in locale (il riconoscimento della lingua
+  di Chromium, CLD3, senza mandare niente) e, se non è la tua, propone nella barra "Traduci con
+  Claude". Si può impostare "Traduci sempre dall'inglese" e simili, sempre dentro il limite di
+  spesa.
+- **Come sostituisce il testo:** legge i nodi di testo della pagina e gli attributi visibili
+  (`alt`, `title`, `placeholder`, `aria-label`), li manda a Claude a blocchi con segnaposto per i
+  tag interni (grassetti, link), così la traduzione rientra al posto giusto senza rompere
+  l'impaginazione, e li sostituisce sul posto. Lascia stare codice, campi di input, testo
+  modificabile, campi password e tutto ciò che il sito marca con `translate="no"`.
+- **Prima quello che vedi:** traduce subito la parte visibile e poi il resto mentre scorri, con le
+  risposte in streaming, così il testo cambia quasi subito.
+- **Contenuti che arrivano dopo:** il testo che la pagina aggiunge dopo il caricamento (commenti,
+  scorrimento infinito) viene tradotto man mano.
+- **Coerenza:** titolo e argomento della pagina vanno a Claude come contesto, e i termini già
+  tradotti restano uguali in tutta la pagina e nelle pagine successive dello stesso sito.
+- **"Mostra originale"** con un clic, e l'indicazione "Tradotta da Claude" nella barra.
+- **Costi bassi:** le traduzioni si salvano in locale, quindi riaprire una pagina già tradotta non
+  costa niente; prompt caching sulle istruzioni di traduzione.
+- **Modello:** a scelta nelle impostazioni, da decidere provando (costi indicativi per una pagina
+  lunga, circa 3.000 parole: Claude Haiku 5.5 sotto il mezzo centesimo, Claude Sonnet 5.5 circa 5
+  centesimi, Claude Opus 5.5 circa 10 centesimi).
+- **Privacy:** il testo della pagina va ad Anthropic passando dalla VPN; sui siti esclusi (banche,
+  sanità) chiede conferma prima di tradurre. Il testo sostituito è visibile agli script della
+  pagina, come succede con il traduttore di Chrome.
+- **iOS:** stessa funzione, con uno script che lavora sulla pagina in WebKit.
 
 **Come funziona**
 
@@ -505,9 +539,10 @@ che un'estensione non può avere.
   barra, scrittura nei campi di testo, menu sul testo selezionato, schede e cronologia in
   linguaggio naturale. Le risposte compaiono dove le chiedi (fumetto accanto all'elemento, menu
   della barra), senza aprire un'altra chat.
-- **Da verificare con la prima build:** che Claude in Chrome funzioni su un browser basato su
-  Chromium che non è Chrome, e che usarlo così rispetti i termini di Anthropic. Se non va, chat e
-  agente passano anch'essi all'API, con gli strumenti nativi descritti sotto.
+- **Compatibilità:** Claude in Chrome funziona già su altri browser basati su Chromium (provato su
+  Helium). Con la prima build lo confermiamo sul nostro e rileggiamo i termini di Anthropic. Se un
+  giorno smettesse di funzionare, chat e agente passano all'API, con gli strumenti nativi
+  descritti sotto.
 - **Modelli:** Claude Opus 5.5 (`claude-opus-5-5`) per l'agente e le domande difficili. Per i
   compiti veloci e frequenti (riassunti, suggerimenti di scrittura) si può valutare Claude Haiku
   5.5 (`claude-haiku-5-5`), molto più economico: da decidere misurando la qualità.
