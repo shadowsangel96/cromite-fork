@@ -385,11 +385,54 @@ collegato, con un giudizio e il perché.
 "ricordati" (alcuni siti legano la sessione al dispositivo e non funzionerebbero comunque). I
 cookie temporanei non si sincronizzano mai.
 
-## 11. iOS
+## 11. Password di Apple
+
+Le password restano nell'app Password di Apple (portachiavi iCloud). Il gestore di Chromium resta
+spento come già in Cromite (`Do-not-store-passwords-by-default.patch`,
+`Disable-privacy-issues-in-password-manager.patch`), così non ci sono doppioni.
+
+- **macOS, integrazione nativa:** il browser parla direttamente con il programma di Apple che fa
+  da ponte verso le password (`PasswordManagerBrowserExtensionHelper`), lo stesso che usa
+  l'estensione ufficiale "Password di iCloud". Le password compaiono nel menu di compilazione di
+  Chromium, quelle nuove si salvano nell'app Password, e la prima volta macOS mostra un codice di
+  6 cifre da inserire nel browser. Il protocollo non è documentato: il riferimento è il progetto
+  open source `au2001/icloud-passwords-firefox` (Apache-2.0).
+- **Windows:** iCloud per Windows ha un ponte analogo, da verificare.
+- **Riserva:** se Apple cambia il protocollo, l'estensione ufficiale "Password di iCloud",
+  configurata in automatico. Il browser registra da solo il programma di Apple, cosa che su
+  Brave e Vivaldi va fatta a mano.
+- **Passkey:** su macOS il browser usa quelle del portachiavi tramite il sistema. Serve
+  l'autorizzazione di Apple per i browser, da chiedere con l'account Developer per
+  l'identificativo dell'app.
+- **iOS:** niente da fare, le password di Apple compaiono sopra la tastiera come in ogni browser.
+  Per le passkey serve l'autorizzazione da browser predefinito.
+- L'assistente all'accesso (task 10) riconosce i login anche con il gestore di Chromium spento.
+
+## 12. uBlock Origin ed estensioni
+
+- **uBlock Origin preinstallato** al posto dell'adblock di Cromite (motore eyeo), perché è più
+  efficace sui casi difficili: scriptlet contro i muri anti-adblock e la pubblicità nei video,
+  filtri cosmetici avanzati, liste scritte per la sua sintassi.
+  - Versione completa (Manifest V2): Cromite tiene ancora attive le estensioni MV2
+    (`Override-the-MV2-deprecation.patch`).
+  - Distribuito con il browser dalla release ufficiale su GitHub (GPL-3.0, come Cromite), non dal
+    Chrome Web Store, così Google non lo vede. Il controllo giornaliero segue anche le release di
+    uBlock Origin. Le liste di filtri si aggiornano da sole, passando dalla VPN.
+  - L'adblock di Cromite resta disponibile ma spento di default, per non filtrare due volte.
+  - **Piano B**, quando Chromium toglierà del tutto MV2 e la patch di Cromite non basterà più:
+    il motore nativo `adblock-rust` di Brave (MPL-2.0), che legge le liste e gli scriptlet di
+    uBlock Origin. Nel frattempo, uBlock Origin Lite (MV3).
+- **Estensioni: solo quelle approvate.** Un elenco di estensioni ammesse, all'inizio solo uBlock
+  Origin (più "Password di iCloud" se serve la riserva); le altre si valutano una per una. Spente
+  di default in incognito. I motivi: fingerprinting (le estensioni che inseriscono elementi nelle
+  pagine si vedono), sicurezza (accesso a tutti i siti, aggiornamenti che possono diventare
+  malevoli) e il fatto che le funzioni più comuni sono già nel browser.
+
+## 13. iOS
 
 - Base: Chromium per iOS (WebKit, regola Apple).
 - Funzioni di Cromite da reimplementare in `ios/`: adblock con le regole di contenuto di
-  WebKit, randomizzazione con script iniettati come fa Brave iOS
+  WebKit (partendo dalle liste di uBlock Origin convertite), randomizzazione con script iniettati come fa Brave iOS
   (`ios/browser/brave_shields/resources/farbling.ts`).
 - **Tema "Liquid Glass" nativo** con gli effetti vetro di iOS 26 (`UIGlassEffect`).
 - **Barra a scelta** nelle impostazioni: tutta in basso (indietro, indirizzo, menu), oppure in
