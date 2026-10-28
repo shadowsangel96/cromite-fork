@@ -61,9 +61,15 @@ impercettibile ma diversi per ogni sito, così due visite non danno la stessa im
 - Da valutare sul modello di brave-core (`browser/farbling/*_browsertest.cc` elenca i casi che
   randomizza): `enumerateDevices`, voci di `speechSynthesis` (Cromite le spegne già),
   `navigator.usb`.
-- **WebGL resta spento** (decisione): espone la scheda video ed è dannoso per la privacy, quindi
-  non lo randomizziamo e non lo riattiviamo. WebGPU espone la GPU allo stesso modo: verificare
-  cosa fa Cromite e, per coerenza, spegnerlo anche lui.
+- **WebGL spento di default** (decisione): espone la scheda video ed è la fonte di impronta più
+  ricca. Cromite lo blocca già e lo consente sito per sito (`Add-webGL-site-setting.patch`, che
+  non rivela il dispositivo nemmeno nei messaggi di errore). In più mettiamo nel pannello del sito
+  **"Consenti WebGL su questo sito (randomizzato)"**, per i siti che ne hanno bisogno (mappe 3D,
+  editor, giochi). Lì funziona, ma con rumore diverso per sito sull'immagine letta (`readPixels`),
+  nome della GPU generico come in Safari e parametri arrotondati a valori comuni. Il rumore non
+  ferma le tecniche che riconoscono la GPU dai tempi di calcolo: per questo resta un'eccezione e
+  non il default.
+- WebGPU: Cromite lo spegne già (`Disable-WebGPU.patch`), e resta spento.
 - API per API, confronto con Cromite: dove Cromite blocca o fissa un valore, decidere se
   tenere il blocco o passare alla randomizzazione (che rompe meno siti).
 - Interruttore per sito, come gli Shields di Brave, e un elenco di siti "fragili" su cui
