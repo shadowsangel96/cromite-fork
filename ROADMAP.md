@@ -224,7 +224,43 @@ restituisce i risultati senza pubblicità, account o profilazione.
     raggiungibile, per esempio fuori casa senza VPN.
   - Su iOS Chromium limita la scelta del motore predefinito: lì serve una patch apposta.
 
-## 7. macOS
+## 7. Navigazione tramite la VPN del proprio server
+
+Solo il browser passa dalla VPN, il resto del dispositivo no: le altre app (banca, giochi)
+restano sulla connessione normale e Tailscale resta acceso (su iOS si può tenere attiva una
+sola VPN alla volta, quindi l'app della VPN escluderebbe Tailscale). Il browser usa come proxy
+il proxy HTTP di un container VPN sul proprio server (es. gluetun), raggiunto in LAN o via
+Tailscale. È il modello di Mullvad Browser: protezione dal fingerprinting nel browser più un IP
+condiviso con altri utenti della VPN.
+
+- **Base:** Cromite ha già la pagina `chrome://proxy` (`Add-a-proxy-configuration-page.patch`).
+  Salva le impostazioni nel Local State, quindi il proxy vale anche per le richieste interne
+  del browser (aggiornamenti, liste dell'adblock). Da verificare che la pagina ci sia anche
+  nelle build desktop.
+- **Patch nostra:**
+  - Voce "VPN personale" in cui si inserisce solo l'indirizzo del proxy (mai nel codice).
+  - Esclusioni automatiche dal proxy: `<local>`, reti private (10.0.0.0/8, 172.16.0.0/12,
+    192.168.0.0/16) e Tailscale (100.64.0.0/10, `*.ts.net`). Così il server stesso (SearXNG,
+    sync) resta raggiungibile direttamente.
+  - WebRTC: con il proxy attivo, politica `disable_non_proxied_udp`, perché altrimenti WebRTC
+    può uscire diretto e rivelare l'IP di casa. Verifica con un test di leak WebRTC.
+  - Server non raggiungibile (per esempio spento di notte): nessun ripiego silenzioso sulla
+    connessione diretta, che mostrerebbe l'IP di casa senza accorgersene. Al suo posto un
+    avviso chiaro con il tasto "naviga diretto" e un interruttore nella barra degli strumenti
+    che mostra sempre se si sta passando dalla VPN.
+  - Elenco modificabile di siti che escono diretti (banche, servizi che bloccano gli IP delle
+    VPN).
+- **Coerenza:** uscita della VPN nello stesso paese di fuso orario e lingua del browser. Un IP
+  estero con il fuso italiano è già di per sé un segnale per gli script antifrode. Il proxy non
+  deve aggiungere intestazioni (`Via`, `X-Forwarded-For`): in gluetun `HTTPPROXY_STEALTH=on`.
+- **Prova fatta:** proxy di gluetun raggiunto da LAN e Tailscale, uscita nel paese scelto,
+  nessuna intestazione aggiunta, in casa circa 70 Mbit/s contro i 115 della connessione
+  diretta. Fuori casa la velocità dipende dall'upload della connessione di casa.
+- **iOS:** da iOS 17 WebKit accetta un proxy per il solo browser
+  (`WKWebsiteDataStore.proxyConfigurations`).
+- **Limite:** la VPN nasconde l'IP, non l'identità quando si fa login a un account.
+
+## 8. macOS
 
 - Porting: Cromite non compila per Mac, le correzioni vanno in `patches/macos/`.
 - **Tema "Liquid Glass" come Safari:** barra delle schede e degli strumenti traslucide con
@@ -232,12 +268,12 @@ restituisce i risultati senza pubblicità, account o profilazione.
   forme e spaziature in stile Safari, modalità chiara e scura, rispetto di "Riduci trasparenza".
 - Aggiornamento in-app da `update.json`, firma ad-hoc (Developer ID più avanti).
 
-## 8. Cookie centralizzati
+## 9. Cookie centralizzati
 
 Dopo il sync: sincronizzazione dei cookie solo cifrata e solo per i siti scelti (alcuni siti
 legano la sessione al dispositivo e non funzionerebbero comunque).
 
-## 9. iOS
+## 10. iOS
 
 - Base: Chromium per iOS (WebKit, regola Apple).
 - Funzioni di Cromite da reimplementare in `ios/`: adblock con le regole di contenuto di
