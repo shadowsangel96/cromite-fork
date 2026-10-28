@@ -244,10 +244,20 @@ condiviso con altri utenti della VPN.
     sync) resta raggiungibile direttamente.
   - WebRTC: con il proxy attivo, politica `disable_non_proxied_udp`, perché altrimenti WebRTC
     può uscire diretto e rivelare l'IP di casa. Verifica con un test di leak WebRTC.
-  - Server non raggiungibile (per esempio spento di notte): nessun ripiego silenzioso sulla
-    connessione diretta, che mostrerebbe l'IP di casa senza accorgersene. Al suo posto un
-    avviso chiaro con il tasto "naviga diretto" e un interruttore nella barra degli strumenti
-    che mostra sempre se si sta passando dalla VPN.
+  - Server non raggiungibile (spento di notte o guasto): nessun ripiego silenzioso sulla
+    connessione diretta, che mostrerebbe l'IP di casa senza accorgersene. Un indicatore nella
+    barra degli strumenti mostra sempre da dove si esce.
+  - **Riserva estrema, se il server resta giù a lungo:** sulla pagina di errore del proxy
+    compare il tasto "Naviga diretto (riserva)", solo lì e mai nel menu normale. Prima di
+    attivarlo chiede conferma e spiega che i siti vedranno l'IP di casa. La modalità diretta:
+    - è temporanea e scade da sola (alla chiusura del browser, al massimo dopo 24 ore);
+    - lascia l'indicatore rosso e una barra fissa "Connessione diretta: il tuo IP è visibile";
+    - torna da sola al proxy, con un avviso, appena il server risponde di nuovo (controllo
+      ogni pochi minuti).
+  - Livello intermedio consigliato prima della riserva estrema: con il server guasto anche
+    Tailscale non serve, quindi si può accendere l'app della VPN sul dispositivo. In
+    modalità diretta il browser esce allora dalla VPN di sistema e l'IP di casa resta
+    nascosto.
   - Elenco modificabile di siti che escono diretti (banche, servizi che bloccano gli IP delle
     VPN).
 - **Coerenza:** uscita della VPN nello stesso paese di fuso orario e lingua del browser. Un IP
