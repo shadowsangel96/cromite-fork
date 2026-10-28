@@ -312,6 +312,9 @@ legano la sessione al dispositivo e non funzionerebbero comunque).
   WebKit, randomizzazione con script iniettati come fa Brave iOS
   (`ios/browser/brave_shields/resources/farbling.ts`).
 - **Tema "Liquid Glass" nativo** con gli effetti vetro di iOS 26 (`UIGlassEffect`).
+- **Barra a scelta** nelle impostazioni: tutta in basso (indietro, indirizzo, menu), oppure in
+  alto come Safari, con l'indirizzo in alto e i pulsanti (indietro, avanti, condividi, schede,
+  menu) in una barra in basso.
 - Distribuzione: `.ipa` da firmare (AltStore/SideStore o account Apple Developer) e una
   sorgente AltStore per gli aggiornamenti.
 
