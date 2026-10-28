@@ -35,9 +35,12 @@ impercettibile ma diversi per ogni sito, così due visite non danno la stessa im
 - Seme come Brave: cambia per sessione, per sito (eTLD+1) e per area di storage; i frame e gli
   script di terze parti usano il seme del sito principale.
 - API da coprire, sul modello di brave-core (`browser/farbling/*_browsertest.cc` ne elenca i
-  casi): Canvas e OffscreenCanvas, WebGL, WebGPU, Web Audio, `navigator.userAgent`,
-  `hardwareConcurrency`, `deviceMemory`, `languages`, `plugins`, `enumerateDevices`, voci di
-  `speechSynthesis`, `navigator.usb`.
+  casi): Canvas e OffscreenCanvas, Web Audio, `navigator.userAgent`, `hardwareConcurrency`,
+  `deviceMemory`, `languages`, `plugins`, `enumerateDevices`, voci di `speechSynthesis`,
+  `navigator.usb`.
+- **WebGL resta spento** (decisione): espone la scheda video ed è dannoso per la privacy, quindi
+  non lo randomizziamo e non lo riattiviamo. WebGPU espone la GPU allo stesso modo: verificare
+  cosa fa Cromite e, per coerenza, spegnerlo anche lui.
 - API per API, confronto con Cromite: dove Cromite blocca o fissa un valore, decidere se
   tenere il blocco o passare alla randomizzazione (che rompe meno siti).
 - Interruttore per sito, come gli Shields di Brave, e un elenco di siti "fragili" su cui
@@ -50,14 +53,32 @@ impercettibile ma diversi per ogni sito, così due visite non danno la stessa im
   risultato se **almeno 4** di questi attributi cambiano tra le due letture: canvas, hash WebGL,
   vendor/renderer WebGL, audio, font, supporto touch, fuso orario (offset e nome), plugin,
   supercookie.
-  - Quindi un valore fisso per sessione e sito non basta: almeno 4 attributi (i candidati
-    naturali sono canvas, WebGL, audio e font) devono variare da una lettura all'altra.
-  - Con WebGL spento, come fa Cromite di default, quei due attributi non contano: o lo si
-    riattiva con la randomizzazione, o si arriva a 4 con gli altri.
-  - Rischio da gestire: un rumore nuovo a ogni lettura si può togliere facendo la media di tante
-    letture. Idea da verificare: per ogni sessione e sito, poche varianti fisse che si alternano,
-    così due letture consecutive differiscono ma la media non riporta al valore vero.
-  - Prima di scrivere codice, verificare come ci riescono Brave ed Epic.
+  - Con WebGL spento i suoi due attributi non contano: i 4 da far variare sono **canvas, audio,
+    font e plugin**.
+
+**Metodo: il meno tracciabile possibile.**
+
+- **Un'impronta diversa per ogni sito:** seme per sessione × sito (eTLD+1) × area di storage.
+  Due siti non possono collegarti confrontando le impronte; l'impronta cambia a ogni riavvio del
+  browser e quando cancelli i dati del sito.
+- **Varianti a rotazione:** per ogni sessione e sito, poche varianti fisse (per esempio 3) di
+  canvas, audio, font e plugin, usate a turno a ogni lettura.
+  - Due letture di fila sono diverse, quindi per Cover Your Tracks l'impronta è "randomized".
+  - La media di tante letture dà la media delle varianti, che hanno uno scostamento comune dal
+    valore vero: non lo fa riemergere, come invece succede con un rumore nuovo a ogni lettura.
+- **Valori credibili:** rumore impercettibile su canvas e audio, sottoinsiemi diversi di un elenco
+  di font comune, elenchi di plugin plausibili come quelli di Brave. Mai valori impossibili, che
+  renderebbero l'impronta rara invece di confonderla.
+- **Fuso orario:** resta fisso per sessione (casuale o scelto, come già fa Cromite), non a ogni
+  lettura, per non sbagliare gli orari mostrati dai siti.
+- Prima di scrivere codice, verificare come ci riescono Brave ed Epic.
+
+**Verifica** (tutte e quattro devono passare):
+
+1. Cover Your Tracks dice "your browser has a randomized fingerprint" invece di "unique".
+2. La media di 100 letture di canvas e audio non coincide con il valore vero.
+3. Due siti diversi vedono impronte diverse nella stessa sessione.
+4. Dopo un riavvio o dopo aver cancellato i dati del sito l'impronta è nuova.
 - Licenza: brave-core è MPL-2.0, compatibile con la GPL-3.0 di Cromite; i file portati
   mantengono la loro intestazione MPL.
 
