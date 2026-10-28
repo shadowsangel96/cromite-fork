@@ -13,17 +13,22 @@ on:
 
 jobs:
   stage:
-    runs-on: windows-2022
+    # Chromium 153 chiede Visual Studio 2026 (docs/windows_build_instructions.md)
+    runs-on: windows-2025-vs2026
     timeout-minutes: 358
     outputs:
       finished: ${{ steps.build.outputs.finished }}
     env:
       PYTHONUTF8: "1"
+      STAGE: ${{ inputs.stage }}
     steps:
+      # D: è il disco temporaneo del runner, molto più libero di C:
       - name: Inizio tappa ${{ inputs.stage }}
-        id: start
-        shell: bash
-        run: echo "epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
+        shell: pwsh
+        run: |
+          "JOB_STARTED=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())" >> $env:GITHUB_ENV
+          $dir = if (Test-Path D:\) { "D:\b" } else { "C:\b" }
+          "FORK_BUILD_DIR=$dir" >> $env:GITHUB_ENV
 
       - uses: actions/checkout@v7
 
@@ -36,35 +41,36 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: windows-build-state
-          path: C:\b
+          path: ${{ env.FORK_BUILD_DIR }}
 
       - name: Estrai lo stato
         if: inputs.stage > 1
         shell: pwsh
         run: |
-          7z x C:\b\state.zip -oC:\b\chromium -y | Select-Object -Last 3
-          Remove-Item C:\b\state.zip
+          7z x "$env:FORK_BUILD_DIR\state.zip" "-o$env:FORK_BUILD_DIR\chromium" -y | Select-Object -Last 3
+          Remove-Item "$env:FORK_BUILD_DIR\state.zip"
+
+      - name: Prepara (Windows SDK, sorgenti, patch, gn)
+        shell: pwsh
+        run: python tools\build\gh_windows_stage.py prepare
 
       - name: Compila
         id: build
         shell: pwsh
-        env:
-          STAGE: ${{ inputs.stage }}
-          JOB_STARTED: ${{ steps.start.outputs.epoch }}
-        run: python tools\build\gh_windows_stage.py
+        run: python tools\build\gh_windows_stage.py build
 
       # -mtc=on conserva gli orari dei file: ninja riparte da dove si era fermato
       - name: Salva lo stato per la tappa successiva
         if: steps.build.outputs.finished == 'false'
         shell: pwsh
-        run: 7z a -tzip C:\b\state.zip C:\b\chromium\src -mx=1 -mtc=on '-xr!.git' | Select-Object -Last 3
+        run: 7z a -tzip "$env:FORK_BUILD_DIR\state.zip" "$env:FORK_BUILD_DIR\chromium\src" -mx=1 -mtc=on '-xr!.git' | Select-Object -Last 3
 
       - name: Carica lo stato
         if: steps.build.outputs.finished == 'false'
         uses: actions/upload-artifact@v7
         with:
           name: windows-build-state
-          path: C:\b\state.zip
+          path: ${{ env.FORK_BUILD_DIR }}\state.zip
           compression-level: 0
           retention-days: 2
           overwrite: true

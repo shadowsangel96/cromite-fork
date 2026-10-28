@@ -204,6 +204,15 @@ restituisce i risultati senza pubblicità, account o profilazione.
   le ricerche arrivare dall'IP di casa. Per la massima privacy le sue richieste in uscita passano
   da una VPN o da Tor (impostazioni `outgoing` di SearXNG); in cambio, ogni tanto qualche motore
   risponde con un CAPTCHA e i suoi risultati mancano.
+- **Con un container VPN già attivo (es. gluetun):** SearXNG manda tutte le richieste al proxy
+  HTTP del container (`outgoing.proxies` in `settings.yml`), senza toccare chi lo usa già. Se la
+  VPN cade, le ricerche falliscono invece di uscire dall'IP di casa, e anche i nomi dei siti li
+  risolve la VPN. Prova fatta: dal proxy di una VPN con uscita all'estero Google, Bing, DuckDuckGo, Startpage
+  e Qwant rispondono, Brave Search risponde 429 (blocca gli IP delle VPN). Il paese di uscita
+  conta poco, perché SearXNG chiede comunque i risultati in italiano. Se la stessa VPN porta anche
+  download pesanti, a pieno carico le ricerche rallentano: in quel caso conviene un container VPN apposta,
+  su un server diverso dagli altri se usano la stessa chiave WireGuard, perché due tunnel con la
+  stessa chiave sullo stesso server si disturbano.
 - **Nel browser:**
   - Chromium sa già usare un motore personalizzato (Impostazioni → Motore di ricerca → Ricerca
     sui siti → Aggiungi, poi "Imposta come predefinito"), e Cromite ha già corretto il supporto

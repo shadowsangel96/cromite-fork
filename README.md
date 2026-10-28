@@ -143,7 +143,7 @@ collaboratore (commenti compresi) sono bloccate. GitHub concede quel blocco per 
 
 | | base Cromite | stato |
 |---|---|---|
-| **Windows x64** | supportata | compilata sui runner Windows gratuiti di GitHub con gli strumenti di Chromium e il Visual Studio già installato lì (`build-windows.yml`, `tools/build/gh_windows_stage.py`): fino a 10 tappe da ~5 ore, ognuna riparte dalla cartella di build della precedente. In alternativa c'è il cross-build da Linux su un host nostro (`tools/build/build-windows.sh`, richiede `ACCEPT_MSVC_LICENSE=1` perché scarica il toolchain MSVC con msvc-wine). |
+| **Windows x64** | supportata | compilata sui runner Windows gratuiti di GitHub con gli strumenti di Chromium e il Visual Studio già installato lì; il Windows SDK che Chromium chiede viene installato all'inizio di ogni tappa se il runner non ce l'ha (`build-windows.yml`, `tools/build/gh_windows_stage.py`): fino a 10 tappe da ~5 ore, ognuna riparte dalla cartella di build della precedente. In alternativa c'è il cross-build da Linux su un host nostro (`tools/build/build-windows.sh`, richiede `ACCEPT_MSVC_LICENSE=1` perché scarica il toolchain MSVC con msvc-wine). |
 | **macOS** | non supportata | portiamo noi: `tools/build/build-macos.sh`, e le correzioni in `patches/macos/`. La prima build dirà cosa di Cromite non compila su Mac. Firma ad-hoc: per darla ad altri senza avvisi di Gatekeeper serve un Apple Developer ID + notarizzazione. |
 | **iOS** | non supportata | su iOS Chromium usa WebKit (regola Apple), quindi le funzioni di Cromite (adblock, privacy) vanno reimplementate nel codice `ios/`. `tools/build/build-ios.sh` produce un `.ipa` non firmato, da installare firmandolo (Apple Developer, AltStore/SideStore). |
 

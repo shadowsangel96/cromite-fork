@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
-"""Una tappa della build Windows sui runner GitHub (Windows Server 2022, Visual Studio 2022).
+"""Una tappa della build Windows sui runner GitHub (windows-2025-vs2026: Visual Studio 2026).
 
-La tappa 1 scarica Chromium con gclient (gli stessi strumenti che usa Cromite), applica
-Cromite e le nostre patch e avvia ninja. Le tappe successive ripartono dalla cartella che
-la precedente ha salvato come artifact. Ogni tappa compila finché resta tempo nel job
-(GitHub lo ferma a 6 ore), poi si ferma pulita lasciando il resto alla successiva.
+Due comandi, due step del workflow:
+- prepare: installa il Windows SDK che chiede Chromium se il runner non ce l'ha (a ogni tappa,
+  perché ogni tappa è una macchina nuova). Nella tappa 1 scarica anche Chromium con gclient
+  (gli stessi strumenti che usa Cromite), applica Cromite e le nostre patch e lancia gn gen.
+- build: compila con ninja finché resta tempo nel job (GitHub lo ferma a 6 ore), poi si
+  ferma pulita lasciando il resto alla tappa successiva, che riparte dalla cartella salvata
+  come artifact.
 
-Variabili: STAGE (1, 2, ...), JOB_STARTED (epoch di inizio job), GITHUB_OUTPUT.
-Output: finished=true quando il pacchetto è pronto in dist/, finished=false se serve
+Variabili: STAGE (1, 2, ...), JOB_STARTED (epoch di inizio job), FORK_BUILD_DIR, GITHUB_OUTPUT.
+Output di build: finished=true quando il pacchetto è pronto in dist/, finished=false se serve
 un'altra tappa.
 """
 
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -28,8 +33,17 @@ DEPOT = WORK / "depot_tools"
 OUT = "out/win64"
 DIST = ROOT / "dist"
 FORKCTL = [sys.executable, str(ROOT / "tools" / "forkctl.py")]
-VS = Path(r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise")
+VSWHERE = Path(r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe")
+VS_YEARS = {"17": "2022", "18": "2026"}  # versione principale di Visual Studio -> anno
 KITS = Path(r"C:\Program Files (x86)\Windows Kits\10")
+# Installer del Windows SDK per la versione che Chromium chiede in build/vs_toolchain.py
+# (SDK_VERSION). Link da learn.microsoft.com/windows/apps/windows-sdk/downloads; la build
+# esatta è quella di docs/windows_build_instructions.md. Quando Chromium cambia SDK, la tappa 1
+# si ferma subito con l'elenco da aggiornare.
+SDK_INSTALLERS = {
+    "10.0.28000.0": ("10.0.28000.2270", "https://go.microsoft.com/fwlink/?linkid=2370315"),
+}
+SDK_FEATURES = ["OptionId.DesktopCPPx64", "OptionId.DesktopCPPx86", "OptionId.WindowsDesktopDebuggers"]
 JOB_LIMIT_MIN = 350  # GitHub ferma il job a 360 minuti
 RESERVE_MIN = 60     # tempo lasciato per comprimere e caricare lo stato
 # Stessa lista di file della release Windows di Cromite (.github/workflows/release.yaml).
@@ -56,11 +70,31 @@ def set_output(key, value):
         fh.write(f"{key}={value}\n")
 
 
+def find_vs():
+    """(anno, cartella) del Visual Studio più recente con ATL/MFC, che serve a Chromium."""
+    out = subprocess.run([str(VSWHERE), "-latest", "-products", "*", "-requires",
+                          "Microsoft.VisualStudio.Component.VC.ATLMFC", "-format", "json"],
+                         capture_output=True, text=True, check=True).stdout
+    found = json.loads(out)
+    if not found:
+        sys.exit("nessun Visual Studio con ATL/MFC sul runner")
+    major = found[0]["installationVersion"].split(".")[0]
+    if major not in VS_YEARS:
+        sys.exit(f"Visual Studio {found[0]['installationVersion']} non previsto da VS_YEARS")
+    return VS_YEARS[major], Path(found[0]["installationPath"])
+
+
 def build_env():
+    year, path = find_vs()
     env = dict(os.environ)
-    env.update({"DEPOT_TOOLS_WIN_TOOLCHAIN": "0", "vs2022_install": str(VS),
+    env.update({"DEPOT_TOOLS_WIN_TOOLCHAIN": "0", f"vs{year}_install": str(path),
                 "PATH": str(DEPOT) + os.pathsep + env["PATH"], "PYTHONUTF8": "1"})
     return env
+
+
+def installed_sdks():
+    include = KITS / "Include"
+    return sorted(p.name for p in include.glob("10.*")) if include.exists() else []
 
 
 def diagnostics():
@@ -70,13 +104,44 @@ def diagnostics():
             usage = shutil.disk_usage(drive)
             print(f"{drive} libero {usage.free / 2**30:.0f} GB su {usage.total / 2**30:.0f} GB")
     print(f"CPU: {os.cpu_count()}")
-    print(f"Visual Studio: {VS.exists()} ({VS})")
-    sdks = sorted(p.name for p in (KITS / "Include").glob("10.*")) if (KITS / "Include").exists() else []
-    print(f"Windows SDK: {', '.join(sdks) or 'nessuno'}")
+    print(f"cartella di lavoro: {WORK}")
+    year, path = find_vs()
+    print(f"Visual Studio {year}: {path}")
+    print(f"Windows SDK: {', '.join(installed_sdks()) or 'nessuno'}")
+
+
+def ensure_toolchain():
+    """Controlla Visual Studio e installa il Windows SDK richiesto dal sorgente di Chromium."""
+    text = (SRC / "build" / "vs_toolchain.py").read_text()
+    sdk = re.search(r"^SDK_VERSION = '([\d.]+)'", text, re.M).group(1)
+    versions = re.search(r"^MSVS_VERSIONS = .*?^\)", text, re.M | re.S).group(0)
+    accepted = re.findall(r"\('(\d{4})', '[\d.]+'\)", versions)
+    year, _ = find_vs()
+    say(f"toolchain: Chromium vuole Visual Studio {' o '.join(accepted)} e Windows SDK {sdk}")
+    if year not in accepted:
+        sys.exit(f"sul runner c'è Visual Studio {year}: cambia runs-on in build-windows-stage.yml")
     debuggers = KITS / "Debuggers" / "x64" / "dbghelp.dll"
-    print(f"Debugging Tools: {debuggers.exists()}")
-    if not VS.exists() or not debuggers.exists():
-        sys.exit("manca Visual Studio 2022 o i Debugging Tools del Windows SDK sul runner")
+    if (KITS / "Include" / sdk / "um" / "windows.h").exists() and debuggers.exists():
+        print("Windows SDK già installato")
+        return
+    if sdk not in SDK_INSTALLERS:
+        sys.exit(f"Windows SDK {sdk} assente sul runner: aggiungi il suo installer a SDK_INSTALLERS "
+                 f"in tools/build/gh_windows_stage.py")
+    build, url = SDK_INSTALLERS[sdk]
+    setup = WORK / "sdk" / "winsdksetup.exe"
+    setup.parent.mkdir(parents=True, exist_ok=True)
+    say(f"installo Windows SDK {build}")
+    urllib.request.urlretrieve(url, setup)
+    log = setup.parent / "install.log"
+    started = time.time()
+    code = subprocess.run([str(setup), "/features", *SDK_FEATURES, "/quiet", "/norestart",
+                           "/ceip", "off", "/log", str(log)]).returncode
+    print(f"installer finito in {(time.time() - started) / 60:.0f} minuti (codice {code})")
+    ok = (KITS / "Include" / sdk / "um" / "windows.h").exists() and debuggers.exists()
+    if code not in (0, 3010) or not ok:
+        if log.exists():
+            print("\n".join(log.read_text(errors="replace").splitlines()[-40:]))
+        sys.exit(f"installazione del Windows SDK {build} non riuscita")
 
 
 def setup_git():
@@ -98,15 +163,17 @@ def setup_depot_tools(env):
     run(["cmd", "/c", DEPOT / "gclient.bat", "--version"], env=env)
 
 
-def fetch_and_patch(env):
-    lock = json.loads((ROOT / "upstream.lock").read_text())
-    version = lock["chromium_version"]
+def fetch_source():
+    version = json.loads((ROOT / "upstream.lock").read_text())["chromium_version"]
     say(f"scarico Chromium {version}")
     SRC.mkdir(parents=True, exist_ok=True)
     run(["git", "init", "-q"], cwd=SRC)
     run(["git", "remote", "add", "origin", "https://chromium.googlesource.com/chromium/src.git"], cwd=SRC)
     run(["git", "fetch", "--depth", "2", "origin", f"+refs/tags/{version}:refs/tags/{version}"], cwd=SRC)
     run(["git", "checkout", "-q", "-f", version], cwd=SRC)
+
+
+def sync_and_patch(env):
     sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=SRC, capture_output=True, text=True,
                          check=True).stdout.strip()
     (CHECKOUT / ".gclient").write_text(
@@ -182,22 +249,37 @@ def package():
     print(f"pronto: {archive}")
 
 
-def main():
-    stage = int(os.environ["STAGE"])
-    deadline = int(os.environ["JOB_STARTED"]) + (JOB_LIMIT_MIN - RESERVE_MIN) * 60
-    env = build_env()
+def prepare(stage):
     setup_git()
     if stage == 1:
         diagnostics()
-    setup_depot_tools(env)
-    if stage == 1:
-        fetch_and_patch(env)
+        fetch_source()
     elif not (SRC / OUT / "build.ninja").exists():
         sys.exit("stato della tappa precedente mancante")
-    finished = ninja(env, deadline)
+    # prima del lungo gclient sync: se manca un pezzo del toolchain la tappa 1 si ferma subito
+    ensure_toolchain()
+    env = build_env()
+    setup_depot_tools(env)
+    if stage == 1:
+        sync_and_patch(env)
+
+
+def build():
+    deadline = int(os.environ["JOB_STARTED"]) + (JOB_LIMIT_MIN - RESERVE_MIN) * 60
+    finished = ninja(build_env(), deadline)
     if finished:
         package()
     set_output("finished", "true" if finished else "false")
+
+
+def main():
+    command = sys.argv[1] if len(sys.argv) > 1 else ""
+    if command == "prepare":
+        prepare(int(os.environ["STAGE"]))
+    elif command == "build":
+        build()
+    else:
+        sys.exit("uso: gh_windows_stage.py prepare|build")
 
 
 if __name__ == "__main__":
