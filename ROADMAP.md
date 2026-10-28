@@ -44,6 +44,20 @@ impercettibile ma diversi per ogni sito, così due visite non danno la stessa im
   alleggerire le protezioni.
 - Verifica con la pagina di test del farbling di Brave e con i test di impronta più noti: il
   valore deve cambiare tra siti, tra sessioni e dopo aver cancellato i dati del sito.
+- **Obiettivo da superare: Cover Your Tracks (EFF) deve dire "your browser has a randomized
+  fingerprint"**, come con Brave ed Epic. Dal suo codice (`static/fetch_whorls.js`, funzione
+  `determine_randomized`): legge l'impronta **due volte di fila nella stessa pagina** e dà quel
+  risultato se **almeno 4** di questi attributi cambiano tra le due letture: canvas, hash WebGL,
+  vendor/renderer WebGL, audio, font, supporto touch, fuso orario (offset e nome), plugin,
+  supercookie.
+  - Quindi un valore fisso per sessione e sito non basta: almeno 4 attributi (i candidati
+    naturali sono canvas, WebGL, audio e font) devono variare da una lettura all'altra.
+  - Con WebGL spento, come fa Cromite di default, quei due attributi non contano: o lo si
+    riattiva con la randomizzazione, o si arriva a 4 con gli altri.
+  - Rischio da gestire: un rumore nuovo a ogni lettura si può togliere facendo la media di tante
+    letture. Idea da verificare: per ogni sessione e sito, poche varianti fisse che si alternano,
+    così due letture consecutive differiscono ma la media non riporta al valore vero.
+  - Prima di scrivere codice, verificare come ci riescono Brave ed Epic.
 - Licenza: brave-core è MPL-2.0, compatibile con la GPL-3.0 di Cromite; i file portati
   mantengono la loro intestazione MPL.
 
@@ -67,7 +81,23 @@ e le autorizzazioni.
 - Comportamento di riferimento: le estensioni di analisi della privacy che mostrano, sito per
   sito, gli eventi di fingerprinting, l'anteprima di canvas/WebGL e un badge con i blocchi.
 
-## 4. Sync sul proprio server
+## 4. Traduzioni italiane dove mancano
+
+Chromium è già tradotto in italiano, ma le stringhe aggiunte da Cromite no: delle 343 che le sue
+patch aggiungono ai file `.grd`/`.grdp`, solo quelle dell'adblock (eyeo) hanno le traduzioni.
+Tolte le 222 solo Android, ne restano **121 che servono anche su Windows, macOS e iOS**:
+autorizzazioni dei siti aggiunte da Cromite (fuso orario, WebGL, WebRTC, viewport, autoplay,
+geometria della tastiera...), userscript e altre impostazioni.
+
+- Una patch `common/` che aggiunge le voci italiane ai file `*_it.xtb` di Chromium.
+- Uno strumento (`tools/i18n.py`) che elenca le stringhe di Cromite e nostre senza traduzione
+  italiana, calcola gli ID come fa grit e rigenera la patch da un file di traduzioni nostro: a
+  ogni aggiornamento di Cromite dice quali stringhe nuove o cambiate vanno tradotte.
+- Le stringhe delle nostre patch (pannello Fingerprinting, sync, ecc.) nascono già con
+  l'italiano.
+- Fuori dal lavoro: `chrome://flags`, che in Chromium è sempre solo in inglese.
+
+## 5. Sync sul proprio server
 
 - Server: `go-sync` di Brave (MPL-2.0) in Docker sul proprio NAS o server.
 - Nel browser: indirizzo del server impostato nelle impostazioni di ogni dispositivo (mai nel
@@ -76,7 +106,7 @@ e le autorizzazioni.
   quindi va raggiungibile solo dalla rete privata (LAN o VPN come Tailscale), con un elenco
   delle chiavi dei propri dispositivi; i dati restano cifrati anche sul server.
 
-## 5. macOS
+## 6. macOS
 
 - Porting: Cromite non compila per Mac, le correzioni vanno in `patches/macos/`.
 - **Tema "Liquid Glass" come Safari:** barra delle schede e degli strumenti traslucide con
@@ -84,12 +114,12 @@ e le autorizzazioni.
   forme e spaziature in stile Safari, modalità chiara e scura, rispetto di "Riduci trasparenza".
 - Aggiornamento in-app da `update.json`, firma ad-hoc (Developer ID più avanti).
 
-## 6. Cookie centralizzati
+## 7. Cookie centralizzati
 
 Dopo il sync: sincronizzazione dei cookie solo cifrata e solo per i siti scelti (alcuni siti
 legano la sessione al dispositivo e non funzionerebbero comunque).
 
-## 7. iOS
+## 8. iOS
 
 - Base: Chromium per iOS (WebKit, regola Apple).
 - Funzioni di Cromite da reimplementare in `ios/`: adblock con le regole di contenuto di
