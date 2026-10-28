@@ -5,6 +5,9 @@ basato su Chromium, per **Windows, macOS e iOS**. Dove Cromite non arriva (macOS
 implementiamo noi. `NomeBrowser` è un nome provvisorio: si cambia in `fork.json` e nella patch
 di branding.
 
+Cosa viene dopo (anti-fingerprinting come Brave, pannello delle API bloccate, sync, tema
+Liquid Glass su macOS e iOS): [ROADMAP.md](ROADMAP.md).
+
 ## La regola: nessuna modifica si perde negli aggiornamenti
 
 Le nostre modifiche non stanno in un fork dei sorgenti, ma come patch in `patches/`, applicate
