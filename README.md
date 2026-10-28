@@ -98,6 +98,21 @@ i file in `.work/` hanno i marcatori con le tre versioni (upstream nuovo, base v
 python3 tests/test_forkctl.py
 ```
 
+## Privacy
+
+Il repo è pubblico: dentro ci sono solo le patch e gli strumenti, mai dati personali.
+
+- Le funzioni che usano server personali (per esempio il sync su un NAS) si configurano nelle
+  impostazioni del browser, su ogni dispositivo: indirizzi e credenziali non vanno nelle patch.
+- Le patch sono firmate con l'identità pubblica di `fork.json` (`patch_author`), qualunque sia
+  la configurazione git del computer; `verify` rifiuta patch con un autore diverso.
+- `python3 tools/forkctl.py privacy-check` cerca email non anonime e indirizzi di rete privati
+  (casa e Tailscale) in file, messaggi e autori dei commit. Gira in CI a ogni push e prima di ogni
+  aggiornamento automatico. Una riga voluta si segna con il commento `privacy: ok`.
+- Parole da non pubblicare mai (nomi, indirizzi): vanno in `.privacy-denylist`, che è escluso
+  da git e resta solo sul tuo computer; `privacy-check` le cerca come parole intere.
+- Conviene usare `privacy-check` anche come hook `pre-push` locale (`.git/hooks/pre-push`).
+
 ## Automazione su GitHub
 
 | workflow | quando | cosa fa |

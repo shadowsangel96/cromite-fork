@@ -16,6 +16,8 @@ REPO = Path(__file__).resolve().parent.parent
 V1, V2 = "1.0.0.1", "1.0.0.2"
 TAG1, TAG2 = f"v{V1}-{'a' * 40}", f"v{V2}-{'b' * 40}"
 APPLY_SCRIPT = "#!/bin/bash\nrm -rf v8/.git\n"
+FAKE_EMAIL = "mario.rossi@gmail.com"  # privacy: ok (dato finto per i test)
+FAKE_LAN_IP = "192.168.1.20"  # privacy: ok (dato finto per i test)
 
 BRANDING = "PRODUCT_FULLNAME=Chromium\nMAC_BUNDLE_ID=org.chromium.Chromium\n"
 FEATURE_V1 = "".join(f"line {i}\n" for i in range(1, 31))
@@ -87,9 +89,12 @@ class Fixture:
                          "build/cromite.gn_args": 'is_debug=false\ntreat_warnings_as_errors=true\n'
                                                   'if (target_os == "win") {\n  is_debug=true\n}\n',
                          "tools/images/cromite-source/apply-cromite-patches.sh": APPLY_SCRIPT})
+        # niente identità git nell'ambiente: il workspace deve usare quella di fork.json
         self.env = {"FORKCTL_CHROMIUM_DIR": str(self.chromium), "FORKCTL_CROMITE_DIR": str(self.cromite),
-                    "FORKCTL_LATEST_TAG": TAG2, "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "t@example.com",
-                    "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "t@example.com"}
+                    "FORKCTL_LATEST_TAG": TAG2}
+        # per i repo "upstream" finti costruiti dai test
+        self.ident_env = {**self.env, "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "t@example.com",
+                          "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "t@example.com"}
 
     def set_lock(self, tag, version):
         (self.root / "upstream.lock").write_text(json.dumps({"cromite_tag": tag, "chromium_version": version}))
@@ -245,16 +250,16 @@ class ForkctlTest(unittest.TestCase):
         v8 = fx.tmp / "v8-upstream"
         write(v8, {"include/v8.h": "// v8\n"})
         for cmd in (("init", "-q"), ("add", "-A"), ("commit", "-qm", "v8")):
-            run("git", *cmd, cwd=v8, env=fx.env)
+            run("git", *cmd, cwd=v8, env=fx.ident_env)
         src = fx.tmp / "full" / "src"
         write(src, {k: v for k, v in {"chrome/app/theme/chromium/BRANDING": BRANDING, "base/feature.cc": FEATURE_V2,
                                        "other/y.txt": "y\n",
                                        "chrome/VERSION": "MAJOR=1\nMINOR=0\nBUILD=0\nPATCH=2\n"}.items()})
         run("git", "init", "-q", cwd=src)
         run("git", "add", "-A", cwd=src)
-        run("git", "commit", "-qm", "chromium", cwd=src, env=fx.env)
-        run("git", "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(v8), "v8", cwd=src, env=fx.env)
-        run("git", "commit", "-qm", "v8 submodule", cwd=src, env=fx.env)
+        run("git", "commit", "-qm", "chromium", cwd=src, env=fx.ident_env)
+        run("git", "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(v8), "v8", cwd=src, env=fx.ident_env)
+        run("git", "commit", "-qm", "v8 submodule", cwd=src, env=fx.ident_env)
 
         fx.forkctl("apply-cromite", "--src", str(src))
         fx.forkctl("apply", "--src", str(src))
@@ -270,6 +275,51 @@ class ForkctlTest(unittest.TestCase):
         fx.set_lock(TAG1, V1)
         fx.forkctl("apply", "--src", str(src), expect=1)  # versione sbagliata: si rifiuta
 
+
+    def test_patches_use_public_author(self):
+        fx = self.fx
+        fx.add_patches(("Uno", "base/feature.cc", "line 1\n", "line 1 x\n"))
+        patch = fx.root / "patches" / fx.series()[0]
+        author = json.loads((fx.root / "fork.json").read_text())["patch_author"]
+        self.assertIn(f"From: {author['name']} <{author['email']}>", patch.read_text())
+        patch.write_text(patch.read_text().replace(author["email"], FAKE_EMAIL))
+        self.assertIn("autore diverso", fx.forkctl("verify", expect=1).stderr)
+
+    def test_privacy_check(self):
+        fx = self.fx
+        author = json.loads((fx.root / "fork.json").read_text())["patch_author"]
+        ident = ["-c", f"user.name={author['name']}", "-c", f"user.email={author['email']}"]
+
+        def commit(files, message="modifica"):
+            write(fx.root, files)
+            run("git", "add", "-A", cwd=fx.root)
+            run("git", *ident, "commit", "-qm", message, cwd=fx.root)
+
+        run("git", "init", "-q", cwd=fx.root)
+        commit({"note.md": "rete 10.0.0.0/8, versione SDK 10.0.26100.0, test@example.com\n"})
+        fx.forkctl("privacy-check")
+        commit({"note.md": f"il NAS è su {FAKE_LAN_IP}\n"})
+        self.assertIn(FAKE_LAN_IP, fx.forkctl("privacy-check", expect=1).stderr)
+        commit({"note.md": "tailscale 100.101.102.103 # privacy: ok\n"})
+        fx.forkctl("privacy-check")
+        commit({"note.md": f"scrivimi a {FAKE_EMAIL}\n"})
+        self.assertIn(FAKE_EMAIL, fx.forkctl("privacy-check", expect=1).stderr)
+        commit({"note.md": "pulito\n"}, f"contatto: {FAKE_EMAIL}")
+        self.assertIn("commit", fx.forkctl("privacy-check", expect=1).stderr)
+
+    def test_privacy_denylist_is_local_and_whole_word(self):
+        fx = self.fx
+        author = json.loads((fx.root / "fork.json").read_text())["patch_author"]
+        run("git", "init", "-q", cwd=fx.root)
+        write(fx.root, {"note.md": "Segretissimo va bene\n", ".gitignore": "/.privacy-denylist\n",
+                        ".privacy-denylist": "# locale\nSegreto\n"})
+        run("git", "add", "-A", cwd=fx.root)
+        run("git", "-c", f"user.name={author['name']}", "-c", f"user.email={author['email']}",
+            "commit", "-qm", "base", cwd=fx.root)
+        self.assertNotIn(".privacy-denylist", run("git", "ls-files", cwd=fx.root).stdout)
+        fx.forkctl("privacy-check")
+        write(fx.root, {"note.md": "il Segreto è qui\n"})
+        self.assertIn("lista locale", fx.forkctl("privacy-check", expect=1).stderr)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

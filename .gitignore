@@ -4,3 +4,5 @@
 /.work/
 __pycache__/
 .DS_Store
+# privacy: lista locale (mai nel repo)
+/.privacy-denylist

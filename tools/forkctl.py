@@ -78,7 +78,8 @@ def log(msg=""):
 # --------------------------------------------------------------------- git
 
 GIT_ENV = {k: v for k, v in os.environ.items()
-           if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")}
+           if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_AUTHOR_NAME",
+                        "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL")}
 
 
 def git(*args, cwd, check=True, stdin=None, env=None):
@@ -99,13 +100,19 @@ def git_version():
     return int(m.group(1)), int(m.group(2))
 
 
+def patch_author():
+    """Identità pubblica con cui firmiamo le patch (fork.json), mai quella del computer."""
+    return CONFIG["patch_author"]["name"], CONFIG["patch_author"]["email"]
+
+
 def identity_args(repo):
     """-c user.name/email se il repo non ha già un'identità (serve a git am/commit)."""
+    name, email = patch_author()
     args = []
     if git("config", "user.name", cwd=repo, check=False).returncode:
-        args += ["-c", "user.name=forkctl"]
+        args += ["-c", f"user.name={name}"]
     if git("config", "user.email", cwd=repo, check=False).returncode:
-        args += ["-c", "user.email=forkctl@localhost"]
+        args += ["-c", f"user.email={email}"]
     return args
 
 
@@ -119,9 +126,10 @@ def init_repo(path):
                 "advice.detachedHead": "false", "merge.conflictStyle": "diff3"}
     for key, value in settings.items():
         git("config", key, value, cwd=path)
-    for key, default in (("user.name", "forkctl"), ("user.email", "forkctl@localhost")):
-        if git("config", key, cwd=path, check=False).returncode:
-            git("config", key, default, cwd=path)
+    # i commit fatti qui diventano patch pubbliche: sempre l'identità di fork.json
+    name, email = patch_author()
+    git("config", "user.name", name, cwd=path)
+    git("config", "user.email", email, cwd=path)
 
 
 def commit(repo, message):
@@ -457,9 +465,15 @@ def check_series(series):
         if not path.is_file():
             problems.append(f"{rel}: elencata in series ma il file non esiste")
             continue
-        found = TRAILER_RE.findall(path.read_text(errors="replace").split("\ndiff --git ", 1)[0])
+        header = path.read_text(errors="replace").split("\ndiff --git ", 1)[0]
+        found = TRAILER_RE.findall(header)
         if found != [rel]:
             problems.append(f"{rel}: trailer Fork-Patch mancante o diverso ({found})")
+        author = re.search(r"^From: (.*)$", header, re.M)
+        expected = "{} <{}>".format(*patch_author())
+        if not author or author.group(1).strip() != expected:
+            problems.append(f"{rel}: autore diverso da patch_author di fork.json "
+                            "(rigenera la patch con forkctl export)")
     listed = set(series)
     for path in sorted(PATCHES.rglob("*.patch")):
         rel = path.relative_to(PATCHES).as_posix()
@@ -1033,6 +1047,79 @@ def cmd_gn_args(args):
     return EXIT_OK
 
 
+# ---------------------------------------------------------------- privacy
+
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+")
+# reti private di casa e di Tailscale (100.64.0.0/10); le notazioni CIDR (10.0.0.0/8) vanno bene
+PRIVATE_IP_RE = re.compile(r"(?<![\d.])(?:10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])|192\.168|"
+                           r"100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7]))\.\d{1,3}\.\d{1,3}(?![\d./])")
+SAFE_EMAIL_DOMAINS = ("users.noreply.github.com", "example.com", "example.org", "example.net")
+SAFE_EMAILS = {"noreply@github.com", "noreply@anthropic.com"}
+# parole vietate solo su questo computer (nome, indirizzi del NAS...): mai nel repo
+DENYLIST = ROOT / ".privacy-denylist"
+
+
+def privacy_problems():
+    deny = []
+    if DENYLIST.is_file():
+        words = [w.strip() for w in DENYLIST.read_text().splitlines() if w.strip() and not w.startswith("#")]
+        # parole intere: "ago" non deve scattare dentro "lago"
+        deny = [re.compile(rf"(?<!\w){re.escape(w)}(?!\w)", re.I) for w in words]
+    own = patch_author()[1].lower()
+    problems = []
+
+    def safe_email(addr):
+        addr = addr.lower()
+        return addr == own or addr in SAFE_EMAILS or addr.split("@", 1)[1] in SAFE_EMAIL_DOMAINS
+
+    def scan(where, line):
+        if "privacy: ok" in line:
+            return
+        problems.extend(f"{where}: email {m.group(0)}" for m in EMAIL_RE.finditer(line)
+                        if not safe_email(m.group(0)))
+        problems.extend(f"{where}: indirizzo di rete privato {m.group(0)}" for m in PRIVATE_IP_RE.finditer(line))
+        problems.extend(f"{where}: contiene una parola della lista locale" for w in deny if w.search(line))
+
+    for rel in text(git("ls-files", "-z", cwd=ROOT)).split("\0"):
+        path = ROOT / rel
+        if not rel or not path.is_file() or path == DENYLIST:
+            continue
+        data = path.read_bytes()
+        if b"\0" in data:
+            continue
+        in_header = rel.endswith(".patch")
+        for number, line in enumerate(data.decode("utf-8", "replace").splitlines(), 1):
+            if rel.endswith(".patch"):
+                # nelle patch contano intestazione e righe aggiunte, non il contesto di Chromium
+                in_header = in_header and not line.startswith("diff --git ")
+                if not in_header and not (line.startswith("+") and not line.startswith("+++")):
+                    continue
+            scan(f"{rel}:{number}", line)
+
+    log_format = "%h%x00%an%x00%ae%x00%cn%x00%ce%x00%B%x01"
+    for entry in text(git("log", f"--format={log_format}", cwd=ROOT, check=False)).split("\x01"):
+        fields = entry.strip("\n").split("\0")
+        if len(fields) < 6:
+            continue
+        sha, names, emails, message = fields[0], (fields[1], fields[3]), (fields[2], fields[4]), fields[5]
+        for addr in emails:
+            if not safe_email(addr):
+                problems.append(f"commit {sha}: identità {addr} non anonima")
+        for line in [*names, *message.splitlines()]:
+            scan(f"commit {sha}", line)
+    return problems
+
+
+def cmd_privacy_check(args):
+    problems = privacy_problems()
+    if problems:
+        raise ForkError("possibili dati personali nel repo:\n  " + "\n  ".join(problems) +
+                        "\n(se una riga è voluta, aggiungi il commento `privacy: ok`)")
+    extra = " e la lista locale" if DENYLIST.is_file() else ""
+    log(f"OK: nessun dato personale trovato (file, commit{extra}).")
+    return EXIT_OK
+
+
 # ------------------------------------------------------------------- info
 
 def cmd_latest(args):
@@ -1085,6 +1172,7 @@ def main():
     p.add_argument("--github-output", action="store_true")
     p.set_defaults(fn=cmd_check)
     sub.add_parser("verify", help="le patch si applicano sulla versione bloccata?").set_defaults(fn=cmd_verify)
+    sub.add_parser("privacy-check", help="cerca dati personali in file e commit").set_defaults(fn=cmd_privacy_check)
     p = sub.add_parser("update", help="riapplica le patch su un Cromite nuovo (rebase a 3 vie)")
     p.add_argument("--to", help="tag Cromite (default: ultima release stabile)")
     p.add_argument("--force", action="store_true")

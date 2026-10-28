@@ -2,5 +2,9 @@
   "name": "NomeBrowser",
   "cromite_repo": "https://github.com/uazo/cromite",
   "cromite_github": "uazo/cromite",
-  "chromium_gitiles": "https://chromium.googlesource.com/chromium/src"
+  "chromium_gitiles": "https://chromium.googlesource.com/chromium/src",
+  "patch_author": {
+    "name": "shadowsangel96",
+    "email": "188833096+shadowsangel96@users.noreply.github.com"
+  }
 }

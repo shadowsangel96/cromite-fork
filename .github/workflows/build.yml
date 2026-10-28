@@ -24,7 +24,7 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       release: ${{ steps.meta.outputs.release }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: meta
         run: |
           version=$(python3 -c 'import json; print(json.load(open("upstream.lock"))["chromium_version"])')
@@ -37,11 +37,11 @@ jobs:
     runs-on: [self-hosted, linux, x64, chromium]
     timeout-minutes: 1440
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: tools/build/build-windows.sh
         env:
           ACCEPT_MSVC_LICENSE: ${{ vars.ACCEPT_MSVC_LICENSE }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows
           path: dist/*.zip
@@ -52,9 +52,9 @@ jobs:
     runs-on: [self-hosted, macOS, ARM64, chromium]
     timeout-minutes: 1440
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: tools/build/build-macos.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos
           path: dist/*-macos-*.zip
@@ -68,9 +68,9 @@ jobs:
     runs-on: [self-hosted, macOS, ARM64, chromium]
     timeout-minutes: 1440
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: tools/build/build-ios.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ios
           path: dist/*.ipa
@@ -82,8 +82,8 @@ jobs:
       (needs.windows.result == 'success' || needs.macos.result == 'success' || needs.ios.result == 'success')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true

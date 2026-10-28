@@ -12,10 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # il controllo privacy guarda tutta la storia
+
+      - name: Nessun dato personale
+        run: python3 tools/forkctl.py privacy-check
 
       - name: Cache dei download (Cromite, file di Chromium)
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .cache
           key: forkctl-${{ github.run_id }}

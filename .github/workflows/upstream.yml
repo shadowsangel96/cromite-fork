@@ -28,12 +28,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Cache dei download (Cromite, file di Chromium)
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .cache
           key: forkctl-${{ github.run_id }}
@@ -59,7 +59,7 @@ jobs:
 
       - name: Report
         if: steps.check.outputs.update == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: report-${{ steps.check.outputs.version }}
           path: reports/update-${{ steps.check.outputs.version }}.md
@@ -80,6 +80,7 @@ jobs:
           git switch -c "$branch"
           git add -A upstream.lock patches state reports
           git commit -m "Aggiorna a Cromite $VERSION" -m "Tag: $TAG"
+          python3 tools/forkctl.py privacy-check
           git push -f origin "$branch"
           if ! gh pr view "$branch" --json number >/dev/null 2>&1; then
             gh pr create --base "$BASE" --head "$branch" \
