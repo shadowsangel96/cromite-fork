@@ -64,8 +64,9 @@ jobs:
           name: report-${{ steps.check.outputs.version }}
           path: reports/update-${{ steps.check.outputs.version }}.md
 
+      # outcome prima di rc: l'output di uno step saltato è null, e null == '0' è vero
       - name: PR dell'aggiornamento (e merge se pulito)
-        if: steps.update.outputs.rc == '0'
+        if: steps.update.outcome == 'success' && steps.update.outputs.rc == '0'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.check.outputs.tag }}
@@ -90,7 +91,7 @@ jobs:
           fi
 
       - name: Issue se serve una decisione
-        if: steps.update.outputs.rc == '2' || steps.update.outputs.rc == '3'
+        if: steps.update.outcome == 'success' && (steps.update.outputs.rc == '2' || steps.update.outputs.rc == '3')
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.check.outputs.version }}
