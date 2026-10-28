@@ -355,6 +355,32 @@ siti"):
   partizionata (`Enable-third-party-storage-partitioning.patch`) e cancellazione dei dati
   all'uscita come opzione (`Add-setting-to-clear-data-on-exit.patch`).
 
+**Siti ricordati, uguali su tutti i dispositivi.** L'elenco è un'impostazione del browser che si
+sincronizza con il sync sul proprio server (task 5), come le altre impostazioni. Un elenco iniziale
+personale si importa al primo avvio da un file privato, fuori dal repo.
+
+**Assistente all'accesso.** Quando il browser riconosce che hai fatto l'accesso a un sito non
+ricordato, chiede con un fumetto accanto all'indirizzo (come per "Salva password") se vuoi restare
+collegato, con un giudizio e il perché.
+
+- **Come riconosce l'accesso:** le euristiche del gestore delle password di Chromium (modulo con
+  la password inviato e poi sparito), più passkey/WebAuthn e il ritorno da un login esterno
+  (Google, Apple e simili).
+- **Come valuta, tutto in locale** (nessun sito visitato esce dal browser):
+  - indirizzo simile a un marchio noto ma diverso (i controlli "lookalike" che Chromium ha già):
+    possibile sito falso, quindi sconsigliato e con avviso;
+  - il sito è anche una rete di tracciamento presente su molti altri siti (elenchi aperti come
+    quello di Disconnect, GPL-3.0): si può ricordare, perché da noi i cookie restano separati per
+    sito, ma l'assistente lo segnala;
+  - quanti tracker ha cercato di caricare la pagina (li blocca già l'adblock);
+  - che cookie ha salvato il sito: di accesso, di analisi o pubblicitari, riconosciuti per nome
+    con l'Open Cookie Database (Apache-2.0).
+- **Risposta:** "Sicuro da ricordare", "Ricordabile con attenzione" o "Sconsigliato", con i
+  motivi, e i pulsanti "Ricorda" e "Non ricordare".
+- **"Ricorda solo l'accesso":** tiene i cookie di accesso e cancella comunque quelli di analisi e
+  pubblicitari, riconosciuti come sopra. Da provare sito per sito, perché alcuni siti legano
+  l'accesso anche a cookie con nomi da analisi.
+
 **Cookie centralizzati**, dopo il sync: sincronizzazione solo cifrata e solo per i siti
 "ricordati" (alcuni siti legano la sessione al dispositivo e non funzionerebbero comunque). I
 cookie temporanei non si sincronizzano mai.

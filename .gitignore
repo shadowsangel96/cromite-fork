@@ -6,3 +6,5 @@ __pycache__/
 .DS_Store
 # privacy: lista locale (mai nel repo)
 /.privacy-denylist
+# impostazioni personali (siti da ricordare, ecc.): mai nel repo
+/.privato/
