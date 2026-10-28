@@ -15,13 +15,14 @@ sopra Cromite nell'ordine di `patches/series`. È lo stesso schema che Cromite u
   codice intorno cambia.
 - I conflitti risolti una volta vengono **ricordati** (`git rerere`, in `state/rr-cache/`) e
   riapplicati in automatico le volte successive.
-- Se una patch non si riapplica, l'aggiornamento **si ferma** e apre una issue con il conflitto.
+- Se una patch non si riapplica, l'aggiornamento **si ferma**: il workflow fallisce (GitHub avvisa
+  via email) con il conflitto nel riepilogo dell'esecuzione.
   Niente viene compilato o pubblicato con patch mancanti.
 - Se una patch diventa vuota (Cromite o Chromium hanno già la stessa modifica), si ferma e chiede
   conferma; solo su conferma la patch va in `patches/retired/`, mai cancellata.
 - `forkctl export` si rifiuta di togliere patch dalla serie se non lo chiedi esplicitamente.
 - Ogni aggiornamento lascia un report in `reports/` con il confronto delle patch prima/dopo
-  (`git range-diff`), e arriva come PR: su GitHub vedi il diff di ogni patch fra le versioni.
+  (`git range-diff`), e arriva come commit: su GitHub vedi il diff di ogni patch fra le versioni.
 
 ## Come funziona
 
@@ -117,18 +118,23 @@ Il repo è pubblico: dentro ci sono solo le patch e gli strumenti, mai dati pers
 
 | workflow | quando | cosa fa |
 |---|---|---|
-| `upstream.yml` | ogni giorno + a mano | nuovo Cromite → `update` → PR + merge + build; se serve una decisione, issue |
-| `verify.yml` | push e PR | test di forkctl + `verify` sulla versione bloccata |
+| `upstream.yml` | ogni giorno + a mano | nuovo Cromite → `update` → commit su `main` + build; se serve una decisione, fallisce con il report nel riepilogo |
+| `verify.yml` | ogni push | controllo privacy, test di forkctl, `verify` sulla versione bloccata |
 | `build.yml` | dopo ogni aggiornamento + a mano | build e release con `update.json`: Windows sui server GitHub (`build-windows.yml`, a tappe), macOS/iOS su un Mac self-hosted |
 
 Da configurare nel repo GitHub:
 
-- *Settings → Actions → General*: "Allow GitHub Actions to create and approve pull requests".
 - *Settings → Variables*:
-  - `AUTO_MERGE_CLEAN`: `false` per rivedere a mano anche gli aggiornamenti puliti (default `true`).
+  - `AUTO_UPDATE`: `false` per ricevere anche gli aggiornamenti puliti su un ramo
+    `upstream/<versione>` da unire a mano, invece del commit diretto su `main` (default `true`).
   - `MAC_BUILD_HOST`: `true` quando è collegato un Mac self-hosted (etichetta aggiuntiva
     `chromium`) per macOS e iOS.
 - Windows non richiede nulla: usa i runner gratuiti di GitHub (il repo è pubblico).
+
+Il repo è pubblico solo per compilare gratis, non è un progetto aperto ai contributi: issue,
+pull request, wiki, progetti e discussioni sono disattivati e le interazioni di chi non è
+collaboratore (commenti compresi) sono bloccate. GitHub concede quel blocco per al massimo
+6 mesi alla volta: va rinnovato (*Settings → Moderation options → Interaction limits*).
 
 ## Piattaforme
 

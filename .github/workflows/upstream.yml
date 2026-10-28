@@ -1,6 +1,8 @@
 # Ogni giorno controlla se Cromite ha una nuova release stabile e riapplica le nostre patch.
-# - tutto pulito (o conflitti già risolti in passato, via rerere): PR + merge + build
-# - conflitto o patch diventata vuota: si ferma e apre una issue con il report
+# Nel repo issue e pull request sono disattivate, quindi:
+# - tutto pulito (o conflitti già risolti in passato, via rerere): commit sul ramo + build
+# - conflitto o patch diventata vuota: il workflow fallisce (GitHub avvisa via email) e il
+#   report è nel riepilogo dell'esecuzione e tra gli artifact
 name: Aggiornamento da Cromite
 
 on:
@@ -12,11 +14,13 @@ on:
         description: "Tag Cromite (vuoto = ultima release stabile)"
         required: false
         default: ""
+      build:
+        description: "Avvia la build dopo un aggiornamento riuscito"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
-  pull-requests: write
-  issues: write
   actions: write
 
 concurrency:
@@ -54,7 +58,7 @@ jobs:
           python3 tools/forkctl.py update --to "${{ steps.check.outputs.tag }}"
           rc=$?
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
-          # 2 = conflitto, 3 = patch diventata vuota: li gestisce lo step dell'issue
+          # 2 = conflitto, 3 = patch diventata vuota: li gestisce l'ultimo step
           if [ $rc -ne 0 ] && [ $rc -ne 2 ] && [ $rc -ne 3 ]; then exit $rc; fi
 
       - name: Report
@@ -64,44 +68,41 @@ jobs:
           name: report-${{ steps.check.outputs.version }}
           path: reports/update-${{ steps.check.outputs.version }}.md
 
+      - name: Riepilogo
+        if: steps.check.outputs.update == 'true'
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+        run: cat "reports/update-$VERSION.md" >> "$GITHUB_STEP_SUMMARY"
+
       # outcome prima di rc: l'output di uno step saltato è null, e null == '0' è vero
-      - name: PR dell'aggiornamento (e merge se pulito)
+      - name: Commit dell'aggiornamento (e build)
         if: steps.update.outcome == 'success' && steps.update.outputs.rc == '0'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.check.outputs.tag }}
           VERSION: ${{ steps.check.outputs.version }}
-          AUTO_MERGE: ${{ vars.AUTO_MERGE_CLEAN || 'true' }}
-          BASE: ${{ github.event.repository.default_branch }}
+          BRANCH: ${{ github.ref_name }}
+          AUTO_UPDATE: ${{ vars.AUTO_UPDATE || 'true' }}
+          # dalle esecuzioni pianificate (senza input) la build parte sempre
+          BUILD: ${{ github.event_name != 'workflow_dispatch' || inputs.build }}
         run: |
-          branch="upstream/$VERSION"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -c "$branch"
           git add -A upstream.lock patches state reports
           git commit -m "Aggiorna a Cromite $VERSION" -m "Tag: $TAG"
           python3 tools/forkctl.py privacy-check
-          git push -f origin "$branch"
-          if ! gh pr view "$branch" --json number >/dev/null 2>&1; then
-            gh pr create --base "$BASE" --head "$branch" \
-              --title "Aggiorna a Cromite $VERSION" --body-file "reports/update-$VERSION.md"
-          fi
-          if [ "$AUTO_MERGE" = "true" ]; then
-            gh pr merge "$branch" --squash --delete-branch
-            gh workflow run build.yml --ref "$BASE"
+          if [ "$AUTO_UPDATE" = "true" ]; then
+            git push origin "HEAD:refs/heads/$BRANCH"
+            if [ "$BUILD" = "true" ]; then gh workflow run build.yml --ref "$BRANCH"; fi
+          else
+            git push -f origin "HEAD:refs/heads/upstream/$VERSION"
+            echo "::notice::Aggiornamento pronto sul ramo upstream/$VERSION, da unire a mano (AUTO_UPDATE=false)"
           fi
 
-      - name: Issue se serve una decisione
+      - name: Serve una decisione sulle patch
         if: steps.update.outcome == 'success' && (steps.update.outputs.rc == '2' || steps.update.outputs.rc == '3')
         env:
-          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.check.outputs.version }}
         run: |
-          title="Aggiornamento a Cromite $VERSION: le patch richiedono una decisione"
-          existing=$(gh issue list --state open --limit 100 --json number,title \
-            --jq ".[] | select(.title == \"$title\") | .number" | head -1)
-          if [ -z "$existing" ]; then
-            gh issue create --title "$title" --body-file "reports/update-$VERSION.md"
-          fi
-          echo "::error::Aggiornamento a $VERSION fermo: serve una decisione sulle patch (vedi issue)"
+          echo "::error::Aggiornamento a $VERSION fermo: serve una decisione sulle patch (report nel riepilogo)"
           exit 1
