@@ -306,10 +306,26 @@ quelli che ce l'hanno usano il loro. Vale per tutte e tre le piattaforme.
   una riga separata sopra (come Chromium).
 - Aggiornamento in-app da `update.json`, firma ad-hoc (Developer ID più avanti).
 
-## 10. Cookie centralizzati
+## 10. Cookie: tre modalità e sincronizzazione
 
-Dopo il sync: sincronizzazione dei cookie solo cifrata e solo per i siti scelti (alcuni siti
-legano la sessione al dispositivo e non funzionerebbero comunque).
+Una scelta nelle impostazioni, con eccezioni per sito dal pannello del sito ("Cookie e dati dei
+siti"):
+
+- **Blocca tutti:** nessun cookie e nessun dato salvato dai siti (anche `localStorage`,
+  IndexedDB e cache dei service worker). È la più privata, ma i login non funzionano.
+- **Temporanei** (proposta di predefinito): i cookie funzionano durante la visita e vengono
+  cancellati, con tutti i dati del sito, appena chiudi l'ultima scheda di quel sito. Per i siti
+  dove vuoi restare collegato c'è "Ricorda questo sito" nel pannello. È il "Dimenticami quando
+  chiudo il sito" di Brave (brave-core, MPL-2.0) esteso a tutti i siti: Chromium da solo cancella
+  i dati di sessione solo alla chiusura del browser.
+- **Normale:** come Chrome, più quello che Cromite fa già: tutti i cookie separati per sito
+  principale (`Partitioning-all-cookies-by-top-frame-domain.patch`), memoria dei siti incorporati
+  partizionata (`Enable-third-party-storage-partitioning.patch`) e cancellazione dei dati
+  all'uscita come opzione (`Add-setting-to-clear-data-on-exit.patch`).
+
+**Cookie centralizzati**, dopo il sync: sincronizzazione solo cifrata e solo per i siti
+"ricordati" (alcuni siti legano la sessione al dispositivo e non funzionerebbero comunque). I
+cookie temporanei non si sincronizzano mai.
 
 ## 11. iOS
 
