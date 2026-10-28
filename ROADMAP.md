@@ -533,9 +533,16 @@ in modo naturale invece che frase per frase.
 - **"Mostra originale"** con un clic, e l'indicazione "Tradotta da Claude" nella barra.
 - **Costi bassi:** le traduzioni si salvano in locale, quindi riaprire una pagina già tradotta non
   costa niente; prompt caching sulle istruzioni di traduzione.
-- **Modello:** a scelta nelle impostazioni, da decidere provando (costi indicativi per una pagina
-  lunga, circa 3.000 parole: Claude Haiku 5.5 sotto il mezzo centesimo, Claude Sonnet 5.5 circa 5
-  centesimi, Claude Opus 5.5 circa 10 centesimi).
+- **Modello: Claude Haiku 5.5 di default** (decisione dopo una prova su un testo con modi di dire,
+  segnaposto e testi dell'interfaccia: qualità quasi uguale a Sonnet 5.5, che rende un po' meglio
+  solo alcuni modi di dire, a circa un ventesimo del costo, sotto il mezzo centesimo per una
+  pagina lunga). Pulsante "Migliora la traduzione" con Claude Sonnet 5.5 per le pagine
+  importanti. Da riprovare sul campo con pagine vere.
+- **Risposta in JSON obbligatorio** (structured outputs, `output_config.format`): nella prova da
+  chat Haiku ha aggiunto una frase prima dell'elenco; con il formato imposto dall'API può uscire
+  solo l'elenco dei segmenti.
+- **Istruzioni:** per i testi brevi dell'interfaccia le formule italiane comuni ("Got it" → "Ok" o
+  "Capito"); verificare che il testo tra backtick resti intatto.
 - **Privacy:** il testo della pagina va ad Anthropic passando dalla VPN; sui siti esclusi (banche,
   sanità) chiede conferma prima di tradurre. Il testo sostituito è visibile agli script della
   pagina, come succede con il traduttore di Chrome.
