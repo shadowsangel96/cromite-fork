@@ -48,7 +48,10 @@ jobs:
         shell: pwsh
         run: |
           7z x "$env:FORK_BUILD_DIR\state.zip" "-o$env:FORK_BUILD_DIR\chromium" -y | Select-Object -Last 3
+          # 7z esce con 1 per i soli avvisi, con 2 o più per gli errori veri
+          if ($LASTEXITCODE -gt 1) { exit $LASTEXITCODE }
           Remove-Item "$env:FORK_BUILD_DIR\state.zip"
+          exit 0
 
       - name: Prepara (Windows SDK, sorgenti, patch, gn)
         shell: pwsh
@@ -63,7 +66,13 @@ jobs:
       - name: Salva lo stato per la tappa successiva
         if: steps.build.outputs.finished == 'false'
         shell: pwsh
-        run: 7z a -tzip "$env:FORK_BUILD_DIR\state.zip" "$env:FORK_BUILD_DIR\chromium\src" -mx=1 -mtc=on '-xr!.git' | Select-Object -Last 3
+        run: |
+          7z a -tzip "$env:FORK_BUILD_DIR\state.zip" "$env:FORK_BUILD_DIR\chromium\src" -mx=1 -mtc=on '-xr!.git' | Select-Object -Last 3
+          # codice 1 = solo avvisi: nei sorgenti di Chromium ci sono link simbolici rotti
+          # (third_party/nearby, roba per Mac) che 7z non può aprire. L'archivio c'è lo stesso.
+          if ($LASTEXITCODE -gt 1) { exit $LASTEXITCODE }
+          "state.zip: {0:N1} GB" -f ((Get-Item "$env:FORK_BUILD_DIR\state.zip").Length / 1GB)
+          exit 0
 
       - name: Carica lo stato
         if: steps.build.outputs.finished == 'false'
