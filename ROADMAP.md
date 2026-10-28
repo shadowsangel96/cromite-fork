@@ -11,10 +11,28 @@ aggiornamenti di Cromite come tutto il resto.
 - Repo pubblico solo per le build, con controllo dei dati personali in CI.
 - Build Windows a tappe sui runner gratuiti di GitHub (prima esecuzione in corso).
 
-## 1. Prima build Windows installabile
+## 1. Prima build Windows installabile, poi build veloci
 
 - Portare a termine la prima build e provarla.
 - Prima release pubblica con `update.json`.
+
+**Riuso della build precedente.** Oggi ogni build riparte da zero (i runner di GitHub sono puliti
+a ogni esecuzione), quindi dura come la prima. Per gli aggiornamenti mensili di Chromium va bene,
+perché cambiano comunque quasi tutti i file. Mentre sviluppiamo le nostre patch, invece, serve
+una build che ricompili solo quello che cambia:
+
+- a fine build si salva la cartella di build completa (sorgenti e `out/`, orari dei file
+  conservati) come artifact legato alla versione di Chromium e al tag di Cromite;
+- se la build successiva ha la stessa versione di Chromium e lo stesso Cromite, parte da lì
+  invece di riscaricare tutto;
+- si riscrivono solo i file toccati dalle patch, vecchie e nuove. Il contenuto originale (Chromium
+  più Cromite) lo dà il mini-albero di `forkctl`, e i file identici non si riscrivono, così
+  ninja non li considera cambiati;
+- ninja ricompila solo i file toccati e ciò che ne dipende, più il link finale;
+- da misurare con la prima build: quanto spazio occupa l'artifact, quanto a lungo GitHub lo
+  conserva gratis per un repo pubblico, quanto dura il link finale di `chrome.dll` con le
+  ottimizzazioni complete. Se il link pesa troppo, una configurazione "di sviluppo" con
+  ottimizzazioni ridotte, separata da quella delle release.
 
 ## 2. Anti-fingerprinting: base di Cromite + randomizzazione come Brave
 
