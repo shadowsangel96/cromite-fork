@@ -454,6 +454,67 @@ spento come già in Cromite (`Do-not-store-passwords-by-default.patch`,
   Chromium e l'altro. Come per macOS, firma e caricamento su App Store Connect avvengono su un
   Mac privato, mai nella CI pubblica. AltStore/SideStore restano l'alternativa senza account.
 
+## 14. Claude integrato nel browser
+
+Claude come parte del browser, non come estensione: lo stile di Claude in Chrome, ma con
+l'interfaccia nativa (pannello laterale in vetro su macOS, foglio dal basso su iOS) e con funzioni
+che un'estensione non può avere.
+
+**Cosa fa**
+
+- **Pannello "Claude"** (pulsante nella barra e scorciatoia da tastiera): domande sulla pagina
+  aperta (riassunto, spiegazione, traduzione, con i rimandi ai punti della pagina), su più schede
+  insieme ("confronta queste tre offerte") e sui PDF aperti.
+- **Barra degli indirizzi:** "Chiedi a Claude" come voce accanto alla ricerca (SearXNG resta il
+  motore predefinito), con la risposta nel pannello.
+- **Testo selezionato:** "Spiega", "Traduci", "Riassumi", "Chiedi a Claude".
+- **Scrittura:** "Aiutami a scrivere" nei campi di testo (riscrivere, cambiare tono, tradurre,
+  rispondere a un'email). Mai nei campi di password e carte.
+- **Agente "Fallo tu":** Claude naviga, clicca, compila e confronta pagine al posto tuo, come
+  Claude in Chrome, in un gruppo di schede dedicato e visibile, con "Ferma" sempre in vista.
+- **Schede, cronologia e segnalibri in linguaggio naturale:** "raggruppa le schede per argomento",
+  "ritrova la ricetta che ho visto martedì". La ricerca nella cronologia gira in locale; a Claude
+  arrivano solo i risultati che scegli di mandare.
+- **Le tue chat di claude.ai:** claude.ai dentro il pannello, con il tuo account, quindi chat,
+  progetti e artifact come nell'app. Non risulta un'API ufficiale per leggere le chat di claude.ai,
+  quindi niente scorciatoie non ufficiali: le chat si usano da claude.ai stesso.
+- **Ponte con gli altri Claude:** il browser espone i suoi strumenti (leggere una pagina, cliccare,
+  compilare, fare screenshot) come server MCP locale, così Claude Code e l'app Claude sul Mac
+  possono usarlo, come già fa Claude in Chrome.
+- **Voce:** dettatura e lettura delle risposte con i servizi vocali del sistema.
+
+**Come funziona**
+
+- **Due canali, perché si pagano in modo diverso:** claude.ai (abbonamento) per le chat nel
+  pannello; l'API di Anthropic (chiave API, a consumo) per tutto ciò che legge o usa il browser.
+  La chiave sta nel portachiavi del sistema, mai in chiaro.
+- **Modelli:** Claude Opus 5.5 (`claude-opus-5-5`) per l'agente e le domande difficili. Per i
+  compiti veloci e frequenti (riassunti, suggerimenti di scrittura) si può valutare Claude Haiku
+  5.5 (`claude-haiku-5-5`), molto più economico: da decidere misurando la qualità.
+- **Strumenti dell'agente** scritti in C++ nel browser e dati a Claude con il tool use: l'albero di
+  accessibilità della pagina (testo e riferimenti agli elementi, più affidabile e più economico
+  degli screenshot), clic e testo come eventi di input veri, navigazione, schede. Screenshot e
+  `computer_toolset_20260801` solo per le pagine disegnate in canvas.
+- **Prompt caching** sul prompt di sistema e sugli strumenti, che restano fissi.
+
+**Privacy e sicurezza (regole fisse)**
+
+- Niente parte senza che tu lo chieda: nessuna analisi delle pagine in background.
+- Esclusi di default: banche, sanità, pagine con campi di password o carte, navigazione in
+  incognito. Elenco modificabile.
+- Le richieste passano dalla VPN come il resto del browser.
+- Il pannello è interfaccia del browser, non uno script nella pagina: i siti non vedono che Claude
+  c'è, quindi nessun segnale di fingerprinting in più.
+- **Istruzioni nascoste nelle pagine (prompt injection):** il contenuto delle pagine arriva a
+  Claude come dato, mai come istruzione. Conferma esplicita prima di acquisti, pagamenti, invio di
+  messaggi o email, invio di moduli, download, cancellazioni e accessi a siti nuovi. L'agente
+  lavora solo sui siti del compito e si ferma a chiedere quando una pagina contiene istruzioni.
+- Registro di ogni azione dell'agente, leggibile dal pannello.
+- **iOS:** pannello come foglio dal basso. L'agente lì passa da script iniettati in WebKit, quindi
+  è più limitato e visibile ai siti: si parte dalle funzioni di lettura e scrittura.
+- **Ponte temporaneo:** finché non è pronto, l'estensione ufficiale Claude in Chrome tra le
+  estensioni approvate, se funziona sui browser basati su Chromium.
+
 ## Windows
 
 - Tema: quello standard di Chromium, nessuna personalizzazione.
