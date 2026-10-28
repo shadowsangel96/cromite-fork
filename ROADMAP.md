@@ -193,7 +193,29 @@ geometria della tastiera...), userscript e altre impostazioni.
   quindi va raggiungibile solo dalla rete privata (LAN o VPN come Tailscale), con un elenco
   delle chiavi dei propri dispositivi; i dati restano cifrati anche sul server.
 
-## 6. macOS
+## 6. Motore di ricerca sul proprio server (SearXNG)
+
+SearXNG è un metamotore open source: interroga Google, Bing, DuckDuckGo e altri per conto tuo e
+restituisce i risultati senza pubblicità, account o profilazione.
+
+- **Server:** SearXNG in Docker sul proprio NAS o server, raggiungibile solo dalla rete privata
+  (LAN o Tailscale), come il sync, con HTTPS e il proxy delle immagini attivo.
+- **Uscita delle ricerche:** se SearXNG interroga i motori direttamente, Google e Bing vedono tutte
+  le ricerche arrivare dall'IP di casa. Per la massima privacy le sue richieste in uscita passano
+  da una VPN o da Tor (impostazioni `outgoing` di SearXNG); in cambio, ogni tanto qualche motore
+  risponde con un CAPTCHA e i suoi risultati mancano.
+- **Nel browser:**
+  - Chromium sa già usare un motore personalizzato (Impostazioni → Motore di ricerca → Ricerca
+    sui siti → Aggiungi, poi "Imposta come predefinito"), e Cromite ha già corretto il supporto
+    OpenSearch per gli indirizzi con un percorso: SearXNG funziona anche senza patch.
+  - Patch nostra: una voce "SearXNG personale" in cui si inserisce solo l'indirizzo del server
+    (mai nel codice), con i suggerimenti mentre scrivi (`/autocompleter`) e già impostata come
+    predefinita.
+  - Ripiego automatico su DuckDuckGo Light (già nell'elenco di Cromite) quando il server non è
+    raggiungibile, per esempio fuori casa senza VPN.
+  - Su iOS Chromium limita la scelta del motore predefinito: lì serve una patch apposta.
+
+## 7. macOS
 
 - Porting: Cromite non compila per Mac, le correzioni vanno in `patches/macos/`.
 - **Tema "Liquid Glass" come Safari:** barra delle schede e degli strumenti traslucide con
@@ -201,12 +223,12 @@ geometria della tastiera...), userscript e altre impostazioni.
   forme e spaziature in stile Safari, modalità chiara e scura, rispetto di "Riduci trasparenza".
 - Aggiornamento in-app da `update.json`, firma ad-hoc (Developer ID più avanti).
 
-## 7. Cookie centralizzati
+## 8. Cookie centralizzati
 
 Dopo il sync: sincronizzazione dei cookie solo cifrata e solo per i siti scelti (alcuni siti
 legano la sessione al dispositivo e non funzionerebbero comunque).
 
-## 8. iOS
+## 9. iOS
 
 - Base: Chromium per iOS (WebKit, regola Apple).
 - Funzioni di Cromite da reimplementare in `ios/`: adblock con le regole di contenuto di
