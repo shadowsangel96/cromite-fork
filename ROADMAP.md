@@ -316,11 +316,17 @@ siti"):
 - **Temporanei** (predefinito, decisione): i cookie funzionano durante la visita e vengono
   cancellati, con tutti i dati del sito, **appena lasci il sito**: quando chiudi la scheda,
   oppure quando nella stessa scheda passi a un altro sito e nessun'altra scheda lo tiene aperto.
-  - **Un minuto di tolleranza** prima di cancellare: se torni indietro entro quel tempo ritrovi
-    tutto com'era. Serve anche ai passaggi che escono dal sito e rientrano, come il login con un
-    account esterno o il pagamento che passa dalla pagina della banca: cancellando subito si
-    romperebbero.
-  - Per i siti dove vuoi restare collegato c'è "Ricorda questo sito" nel pannello.
+  - **Cancellazione istantanea** (decisione): appena lasci il sito tu (chiudi la scheda, scrivi
+    un altro indirizzo, segui un link verso un altro sito o torni indietro verso un altro sito),
+    i dati spariscono subito, senza attese.
+  - **Unica attesa automatica: i giri che il sito stesso fa fare fuori e ritorno**, come il login
+    con un account esterno o il pagamento che passa dalla pagina della banca. Si riconoscono
+    perché l'uscita parte dal sito con un reindirizzamento del server o con l'invio di un modulo,
+    non da un link diretto. In quel caso i dati restano finché non torni, al massimo 5 minuti; se
+    nel frattempo chiudi la scheda o vai altrove, si cancellano subito. Senza questa eccezione
+    il pagamento o il login fallirebbero al ritorno. Da verificare sui casi reali.
+  - Per i siti dove vuoi restare collegato c'è "Ricorda questo sito" nel pannello. L'elenco dei
+    siti da ricordare (per esempio iCloud) si decide sito per sito.
   - Base: il "Dimenticami quando chiudo il sito" di Brave (brave-core, MPL-2.0), esteso a tutti i
     siti. Chromium da solo cancella i dati di sessione solo alla chiusura del browser.
 - **Normale:** come Chrome, più quello che Cromite fa già: tutti i cookie separati per sito
