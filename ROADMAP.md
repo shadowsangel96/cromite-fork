@@ -15,6 +15,21 @@ aggiornamenti di Cromite come tutto il resto.
 
 - Portare a termine la prima build e provarla.
 - Prima release pubblica con `update.json`.
+- **Correzioni di sicurezza di Chromium senza aspettare Cromite** (obbligatorio). Quando Chrome
+  pubblica una correzione dentro la stessa versione principale (per esempio da 153.0.8010.37 a
+  153.0.8010.55) e Cromite non l'ha ancora seguita, il controllo giornaliero applica le patch di
+  Cromite e le nostre su quella versione e avvia la build.
+  - Dentro la stessa versione principale le differenze sono minime: le patch quasi sempre
+    entrano pulite. Se una non entra, il workflow si ferma e avvisa come per gli altri conflitti,
+    e resta l'ultima build buona.
+  - Le versioni principali nuove (ogni 4 settimane) aspettano sempre Cromite.
+  - In `forkctl`: la versione di Chromium in `upstream.lock` diventa indipendente dal tag di
+    Cromite, e il controllo guarda anche le release stabili di Chromium.
+- **Aggiornamenti in "Informazioni su"** (`chrome://settings/help`), come in Chrome: il browser
+  mostra la versione, controlla se ce n'è una nuova, la scarica e chiede di riavviare. La pagina
+  c'è già in Chromium; il pezzo che la collega all'aggiornamento (`VersionUpdater`) va scritto
+  per ogni piattaforma: il nostro aggiornamento su Windows, Sparkle su macOS, TestFlight su iOS
+  (lì la pagina rimanda all'app TestFlight).
 
 **Riuso della build precedente.** Oggi ogni build riparte da zero (i runner di GitHub sono puliti
 a ogni esecuzione), quindi dura come la prima. Per gli aggiornamenti mensili di Chromium va bene,
@@ -304,7 +319,13 @@ quelli che ce l'hanno usano il loro. Vale per tutte e tre le piattaforme.
   forme e spaziature in stile Safari, modalità chiara e scura, rispetto di "Riduci trasparenza".
 - **Schede a scelta** nelle impostazioni: nella barra degli strumenti (compatte, come Safari) o in
   una riga separata sopra (come Chromium).
-- Aggiornamento in-app da `update.json`, firma ad-hoc (Developer ID più avanti).
+- **Firma e aggiornamenti:** firma Developer ID e notarizzazione Apple, così macOS la apre senza
+  avvisi. Aggiornamenti con Sparkle, firmati con una nostra chiave EdDSA e mostrati in
+  "Informazioni su".
+- **La firma resta fuori dalla CI pubblica.** Il certificato Developer ID contiene il nome del
+  titolare dell'account, e i log delle Actions e le release di questo repo sono pubblici. Quindi
+  GitHub compila senza firmare, e firma, notarizzazione e feed di Sparkle stanno su un Mac e un
+  server privati. Le build macOS firmate non vanno nelle release pubbliche.
 
 ## 10. Cookie: tre modalità e sincronizzazione
 
@@ -348,10 +369,14 @@ cookie temporanei non si sincronizzano mai.
 - **Barra a scelta** nelle impostazioni: tutta in basso (indietro, indirizzo, menu), oppure in
   alto come Safari, con l'indirizzo in alto e i pulsanti (indietro, avanti, condividi, schede,
   menu) in una barra in basso.
-- Distribuzione: `.ipa` da firmare (AltStore/SideStore o account Apple Developer) e una
-  sorgente AltStore per gli aggiornamenti.
+- **Distribuzione: TestFlight** con l'account Apple Developer (test interno, senza revisione di
+  Apple): gli aggiornamenti arrivano da soli e ogni build vale 90 giorni, più del mese tra un
+  Chromium e l'altro. Come per macOS, firma e caricamento su App Store Connect avvengono su un
+  Mac privato, mai nella CI pubblica. AltStore/SideStore restano l'alternativa senza account.
 
 ## Windows
 
 - Tema: quello standard di Chromium, nessuna personalizzazione.
-- Aggiornamento in-app da `update.json` (Cromite su Windows disattiva l'updater di Chromium).
+- Aggiornamento in-app da `update.json` (Cromite su Windows disattiva l'updater di Chromium),
+  dalla pagina "Informazioni su": pacchetto firmato con una nostra chiave e verificato prima di
+  installarlo, sostituzione dei file al riavvio, versione precedente tenuta per tornare indietro.
