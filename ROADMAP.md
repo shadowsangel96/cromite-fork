@@ -211,8 +211,26 @@ geometria della tastiera...), userscript e altre impostazioni.
 - Nel browser: indirizzo del server impostato nelle impostazioni di ogni dispositivo (mai nel
   codice), login Google sostituito da una chiave nostra, cifratura con passphrase.
 - Sicurezza: `go-sync` accetta qualunque client che si firmi da solo con una chiave ed25519,
-  quindi va raggiungibile solo dalla rete privata (LAN o VPN come Tailscale), con un elenco
-  delle chiavi dei propri dispositivi; i dati restano cifrati anche sul server.
+  quindi va raggiungibile solo dalla rete privata (LAN o VPN come Tailscale) e accetta una sola
+  catena di sync, la propria (vedi sotto); i dati restano cifrati anche sul server.
+- **Accesso dal pulsante del profilo**, in alto a destra, dove Chromium mostra "Accedi con
+  Google": diventa **"Accedi con Claude"**. Un solo accesso collega l'account Claude a tutte le
+  parti di Claude nel browser (Claude in Chrome, chat nel pannello, task 14) e attiva la sync.
+- **Sync automatica tra i dispositivi, senza digitare frasi.** Il codice della catena (le parole
+  che in Brave si copiano a mano da un dispositivo all'altro) lo crea il primo dispositivo e lo
+  salva nell'app Password di Apple (portachiavi iCloud, cifrato end-to-end; su Windows con
+  iCloud per Windows, task 11). Ogni altro dispositivo, al primo "Accedi", lo ritrova lì e si
+  unisce da solo alla sync sul proprio server.
+- **Perché il codice non dipende dall'account Claude:** non risulta un "Accedi con Anthropic" con
+  cui un'app di terzi possa verificare l'identità o salvare dati, e anche se ci fosse, legare la
+  chiave di tutti i dati sincronizzati (cronologia, cookie, impostazioni) a un account esterno
+  vorrebbe dire affidargliela. Quindi: l'account Claude serve a Claude, il portachiavi di Apple
+  custodisce il codice, i dati stanno solo sul proprio server, cifrati.
+- **Il server accetta solo la propria catena:** `go-sync` configurato per un solo account di sync,
+  quello derivato dal codice, al posto dell'elenco delle chiavi dei singoli dispositivi. Chi ha il
+  codice ed è in LAN o su Tailscale entra, nessun altro.
+- **Il menu del profilo** mostra account Claude collegato, sync attiva, ultimo aggiornamento e
+  dispositivi della catena, con "Rimuovi dispositivo".
 
 ## 6. Motore di ricerca sul proprio server (SearXNG)
 
