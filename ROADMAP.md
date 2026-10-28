@@ -410,9 +410,20 @@ spento come già in Cromite (`Do-not-store-passwords-by-default.patch`,
 
 ## 12. uBlock Origin ed estensioni
 
-- **uBlock Origin preinstallato** al posto dell'adblock di Cromite (motore eyeo), perché è più
-  efficace sui casi difficili: scriptlet contro i muri anti-adblock e la pubblicità nei video,
+- **uBlock Origin integrato nel browser** al posto dell'adblock di Cromite (motore eyeo), perché è
+  più efficace sui casi difficili: scriptlet contro i muri anti-adblock e la pubblicità nei video,
   filtri cosmetici avanzati, liste scritte per la sua sintassi.
+  - **Integrato, non estensione:** gira come componente interno del browser, come il lettore
+    PDF di Chromium. Non compare tra le estensioni e non si disinstalla per sbaglio.
+  - **Impostazioni** nella sezione dove prima c'era l'adblock di Cromite ("Blocco contenuti"):
+    liste di filtri, filtri personali, regole e siti esclusi di uBlock Origin dentro la pagina
+    delle impostazioni.
+  - **Icona a destra dell'indirizzo**, speculare allo scudo del fingerprinting a sinistra, con il
+    numero di elementi bloccati nella pagina. Apre il pannello "Blocco contenuti": acceso o spento
+    sul sito, bloccati e domini esterni, blocchi extra per sito (popup, media grandi, font
+    esterni, JavaScript), "Nascondi un elemento", registro e impostazioni. Su iPhone l'icona
+    prende il posto di "Ricarica" nella capsula dell'indirizzo (si ricarica tirando giù la
+    pagina) e il pannello si apre dal basso.
   - Versione completa (Manifest V2): Cromite tiene ancora attive le estensioni MV2
     (`Override-the-MV2-deprecation.patch`).
   - Distribuito con il browser dalla release ufficiale su GitHub (GPL-3.0, come Cromite), non dal
