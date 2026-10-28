@@ -313,11 +313,16 @@ siti"):
 
 - **Blocca tutti:** nessun cookie e nessun dato salvato dai siti (anche `localStorage`,
   IndexedDB e cache dei service worker). È la più privata, ma i login non funzionano.
-- **Temporanei** (proposta di predefinito): i cookie funzionano durante la visita e vengono
-  cancellati, con tutti i dati del sito, appena chiudi l'ultima scheda di quel sito. Per i siti
-  dove vuoi restare collegato c'è "Ricorda questo sito" nel pannello. È il "Dimenticami quando
-  chiudo il sito" di Brave (brave-core, MPL-2.0) esteso a tutti i siti: Chromium da solo cancella
-  i dati di sessione solo alla chiusura del browser.
+- **Temporanei** (predefinito, decisione): i cookie funzionano durante la visita e vengono
+  cancellati, con tutti i dati del sito, **appena lasci il sito**: quando chiudi la scheda,
+  oppure quando nella stessa scheda passi a un altro sito e nessun'altra scheda lo tiene aperto.
+  - **Un minuto di tolleranza** prima di cancellare: se torni indietro entro quel tempo ritrovi
+    tutto com'era. Serve anche ai passaggi che escono dal sito e rientrano, come il login con un
+    account esterno o il pagamento che passa dalla pagina della banca: cancellando subito si
+    romperebbero.
+  - Per i siti dove vuoi restare collegato c'è "Ricorda questo sito" nel pannello.
+  - Base: il "Dimenticami quando chiudo il sito" di Brave (brave-core, MPL-2.0), esteso a tutti i
+    siti. Chromium da solo cancella i dati di sessione solo alla chiusura del browser.
 - **Normale:** come Chrome, più quello che Cromite fa già: tutti i cookie separati per sito
   principale (`Partitioning-all-cookies-by-top-frame-domain.patch`), memoria dei siti incorporati
   partizionata (`Enable-third-party-storage-partitioning.patch`) e cancellazione dei dati
