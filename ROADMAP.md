@@ -34,9 +34,14 @@ impercettibile ma diversi per ogni sito, così due visite non danno la stessa im
 
 - Seme come Brave: cambia per sessione, per sito (eTLD+1) e per area di storage; i frame e gli
   script di terze parti usano il seme del sito principale.
-- API da coprire, sul modello di brave-core (`browser/farbling/*_browsertest.cc` ne elenca i
-  casi): Canvas e OffscreenCanvas, Web Audio, `navigator.userAgent`, `hardwareConcurrency`,
-  `deviceMemory`, `languages`, `plugins`, `enumerateDevices`, voci di `speechSynthesis`,
+- Due strategie, su segnali diversi:
+  - **randomizzare** i segnali "rumorosi", dove una piccola alterazione non si nota: canvas e
+    OffscreenCanvas, audio, font, plugin;
+  - **uniformare** i valori precisi che i siti usano davvero (versioni, schermo): un valore
+    inventato renderebbe l'impronta più rara e romperebbe l'impaginazione, quindi tutti
+    dichiarano gli stessi valori (vedi sotto). CPU, memoria e lingua li fissa già Cromite.
+- Da valutare sul modello di brave-core (`browser/farbling/*_browsertest.cc` elenca i casi che
+  randomizza): `enumerateDevices`, voci di `speechSynthesis` (Cromite le spegne già),
   `navigator.usb`.
 - **WebGL resta spento** (decisione): espone la scheda video ed è dannoso per la privacy, quindi
   non lo randomizziamo e non lo riattiviamo. WebGPU espone la GPU allo stesso modo: verificare
@@ -73,14 +78,57 @@ impercettibile ma diversi per ogni sito, così due visite non danno la stessa im
   lettura, per non sbagliare gli orari mostrati dai siti.
 - Prima di scrivere codice, verificare come ci riescono Brave ed Epic.
 
-**Verifica** (tutte e quattro devono passare):
+**Priorità**, in base a quello che i tracker leggono davvero (riferimento: i segnali raccolti
+da FingerprintJS, la libreria open source più diffusa, `src/sources/index.ts`):
+
+1. **Canvas, font e audio:** tra i segnali più usati e più identificanti, e contano per Cover Your
+   Tracks. Font in entrambi i modi in cui vengono letti: elenco dei font installati (misurando il
+   testo) e resa dei font predefiniti. Audio compresa la latenza (`audioBaseLatency`).
+2. **Plugin:** solo per arrivare a 4 attributi in Cover Your Tracks. Valgono quasi niente per il
+   tracciamento (in Chromium restituiscono a tutti lo stesso elenco di lettori PDF), ma sono il
+   quarto più innocuo: supporto touch e fuso orario a ogni lettura romperebbero i siti, i
+   supercookie non si possono randomizzare.
+3. **Client Hints e schermo, uniformati** (sotto): non contano per Cover Your Tracks, ma sono tra i
+   segnali più ricchi per i tracker.
+4. Il resto, confrontato con quello che fa già Cromite: preferenze di visualizzazione (contrasto,
+   HDR, gamma di colori, movimento ridotto), formato di data e lingua, `enumerateDevices`.
+
+**Uniformare: Client Hints.** Sono le informazioni su browser e sistema negli header
+`Sec-CH-UA-*` e in `navigator.userAgentData`. Quelle ad alta precisione diventano uguali per
+tutti:
+
+- versione del browser solo maggiore (`153.0.0.0` invece di `153.0.8010.37`), come la stringa
+  User-Agent: Cromite ha già una patch per la versione completa, da verificare e completare;
+- versione del sistema (`platformVersion`): un solo valore per sistema operativo, invece di quello
+  vero che distingue le singole build di Windows o di macOS;
+- architettura, bit e formato del dispositivo: quelli standard della piattaforma, mai più
+  dettagliati del necessario;
+- **coerenza** fra stringa User-Agent, `navigator.platform`, `userAgentData` e header: un browser
+  che si contraddice è facilissimo da riconoscere.
+
+**Uniformare: schermo e finestra.**
+
+- Risoluzione dichiarata come uno dei tagli più comuni per quel sistema; area utilizzabile
+  (`availWidth`/`availHeight`) uguale allo schermo intero, così non si leggono dimensione e
+  posizione di barra delle applicazioni e Dock; profondità colore standard.
+- **Letterboxing** come in Tor Browser e Mullvad Browser: l'area della pagina viene arrotondata a
+  multipli fissi (per esempio 200×100 pixel) con un bordo neutro, così la dimensione esatta della
+  finestra, il dato più identificante, non si legge. Il bordo si vede, quindi è un'opzione:
+  attiva di default in incognito, attivabile anche nella navigazione normale.
+
+**Verifica** (tutte devono passare):
 
 1. Cover Your Tracks dice "your browser has a randomized fingerprint" invece di "unique".
 2. La media di 100 letture di canvas e audio non coincide con il valore vero.
 3. Due siti diversi vedono impronte diverse nella stessa sessione.
 4. Dopo un riavvio o dopo aver cancellato i dati del sito l'impronta è nuova.
-- Licenza: brave-core è MPL-2.0, compatibile con la GPL-3.0 di Cromite; i file portati
-  mantengono la loro intestazione MPL.
+5. Client Hints, User-Agent e `navigator.platform` danno gli stessi valori su ogni computer con
+   lo stesso sistema, e non si contraddicono tra loro.
+6. Con il letterboxing attivo, finestre di misure diverse danno la stessa dimensione della pagina
+   entro un multiplo.
+
+Licenza: brave-core è MPL-2.0, compatibile con la GPL-3.0 di Cromite; i file portati mantengono
+la loro intestazione MPL.
 
 ## 3. Pannello "Fingerprinting" nel menu delle informazioni sul sito
 
