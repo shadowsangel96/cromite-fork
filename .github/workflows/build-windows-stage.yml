@@ -1,0 +1,79 @@
+# Una tappa della build Windows (tools/build/gh_windows_stage.py). La usa build-windows.yml.
+name: Tappa build Windows
+
+on:
+  workflow_call:
+    inputs:
+      stage:
+        type: number
+        required: true
+    outputs:
+      finished:
+        value: ${{ jobs.stage.outputs.finished }}
+
+jobs:
+  stage:
+    runs-on: windows-2022
+    timeout-minutes: 358
+    outputs:
+      finished: ${{ steps.build.outputs.finished }}
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - name: Inizio tappa ${{ inputs.stage }}
+        id: start
+        shell: bash
+        run: echo "epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Scarica lo stato della tappa precedente
+        if: inputs.stage > 1
+        uses: actions/download-artifact@v8
+        with:
+          name: windows-build-state
+          path: C:\b
+
+      - name: Estrai lo stato
+        if: inputs.stage > 1
+        shell: pwsh
+        run: |
+          7z x C:\b\state.zip -oC:\b\chromium -y | Select-Object -Last 3
+          Remove-Item C:\b\state.zip
+
+      - name: Compila
+        id: build
+        shell: pwsh
+        env:
+          STAGE: ${{ inputs.stage }}
+          JOB_STARTED: ${{ steps.start.outputs.epoch }}
+        run: python tools\build\gh_windows_stage.py
+
+      # -mtc=on conserva gli orari dei file: ninja riparte da dove si era fermato
+      - name: Salva lo stato per la tappa successiva
+        if: steps.build.outputs.finished == 'false'
+        shell: pwsh
+        run: 7z a -tzip C:\b\state.zip C:\b\chromium\src -mx=1 -mtc=on '-xr!.git' | Select-Object -Last 3
+
+      - name: Carica lo stato
+        if: steps.build.outputs.finished == 'false'
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-build-state
+          path: C:\b\state.zip
+          compression-level: 0
+          retention-days: 2
+          overwrite: true
+
+      - name: Carica il pacchetto
+        if: steps.build.outputs.finished == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-windows
+          path: dist/*.zip
+          compression-level: 0
+          retention-days: 7

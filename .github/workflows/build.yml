@@ -1,6 +1,7 @@
-# Build completa e release. Gira su runner self-hosted (Chromium non entra nei runner GitHub
-# gratuiti): un host Linux x86-64 per Windows, un Mac Apple Silicon per macOS e iOS.
-# Ogni piattaforma parte solo se la variabile del suo host è "true" (Settings > Variables).
+# Build completa e release.
+# - Windows: sui runner gratuiti di GitHub, a tappe (build-windows.yml).
+# - macOS e iOS: per ora su un Mac self-hosted, solo se MAC_BUILD_HOST è "true"
+#   (Settings > Variables).
 name: Build
 
 on:
@@ -16,6 +17,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: build
+  cancel-in-progress: false
 
 jobs:
   meta:
@@ -33,18 +38,8 @@ jobs:
 
   windows:
     needs: meta
-    if: contains(inputs.targets || 'windows,macos,ios', 'windows') && vars.LINUX_BUILD_HOST == 'true'
-    runs-on: [self-hosted, linux, x64, chromium]
-    timeout-minutes: 1440
-    steps:
-      - uses: actions/checkout@v7
-      - run: tools/build/build-windows.sh
-        env:
-          ACCEPT_MSVC_LICENSE: ${{ vars.ACCEPT_MSVC_LICENSE }}
-      - uses: actions/upload-artifact@v7
-        with:
-          name: windows
-          path: dist/*.zip
+    if: contains(inputs.targets || 'windows,macos,ios', 'windows')
+    uses: ./.github/workflows/build-windows.yml
 
   macos:
     needs: meta
@@ -56,7 +51,7 @@ jobs:
       - run: tools/build/build-macos.sh
       - uses: actions/upload-artifact@v7
         with:
-          name: macos
+          name: release-macos
           path: dist/*-macos-*.zip
 
   ios:
@@ -72,7 +67,7 @@ jobs:
       - run: tools/build/build-ios.sh
       - uses: actions/upload-artifact@v7
         with:
-          name: ios
+          name: release-ios
           path: dist/*.ipa
 
   release:
@@ -85,6 +80,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
+          pattern: release-*
           path: dist
           merge-multiple: true
       - name: Manifest per gli aggiornamenti in-app

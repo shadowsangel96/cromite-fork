@@ -1,0 +1,88 @@
+# Build Windows sui runner gratuiti di GitHub, a tappe (stesso schema di ungoogled-chromium):
+# ogni tappa compila per poche ore e passa la cartella di build alla successiva.
+# Le tappe dopo la fine della build vengono saltate.
+name: Build Windows
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stage-1:
+    uses: ./.github/workflows/build-windows-stage.yml
+    with:
+      stage: 1
+
+  stage-2:
+    needs: stage-1
+    if: needs.stage-1.outputs.finished == 'false'
+    uses: ./.github/workflows/build-windows-stage.yml
+    with:
+      stage: 2
+
+  stage-3:
+    needs: stage-2
+    if: needs.stage-2.outputs.finished == 'false'
+    uses: ./.github/workflows/build-windows-stage.yml
+    with:
+      stage: 3
+
+  stage-4:
+    needs: stage-3
+    if: needs.stage-3.outputs.finished == 'false'
+    uses: ./.github/workflows/build-windows-stage.yml
+    with:
+      stage: 4
+
+  stage-5:
+    needs: stage-4
+    if: needs.stage-4.outputs.finished == 'false'
+    uses: ./.github/workflows/build-windows-stage.yml
+    with:
+      stage: 5
+
+  stage-6:
+    needs: stage-5
+    if: needs.stage-5.outputs.finished == 'false'
+    uses: ./.github/workflows/build-windows-stage.yml
+    with:
+      stage: 6
+
+  stage-7:
+    needs: stage-6
+    if: needs.stage-6.outputs.finished == 'false'
+    uses: ./.github/workflows/build-windows-stage.yml
+    with:
+      stage: 7
+
+  stage-8:
+    needs: stage-7
+    if: needs.stage-7.outputs.finished == 'false'
+    uses: ./.github/workflows/build-windows-stage.yml
+    with:
+      stage: 8
+
+  stage-9:
+    needs: stage-8
+    if: needs.stage-8.outputs.finished == 'false'
+    uses: ./.github/workflows/build-windows-stage.yml
+    with:
+      stage: 9
+
+  stage-10:
+    needs: stage-9
+    if: needs.stage-9.outputs.finished == 'false'
+    uses: ./.github/workflows/build-windows-stage.yml
+    with:
+      stage: 10
+
+  # fallisce se una tappa è fallita o se le tappe non sono bastate
+  check:
+    needs: [stage-1, stage-2, stage-3, stage-4, stage-5, stage-6, stage-7, stage-8, stage-9, stage-10]
+    if: always() && !contains(needs.*.outputs.finished, 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "::error::build Windows non completata (tappa fallita o 10 tappe non bastano)" && exit 1

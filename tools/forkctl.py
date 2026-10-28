@@ -26,6 +26,7 @@ import os
 import posixpath
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -958,6 +959,14 @@ def check_src_version(src, lock):
         raise ForkError(f"{src} è Chromium {version}, upstream.lock vuole {lock['chromium_version']}")
 
 
+def rmtree_force(path):
+    """Come shutil.rmtree, ma toglie la sola lettura (su Windows gli oggetti git ce l'hanno)."""
+    def retry(func, target, _):
+        os.chmod(target, stat.S_IWRITE)
+        func(target)
+    shutil.rmtree(path, onerror=retry)
+
+
 def flatten_submodule(src, sub):
     """Come apply-cromite-patches.sh: trasforma il sottomodulo in file normali di src."""
     path = src / sub
@@ -965,7 +974,7 @@ def flatten_submodule(src, sub):
     if not gitdir.exists():
         log(f"  {sub}: già incorporato")
         return
-    shutil.rmtree(gitdir) if gitdir.is_dir() else gitdir.unlink()
+    rmtree_force(gitdir) if gitdir.is_dir() else gitdir.unlink()
     tmp = path.with_name(path.name + ".forkctl-tmp")
     os.replace(path, tmp)
     git("rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", sub, cwd=src)

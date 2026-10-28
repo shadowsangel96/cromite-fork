@@ -1,1 +1,8 @@
-# Windows: Cromite la supporta già, per ora usiamo i suoi argomenti così come sono.
+# Windows: Cromite la supporta già; sopra i suoi argomenti cambiamo solo quello che serve
+# alla build a tappe sui runner GitHub (4 core, 16 GB, 6 ore per tappa).
+# ninja invece di siso: riprende una build interrotta guardando gli orari dei file.
+use_siso = false
+# niente simboli di debug: link molto più leggeri e cartella di build più piccola
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0

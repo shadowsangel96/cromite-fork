@@ -119,23 +119,22 @@ Il repo è pubblico: dentro ci sono solo le patch e gli strumenti, mai dati pers
 |---|---|---|
 | `upstream.yml` | ogni giorno + a mano | nuovo Cromite → `update` → PR + merge + build; se serve una decisione, issue |
 | `verify.yml` | push e PR | test di forkctl + `verify` sulla versione bloccata |
-| `build.yml` | dopo ogni aggiornamento + a mano | build sugli host self-hosted, release con `update.json` |
+| `build.yml` | dopo ogni aggiornamento + a mano | build e release con `update.json`: Windows sui server GitHub (`build-windows.yml`, a tappe), macOS/iOS su un Mac self-hosted |
 
 Da configurare nel repo GitHub:
 
 - *Settings → Actions → General*: "Allow GitHub Actions to create and approve pull requests".
 - *Settings → Variables*:
   - `AUTO_MERGE_CLEAN`: `false` per rivedere a mano anche gli aggiornamenti puliti (default `true`).
-  - `LINUX_BUILD_HOST` / `MAC_BUILD_HOST`: `true` quando i runner sono collegati.
-  - `ACCEPT_MSVC_LICENSE`: `1` per la build Windows (vedi sotto).
-- Runner self-hosted con l'etichetta aggiuntiva `chromium`: uno Linux x86-64 (Windows), uno Mac
-  Apple Silicon (macOS e iOS).
+  - `MAC_BUILD_HOST`: `true` quando è collegato un Mac self-hosted (etichetta aggiuntiva
+    `chromium`) per macOS e iOS.
+- Windows non richiede nulla: usa i runner gratuiti di GitHub (il repo è pubblico).
 
 ## Piattaforme
 
 | | base Cromite | stato |
 |---|---|---|
-| **Windows x64** | supportata | cross-build da Linux come fa Cromite (`tools/build/build-windows.sh`). Scaricare il toolchain MSVC con msvc-wine implica accettare la licenza di Visual Studio: per questo serve `ACCEPT_MSVC_LICENSE=1`. |
+| **Windows x64** | supportata | compilata sui runner Windows gratuiti di GitHub con gli strumenti di Chromium e il Visual Studio già installato lì (`build-windows.yml`, `tools/build/gh_windows_stage.py`): fino a 10 tappe da ~5 ore, ognuna riparte dalla cartella di build della precedente. In alternativa c'è il cross-build da Linux su un host nostro (`tools/build/build-windows.sh`, richiede `ACCEPT_MSVC_LICENSE=1` perché scarica il toolchain MSVC con msvc-wine). |
 | **macOS** | non supportata | portiamo noi: `tools/build/build-macos.sh`, e le correzioni in `patches/macos/`. La prima build dirà cosa di Cromite non compila su Mac. Firma ad-hoc: per darla ad altri senza avvisi di Gatekeeper serve un Apple Developer ID + notarizzazione. |
 | **iOS** | non supportata | su iOS Chromium usa WebKit (regola Apple), quindi le funzioni di Cromite (adblock, privacy) vanno reimplementate nel codice `ios/`. `tools/build/build-ios.sh` produce un `.ipa` non firmato, da installare firmandolo (Apple Developer, AltStore/SideStore). |
 
@@ -157,5 +156,5 @@ Variabili: `FORK_BUILD_DIR` (default `~/fork-build`), `FORK_DIST_DIR`, `FORK_KEE
   riapplicato in automatico da rerere, e una patch diventata vuota ritirata solo su conferma.
 - I test offline coprono gli stessi casi più l'applicazione su un checkout completo finto
   (incorporazione dei sottomoduli come fa Cromite, patch Cromite, nostre patch, overlay).
-- Gli script `tools/build/` e il workflow `build.yml` **non sono ancora stati eseguiti**: manca un
-  host di build. La prima esecuzione su ciascuna piattaforma va seguita da vicino.
+- La build Windows a tappe su GitHub è nuova: la prima esecuzione va seguita da vicino.
+  Gli script per macOS, iOS e il cross-build Windows da Linux non sono ancora stati eseguiti.

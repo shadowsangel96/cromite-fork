@@ -1,0 +1,3 @@
+# I file del repo vanno usati così come sono su ogni sistema (le patch soprattutto):
+# niente conversione automatica dei fine riga, nemmeno sui runner Windows.
+* -text
