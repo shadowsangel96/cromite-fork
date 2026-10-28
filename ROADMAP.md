@@ -468,6 +468,11 @@ che un'estensione non può avere.
 - **Barra degli indirizzi:** "Chiedi a Claude" come voce accanto alla ricerca (SearXNG resta il
   motore predefinito), con la risposta nel pannello.
 - **Testo selezionato:** "Spiega", "Traduci", "Riassumi", "Chiedi a Claude".
+- **Puntatore magico** (su iOS "Tocca e chiedi"): passi il puntatore su un elemento qualsiasi
+  della pagina (titolo, foto, tabella, pulsante), il browser lo evidenzia e chiedi a Claude di
+  quello. A Claude arriva solo quell'elemento, con un ritaglio della sua immagine.
+- **Cerchia e cerca:** disegni un cerchio intorno a una parte della pagina (sul telefono col
+  dito) e Claude guarda e cerca solo in quella zona. A Claude arriva il ritaglio della zona.
 - **Scrittura:** "Aiutami a scrivere" nei campi di testo (riscrivere, cambiare tono, tradurre,
   rispondere a un'email). Mai nei campi di password e carte.
 - **Agente "Fallo tu":** Claude naviga, clicca, compila e confronta pagine al posto tuo, come
@@ -496,6 +501,11 @@ che un'estensione non può avere.
   degli screenshot), clic e testo come eventi di input veri, navigazione, schede. Screenshot e
   `computer_toolset_20260801` solo per le pagine disegnate in canvas.
 - **Prompt caching** sul prompt di sistema e sugli strumenti, che restano fissi.
+- **Limite di spesa**, perché l'API è a consumo e non ha un abbonamento fisso. Credito prepagato
+  senza ricarica automatica e limite di spesa del workspace nella Console di Anthropic, più un
+  tetto nel browser: limite al giorno e al mese nelle impostazioni, spesa del giorno sempre
+  visibile in fondo al pannello, avviso all'80% e blocco al 100%. Per ogni compito dell'agente un
+  budget di token (`task_budget`), così si ferma in modo ordinato invece di consumare all'infinito.
 
 **Privacy e sicurezza (regole fisse)**
 
