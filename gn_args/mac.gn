@@ -1,3 +1,15 @@
 # macOS: Cromite non lo compila. Nella prima fase di porting gli avvisi del compilatore
 # sul codice di Cromite non devono fermare la build; lo rimettiamo a true quando è pulita.
 treat_warnings_as_errors = false
+# Cromite non ha un blocco per il Mac: gli stessi valori dei suoi blocchi Windows e Linux.
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+enable_pdf = true
+pdf_is_complete_lib = true
+enable_plugins = true
+# ninja invece di siso: accetta -j (FORK_JOBS) e riprende una build interrotta.
+use_siso = false
+# Il link ThinLTO di Chromium vuole molta più RAM del link normale: con 8-16 GB va in swap.
+# Lo riaccendiamo per le release, su un Mac con più memoria.
+use_thin_lto = false

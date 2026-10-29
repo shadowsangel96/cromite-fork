@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build macOS (arm64 di default, FORK_MAC_CPU=x64 per Intel). Cromite non supporta macOS:
 # le correzioni per farlo compilare e funzionare vanno in patches/macos/ (titolo "mac: ...").
-# Requisiti host: Mac Apple Silicon, Xcode completo, ~32 GB RAM, ~250 GB su volume APFS.
+# Requisiti host: Mac Apple Silicon, Xcode completo, ~250 GB su volume APFS. Con poca RAM
+# (8-16 GB) limitare i processi con FORK_JOBS=4: più lenta, ma senza riempire lo swap.
 source "$(dirname "$0")/common.sh"
 
 [ "$(uname -s)" = Darwin ] || die "macOS si compila solo su un Mac"

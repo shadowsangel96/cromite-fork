@@ -88,9 +88,19 @@ prepare_source() {
     "${FORKCTL[@]}" apply-cromite --src "$SRC"
     git tag forkctl-cromite
   fi
+  # Stesse patch dell'ultima volta: niente reset, così i file non cambiano orario e ninja non
+  # ricompila quello che dipende da loro (una build interrotta riparte da dove era).
+  local stamp
+  stamp="$(cd "$ROOT" && find patches overlay -type f | LC_ALL=C sort | xargs shasum | shasum | cut -c1-40)"
+  if [ "$(cat "$CHECKOUT/.forkctl-applied" 2>/dev/null)" = "$stamp" ]; then
+    say "le nostre patch sono già applicate"
+    return
+  fi
   say "applico le nostre patch"
+  rm -f "$CHECKOUT/.forkctl-applied"
   git reset -q --hard refs/tags/forkctl-cromite
   "${FORKCTL[@]}" apply --src "$SRC"
+  echo "$stamp" > "$CHECKOUT/.forkctl-applied"
 }
 
 # gn_gen <os> <cpu> <out>
@@ -101,10 +111,14 @@ gn_gen() {
 }
 
 # build <out> <target...>
+# FORK_JOBS: processi in parallelo (meno = meno RAM). FORK_KEEP_GOING=1: dopo un errore continua
+# con il resto, così una piattaforma nuova mostra tutti i suoi errori in una build sola.
 build() {
-  local out="$1"
+  local out="$1" extra=()
   shift
-  (cd "$SRC" && autoninja -C "$out" "$@")
+  [ -n "${FORK_JOBS:-}" ] && extra+=(-j "$FORK_JOBS")
+  [ "${FORK_KEEP_GOING:-0}" = 1 ] && extra+=(-k 0)
+  (cd "$SRC" && autoninja ${extra[@]+"${extra[@]}"} -C "$out" "$@")
 }
 
 product_name() {
