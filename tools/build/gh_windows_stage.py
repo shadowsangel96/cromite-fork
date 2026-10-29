@@ -10,6 +10,8 @@ Due comandi, due step del workflow:
 - build: compila con ninja finché resta tempo nel job (GitHub lo ferma a 6 ore), poi si
   ferma pulita lasciando il resto alla tappa successiva, che riparte dalla cartella salvata
   come artifact.
+- local: tutta la build su un PC nostro, senza tappe (requisiti nel README). La cartella resta:
+  le build successive ricompilano solo quello che cambia. FORK_JOBS limita i processi di ninja.
 
 Variabili: STAGE (1, 2, ...), JOB_STARTED (epoch di inizio job), FORK_BUILD_DIR, GITHUB_OUTPUT,
 RESUME_RUN (id della run da cui la tappa 1 riprende lo stato; vuota = da zero).
@@ -17,6 +19,7 @@ Output di build: finished=true quando il pacchetto è pronto in dist/, finished=
 un'altra tappa.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -35,6 +38,8 @@ SRC = CHECKOUT / "src"
 DEPOT = WORK / "depot_tools"
 OUT = "out/win64"
 DIST = ROOT / "dist"
+VERSION_FILE = CHECKOUT / ".forkctl-version"   # versione di Chromium scaricata (build locale)
+APPLIED = CHECKOUT / ".forkctl-applied"        # impronta delle nostre patch applicate
 FORKCTL = [sys.executable, str(ROOT / "tools" / "forkctl.py")]
 VSWHERE = Path(r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe")
 VS_YEARS = {"17": "2022", "18": "2026"}  # versione principale di Visual Studio -> anno
@@ -113,8 +118,9 @@ def diagnostics():
     print(f"Windows SDK: {', '.join(installed_sdks()) or 'nessuno'}")
 
 
-def ensure_toolchain():
-    """Controlla Visual Studio e installa il Windows SDK richiesto dal sorgente di Chromium."""
+def ensure_toolchain(local=False):
+    """Controlla Visual Studio e il Windows SDK richiesto dal sorgente di Chromium. Sui runner
+    installa l'SDK se manca; su un PC nostro dice cosa installare (serve l'amministratore)."""
     text = (SRC / "build" / "vs_toolchain.py").read_text()
     sdk = re.search(r"^SDK_VERSION = '([\d.]+)'", text, re.M).group(1)
     versions = re.search(r"^MSVS_VERSIONS = .*?^\)", text, re.M | re.S).group(0)
@@ -122,11 +128,15 @@ def ensure_toolchain():
     year, _ = find_vs()
     say(f"toolchain: Chromium vuole Visual Studio {' o '.join(accepted)} e Windows SDK {sdk}")
     if year not in accepted:
-        sys.exit(f"sul runner c'è Visual Studio {year}: cambia runs-on in build-windows-stage.yml")
+        hint = "installa quella versione" if local else "cambia runs-on in build-windows-stage.yml"
+        sys.exit(f"c'è Visual Studio {year}, Chromium vuole {' o '.join(accepted)}: {hint}")
     debuggers = KITS / "Debuggers" / "x64" / "dbghelp.dll"
     if (KITS / "Include" / sdk / "um" / "windows.h").exists() and debuggers.exists():
         print("Windows SDK già installato")
         return
+    if local:
+        url = f": {SDK_INSTALLERS[sdk][1]}" if sdk in SDK_INSTALLERS else ""
+        sys.exit(f"manca il Windows SDK {sdk} con i Debugging Tools for Windows{url}")
     if sdk not in SDK_INSTALLERS:
         sys.exit(f"Windows SDK {sdk} assente sul runner: aggiungi il suo installer a SDK_INSTALLERS "
                  f"in tools/build/gh_windows_stage.py")
@@ -171,7 +181,9 @@ def fetch_source():
     say(f"scarico Chromium {version}")
     SRC.mkdir(parents=True, exist_ok=True)
     run(["git", "init", "-q"], cwd=SRC)
-    run(["git", "remote", "add", "origin", "https://chromium.googlesource.com/chromium/src.git"], cwd=SRC)
+    if subprocess.run(["git", "remote", "get-url", "origin"], cwd=SRC, capture_output=True).returncode:
+        run(["git", "remote", "add", "origin", "https://chromium.googlesource.com/chromium/src.git"],
+            cwd=SRC)
     run(["git", "fetch", "--depth", "2", "origin", f"+refs/tags/{version}:refs/tags/{version}"], cwd=SRC)
     run(["git", "checkout", "-q", "-f", version], cwd=SRC)
 
@@ -194,11 +206,22 @@ def sync_and_patch(env):
 
     say("patch di Cromite e nostre")
     run([*FORKCTL, "apply-cromite", "--src", SRC], env=env)
+    run(["git", "tag", "-f", "forkctl-cromite"], cwd=SRC)
     run([*FORKCTL, "apply", "--src", SRC], env=env)
+    APPLIED.write_text(patches_stamp())
 
     say("gn gen")
     write_gn_args(env)
     run([SRC / "buildtools" / "win" / "gn.exe", "gen", OUT], cwd=SRC, env=env)
+
+
+def patches_stamp():
+    """Impronta delle nostre patch e dell'overlay: cambia quando vanno riapplicate."""
+    digest = hashlib.sha1()
+    for path in sorted(p for d in (ROOT / "patches", ROOT / "overlay") for p in d.rglob("*")
+                       if p.is_file()):
+        digest.update(path.relative_to(ROOT).as_posix().encode() + b"\0" + path.read_bytes())
+    return digest.hexdigest()
 
 
 def write_gn_args(env):
@@ -214,15 +237,21 @@ def write_gn_args(env):
     print(args)
 
 
-def ninja(env, deadline):
-    """True se la build è finita, False se il tempo della tappa è scaduto."""
+def ninja(env, deadline=None):
+    """True se la build è finita, False se il tempo della tappa è scaduto (None: nessun limite)."""
     exe = SRC / "third_party" / "ninja" / "ninja.exe"
-    cmd = [str(exe), "-C", OUT, "-j", str(os.cpu_count() or 4), "chrome"]
-    remaining = deadline - time.time()
-    say(f"ninja per al massimo {remaining / 60:.0f} minuti")
-    if remaining < 600:
-        return False
-    proc = subprocess.Popen(cmd, cwd=SRC, env=env, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+    jobs = os.environ.get("FORK_JOBS") or str(os.cpu_count() or 4)
+    cmd = [str(exe), "-C", OUT, "-j", jobs, "chrome"]
+    remaining = None if deadline is None else deadline - time.time()
+    if remaining is None:
+        say("ninja")
+    else:
+        say(f"ninja per al massimo {remaining / 60:.0f} minuti")
+        if remaining < 600:
+            return False
+    # gruppo a parte solo nelle tappe, per fermarlo con CTRL_BREAK; in locale vale Ctrl+C
+    flags = 0 if deadline is None else subprocess.CREATE_NEW_PROCESS_GROUP
+    proc = subprocess.Popen(cmd, cwd=SRC, env=env, creationflags=flags)
     try:
         code = proc.wait(timeout=remaining)
     except subprocess.TimeoutExpired:
@@ -279,6 +308,35 @@ def prepare(stage):
         write_gn_args(env)
 
 
+def local():
+    WORK.mkdir(parents=True, exist_ok=True)
+    # la configurazione git di questa build, non quella globale di chi usa il PC
+    os.environ["GIT_CONFIG_GLOBAL"] = str(WORK / "gitconfig")
+    setup_git()
+    version = json.loads((ROOT / "upstream.lock").read_text())["chromium_version"]
+    synced = VERSION_FILE.exists() and VERSION_FILE.read_text().strip() == version
+    if not synced:
+        diagnostics()
+        fetch_source()
+    ensure_toolchain(local=True)
+    env = build_env()
+    setup_depot_tools(env)
+    if not synced:
+        sync_and_patch(env)
+        VERSION_FILE.write_text(version)
+    else:
+        say(f"sorgenti di Chromium {version} già pronti")
+        if not APPLIED.exists() or APPLIED.read_text() != patches_stamp():
+            say("le nostre patch sono cambiate: le riapplico")
+            APPLIED.unlink(missing_ok=True)
+            run(["git", "reset", "-q", "--hard", "refs/tags/forkctl-cromite"], cwd=SRC)
+            run([*FORKCTL, "apply", "--src", SRC], env=env)
+            APPLIED.write_text(patches_stamp())
+        write_gn_args(env)
+    ninja(env)
+    package()
+
+
 def build():
     deadline = int(os.environ["JOB_STARTED"]) + (JOB_LIMIT_MIN - RESERVE_MIN) * 60
     finished = ninja(build_env(), deadline)
@@ -293,8 +351,10 @@ def main():
         prepare(int(os.environ["STAGE"]))
     elif command == "build":
         build()
+    elif command == "local":
+        local()
     else:
-        sys.exit("uso: gh_windows_stage.py prepare|build")
+        sys.exit("uso: gh_windows_stage.py prepare|build|local")
 
 
 if __name__ == "__main__":

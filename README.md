@@ -158,6 +158,35 @@ Chromium completo richiede ~32 GB di RAM (16 al minimo), ~250 GB di disco e ore 
 Windows si compila da Linux x86-64; macOS e iOS solo su un Mac con Xcode completo.
 Variabili: `FORK_BUILD_DIR` (default `~/fork-build`), `FORK_DIST_DIR`, `FORK_KEEP_OLD=1`.
 
+### Build Windows su un PC Windows
+
+Molto più veloce delle tappe su GitHub, e dalla seconda volta ricompila solo quello che cambia.
+Serve:
+
+- Windows 10 o 11 x64 e ~250 GB liberi su un SSD NTFS.
+- Visual Studio 2026 (va bene la Community) con il carico di lavoro per lo sviluppo desktop in
+  C++ e i componenti ATL e MFC per gli strumenti di compilazione più recenti (x86 e x64).
+- Il Windows SDK che chiede Chromium, con i Debugging Tools for Windows: oggi il 10.0.28000
+  (installer: <https://go.microsoft.com/fwlink/?linkid=2370315>). Se manca, lo script lo dice.
+- Git per Windows e Python 3.12 o più recente.
+- Consigliato: escludere la cartella di build dalla scansione in tempo reale di Microsoft
+  Defender (Sicurezza di Windows › Protezione da virus e minacce › Esclusioni), che altrimenti
+  rallenta molto la compilazione.
+
+In PowerShell:
+
+```powershell
+git clone https://github.com/shadowsangel96/cromite-fork
+cd cromite-fork
+$env:FORK_BUILD_DIR = "D:\cromite-build"   # dove tenere sorgenti e build
+python tools\build\gh_windows_stage.py local
+```
+
+La prima volta scarica circa 30 GB e compila tutto; il pacchetto finisce in `dist\`. Per le
+versioni successive: `git pull` e lo stesso comando. La configurazione git usata dalla build sta
+nella cartella di build, quella dell'utente non si tocca. `FORK_JOBS` limita i processi di ninja
+se la RAM non basta (di default uno per core).
+
 ## Cosa è verificato
 
 - `forkctl` è provato su dati reali: patch scritte su Cromite 148 e riapplicate su 153, con una
@@ -166,4 +195,5 @@ Variabili: `FORK_BUILD_DIR` (default `~/fork-build`), `FORK_DIST_DIR`, `FORK_KEE
 - I test offline coprono gli stessi casi più l'applicazione su un checkout completo finto
   (incorporazione dei sottomoduli come fa Cromite, patch Cromite, nostre patch, overlay).
 - La build Windows a tappe su GitHub è nuova: la prima esecuzione va seguita da vicino.
-  Gli script per macOS, iOS e il cross-build Windows da Linux non sono ancora stati eseguiti.
+  Gli script per macOS (prima prova in corso), iOS, la build Windows su un PC e il cross-build
+  Windows da Linux non sono ancora stati eseguiti fino in fondo.
