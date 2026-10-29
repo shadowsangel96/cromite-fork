@@ -29,7 +29,8 @@ aggiornamenti di Cromite come tutto il resto.
   mostra la versione, controlla se ce n'è una nuova, la scarica e chiede di riavviare. La pagina
   c'è già in Chromium; il pezzo che la collega all'aggiornamento (`VersionUpdater`) va scritto
   per ogni piattaforma: il nostro aggiornamento su Windows, Sparkle su macOS, TestFlight su iOS
-  (lì la pagina rimanda all'app TestFlight).
+  (lì la pagina rimanda all'app TestFlight). Il controllo passa dalla VPN come la navigazione
+  (task 7) e non manda identificativi: legge solo il file della release.
 
 **Riuso della build precedente.** Oggi ogni build riparte da zero (i runner di GitHub sono puliti
 a ogni esecuzione), quindi dura come la prima. Per gli aggiornamenti mensili di Chromium va bene,
@@ -286,6 +287,11 @@ condiviso con altri utenti della VPN.
   - Server non raggiungibile (spento di notte o guasto): nessun ripiego silenzioso sulla
     connessione diretta, che mostrerebbe l'IP di casa senza accorgersene. Un indicatore nella
     barra degli strumenti mostra sempre da dove si esce.
+  - Controllo degli aggiornamenti e liste dell'adblock: stessa strada della navigazione, mai
+    un'uscita diretta solo per loro. Con il server spento aspettano; il browser intanto non
+    naviga, quindi non è esposto. Appena il proxy risponde il controllo parte subito, prima di
+    aspettare il giro delle 5 ore. In modalità riserva escono diretti come il resto, senza
+    mostrare l'IP a nessuno in più.
   - **Riserva estrema, se il server resta giù a lungo:** sulla pagina di errore del proxy
     compare il tasto "Naviga diretto (riserva)", solo lì e mai nel menu normale. Prima di
     attivarlo chiede conferma e spiega che i siti vedranno l'IP di casa. La modalità diretta:
