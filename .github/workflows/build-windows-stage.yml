@@ -7,6 +7,10 @@ on:
       stage:
         type: number
         required: true
+      # solo per la tappa 1: riparte dallo stato salvato da quella run invece che da zero
+      resume_run:
+        type: string
+        default: ""
     outputs:
       finished:
         value: ${{ jobs.stage.outputs.finished }}
@@ -21,6 +25,7 @@ jobs:
     env:
       PYTHONUTF8: "1"
       STAGE: ${{ inputs.stage }}
+      RESUME_RUN: ${{ inputs.stage == 1 && inputs.resume_run || '' }}
     steps:
       # D: è il disco temporaneo del runner, molto più libero di C:
       - name: Inizio tappa ${{ inputs.stage }}
@@ -37,14 +42,16 @@ jobs:
           python-version: "3.12"
 
       - name: Scarica lo stato della tappa precedente
-        if: inputs.stage > 1
+        if: inputs.stage > 1 || env.RESUME_RUN != ''
         uses: actions/download-artifact@v8
         with:
           name: windows-build-state
           path: ${{ env.FORK_BUILD_DIR }}
+          run-id: ${{ env.RESUME_RUN || github.run_id }}
+          github-token: ${{ github.token }}
 
       - name: Estrai lo stato
-        if: inputs.stage > 1
+        if: inputs.stage > 1 || env.RESUME_RUN != ''
         shell: pwsh
         run: |
           7z x "$env:FORK_BUILD_DIR\state.zip" "-o$env:FORK_BUILD_DIR\chromium" -y | Select-Object -Last 3
@@ -62,9 +69,11 @@ jobs:
         shell: pwsh
         run: python tools\build\gh_windows_stage.py build
 
-      # -mtc=on conserva gli orari dei file: ninja riparte da dove si era fermato
+      # -mtc=on conserva gli orari dei file: ninja riparte da dove si era fermato.
+      # Anche se ninja fallisce: dopo la correzione si riprende da qui (resume_run in build-windows.yml).
       - name: Salva lo stato per la tappa successiva
-        if: steps.build.outputs.finished == 'false'
+        id: save
+        if: (success() || failure()) && steps.build.outcome != 'skipped' && steps.build.outputs.finished != 'true'
         shell: pwsh
         run: |
           7z a -tzip "$env:FORK_BUILD_DIR\state.zip" "$env:FORK_BUILD_DIR\chromium\src" -mx=1 -mtc=on '-xr!.git' | Select-Object -Last 3
@@ -75,7 +84,7 @@ jobs:
           exit 0
 
       - name: Carica lo stato
-        if: steps.build.outputs.finished == 'false'
+        if: (success() || failure()) && steps.save.outcome == 'success'
         uses: actions/upload-artifact@v7
         with:
           name: windows-build-state

@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: write
+  actions: read  # la build Windows scarica lo stato salvato fra una tappa e l'altra
 
 concurrency:
   group: build

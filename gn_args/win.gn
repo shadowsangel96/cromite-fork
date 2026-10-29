@@ -6,3 +6,8 @@ use_siso = false
 symbol_level = 0
 blink_symbol_level = 0
 v8_symbol_level = 0
+# Compilando su Windows (Cromite lo fa da Linux) Chromium costruisce anche code_cache_generator.exe,
+# che con la patch Content-settings-infrastructure di Cromite non si collega più: content_settings.cc
+# chiama WebsiteSettingsRegistry, che sta in core/browser. Così le pagine interne restano come nelle
+# release Windows di Cromite, senza il bytecode JS precompilato.
+enable_webui_generate_code_cache = false

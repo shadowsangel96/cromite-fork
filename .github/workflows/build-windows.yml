@@ -1,20 +1,32 @@
 # Build Windows sui runner gratuiti di GitHub, a tappe (stesso schema di ungoogled-chromium):
 # ogni tappa compila per poche ore e passa la cartella di build alla successiva.
 # Le tappe dopo la fine della build vengono saltate.
+# Se una tappa fallisce lo stato viene salvato lo stesso: dopo la correzione si rilancia con
+# resume_run = id di quella run e si riparte da lì (lo stato resta 2 giorni).
 name: Build Windows
 
 on:
   workflow_call:
+    inputs:
+      resume_run:
+        type: string
+        default: ""
   workflow_dispatch:
+    inputs:
+      resume_run:
+        description: "Riprendi dallo stato salvato da questa run (id); vuoto = da zero"
+        default: ""
 
 permissions:
   contents: read
+  actions: read  # scaricare lo stato salvato, anche da un'altra run
 
 jobs:
   stage-1:
     uses: ./.github/workflows/build-windows-stage.yml
     with:
       stage: 1
+      resume_run: ${{ inputs.resume_run || '' }}
 
   stage-2:
     needs: stage-1

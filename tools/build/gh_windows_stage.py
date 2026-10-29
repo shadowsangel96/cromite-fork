@@ -5,11 +5,14 @@ Due comandi, due step del workflow:
 - prepare: installa il Windows SDK che chiede Chromium se il runner non ce l'ha (a ogni tappa,
   perché ogni tappa è una macchina nuova). Nella tappa 1 scarica anche Chromium con gclient
   (gli stessi strumenti che usa Cromite), applica Cromite e le nostre patch e lancia gn gen.
+  Nelle tappe che ripartono da uno stato salvato riscrive solo args.gn, se gn_args/ è cambiato:
+  ninja allora rigenera da sé i suoi file.
 - build: compila con ninja finché resta tempo nel job (GitHub lo ferma a 6 ore), poi si
   ferma pulita lasciando il resto alla tappa successiva, che riparte dalla cartella salvata
   come artifact.
 
-Variabili: STAGE (1, 2, ...), JOB_STARTED (epoch di inizio job), FORK_BUILD_DIR, GITHUB_OUTPUT.
+Variabili: STAGE (1, 2, ...), JOB_STARTED (epoch di inizio job), FORK_BUILD_DIR, GITHUB_OUTPUT,
+RESUME_RUN (id della run da cui la tappa 1 riprende lo stato; vuota = da zero).
 Output di build: finished=true quando il pacchetto è pronto in dist/, finished=false se serve
 un'altra tappa.
 """
@@ -194,12 +197,21 @@ def sync_and_patch(env):
     run([*FORKCTL, "apply", "--src", SRC], env=env)
 
     say("gn gen")
+    write_gn_args(env)
+    run([SRC / "buildtools" / "win" / "gn.exe", "gen", OUT], cwd=SRC, env=env)
+
+
+def write_gn_args(env):
+    """Scrive args.gn solo se cambia: un args.gn nuovo fa rigenerare i file di ninja."""
     (SRC / OUT).mkdir(parents=True, exist_ok=True)
+    path = SRC / OUT / "args.gn"
     args = subprocess.run([*FORKCTL, "gn-args", "--os", "win", "--cpu", "x64"], capture_output=True,
                           text=True, check=True, env=env).stdout
-    (SRC / OUT / "args.gn").write_text(args)
+    if path.exists() and path.read_text() == args:
+        print("args.gn invariato")
+        return
+    path.write_text(args)
     print(args)
-    run([SRC / "buildtools" / "win" / "gn.exe", "gen", OUT], cwd=SRC, env=env)
 
 
 def ninja(env, deadline):
@@ -250,8 +262,9 @@ def package():
 
 
 def prepare(stage):
+    fresh = stage == 1 and not os.environ.get("RESUME_RUN")
     setup_git()
-    if stage == 1:
+    if fresh:
         diagnostics()
         fetch_source()
     elif not (SRC / OUT / "build.ninja").exists():
@@ -260,8 +273,10 @@ def prepare(stage):
     ensure_toolchain()
     env = build_env()
     setup_depot_tools(env)
-    if stage == 1:
+    if fresh:
         sync_and_patch(env)
+    else:
+        write_gn_args(env)
 
 
 def build():
