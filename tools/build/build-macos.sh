@@ -13,6 +13,12 @@ prepare_source "" 'target_os = ["mac"]'
 
 OUT="out/mac-$CPU"
 gn_gen mac "$CPU" "$OUT"
+# FORK_SOURCE_ONLY=1: scarica, applica le patch e lancia gn, senza compilare (la parte che usa
+# la rete si fa quando la banda è libera; la compilazione non scarica niente)
+if [ "${FORK_SOURCE_ONLY:-0}" = 1 ]; then
+  say "sorgenti e gn pronti, compilazione saltata (FORK_SOURCE_ONLY=1)"
+  exit 0
+fi
 build "$OUT" chrome
 
 say "impacchetto"
