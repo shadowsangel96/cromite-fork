@@ -27,6 +27,11 @@ fetch_depot_tools() {
     say "scarico depot_tools"
     git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git "$DEPOT"
   fi
+  # con DEPOT_TOOLS_UPDATE=0 gclient non prepara il python3 di depot_tools, che serve a gn
+  if [ ! -f "$DEPOT/python3_bin_reldir.txt" ]; then
+    say "preparo il python di depot_tools"
+    (source "$DEPOT/bootstrap_python3" && bootstrap_python3)
+  fi
 }
 
 remove_old_checkouts() {
