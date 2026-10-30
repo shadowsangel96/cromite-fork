@@ -13,3 +13,7 @@ use_siso = false
 # Il link ThinLTO di Chromium vuole molta più RAM del link normale: con 8-16 GB va in swap.
 # Lo riaccendiamo per le release, su un Mac con più memoria.
 use_thin_lto = false
+# Il lld di Chromium 153 non legge i .tbd del macOS SDK 27 di Xcode 27 ("unknown target
+# arm64e.x1-macos"): si collega con il linker di Apple, che li conosce. Si toglie quando
+# Chromium aggiorna LLVM, o compilando con il macOS SDK 26.
+use_lld = false
