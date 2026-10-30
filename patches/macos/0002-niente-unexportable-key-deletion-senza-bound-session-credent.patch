@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 18:29:36 +0100
+Subject: [PATCH] mac: niente unexportable-key-deletion senza bound session
+ credentials
+
+Cromite mette enable_bound_session_credentials = false, quindi about_flags.cc non
+include components/unexportable_keys/features.h; la voce solo-Mac del flag non
+controllava quella condizione e non compilava.
+
+Fork-Patch: macos/0002-niente-unexportable-key-deletion-senza-bound-session-credent.patch
+
+diff --git a/chrome/browser/about_flags.cc b/chrome/browser/about_flags.cc
+index 76ff558c828e2067c39c6a8f4b1cd990ca74e491..9b64b1054ae29e157a22b0271c92e21c6562586c 100644
+--- a/chrome/browser/about_flags.cc
++++ b/chrome/browser/about_flags.cc
+@@ -12550,7 +12550,7 @@ const FeatureEntry kFeatureEntries[] = {
+      FEATURE_VALUE_TYPE(features::kReadAnythingOmniboxChip)},
+ #endif
+ 
+-#if BUILDFLAG(IS_MAC)
++#if BUILDFLAG(IS_MAC) && BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+     {"unexportable-key-deletion",
+      flag_descriptions::kUnexportableKeyDeletionName,
+      flag_descriptions::kUnexportableKeyDeletionDescription, kOsMac,

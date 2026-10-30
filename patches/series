@@ -2,3 +2,5 @@
 # Generato da `forkctl export`: ogni patch porta il trailer Fork-Patch.
 common/0001-branding-nome-del-fork-e-bundle-id-per-macos-ios.patch
 macos/0001-showtoast-vuoto-nel-dialogo-file.patch
+macos/0002-niente-unexportable-key-deletion-senza-bound-session-credent.patch
+macos/0003-parametro-della-sandbox-translatekit-solo-con-la-traduzione.patch
