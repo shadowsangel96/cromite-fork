@@ -1048,6 +1048,55 @@ def cmd_reapply(args):
     return code
 
 
+def paths_at_ref(ref):
+    """File toccati dalle patch e dall'overlay di questo repo com'erano al commit `ref`."""
+    git("fetch", "-q", "--depth", "1", "origin", ref, cwd=ROOT, check=False)
+    paths = set()
+    for line in text(git("show", f"{ref}:patches/series", cwd=ROOT)).splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            data = git("show", f"{ref}:patches/{line}", cwd=ROOT).stdout
+            paths.update(p for pair in patch_files(data) for p in pair if p)
+    listed = text(git("ls-tree", "-r", "--name-only", ref, "--", "overlay", cwd=ROOT)).splitlines()
+    paths.update(posixpath.relpath(f, "overlay") for f in listed
+                 if posixpath.basename(f) not in (".gitkeep", "README.md"))
+    return paths
+
+
+def cmd_refresh(args):
+    """Per un albero senza .git, come lo stato salvato di una build a tappe: porta a Chromium +
+    Cromite + patch attuali i file toccati dalle patch di adesso e da quelle di --old-ref. Scrive
+    solo i file che cambiano, così ninja ricompila solo quello."""
+    guard_open_session(False)
+    src = Path(args.src).resolve()
+    series = read_series()
+    check_series(series)
+    paths = series_paths(series) | paths_at_ref(args.old_ref)
+    build_work(Cromite(read_lock()["cromite_tag"]), paths, series, BASE)
+
+    wanted = {rel: WORK / rel for rel in paths}
+    for f in OVERLAY.rglob("*"):
+        if f.is_file() and f.name not in (".gitkeep", "README.md"):
+            wanted[f.relative_to(OVERLAY).as_posix()] = f
+    changed = 0
+    for rel, source in sorted(wanted.items()):
+        target = src / rel
+        if not source.is_file():
+            if target.exists():
+                target.unlink()
+                log(f"  tolto {rel}")
+                changed += 1
+        elif not target.is_file() or target.read_bytes() != source.read_bytes():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+            shutil.copymode(source, target)
+            log(f"  scritto {rel}")
+            changed += 1
+    shutil.rmtree(WORK, ignore_errors=True)
+    log(f"Patch aggiornate su {src}: {changed} file cambiati su {len(wanted)} controllati.")
+    return EXIT_OK
+
+
 def merged_gn_args(target_os, target_cpu):
     """args.gn = Cromite + gn_args/common.gn + gn_args/<os>.gn; i nostri valori vincono."""
     ours = []
@@ -1232,6 +1281,11 @@ def main():
     p.add_argument("--src", required=True)
     p.add_argument("--base", required=True)
     p.set_defaults(fn=cmd_reapply)
+    p = sub.add_parser("refresh", help="(host di build) aggiorna le patch su un albero senza .git, "
+                                        "dallo stato salvato al commit --old-ref")
+    p.add_argument("--src", required=True)
+    p.add_argument("--old-ref", required=True)
+    p.set_defaults(fn=cmd_refresh)
     p = sub.add_parser("gn-args", help="args.gn finale per una piattaforma")
     p.add_argument("--os", required=True, choices=["win", "mac", "ios", "linux", "android"])
     p.add_argument("--cpu", required=True)

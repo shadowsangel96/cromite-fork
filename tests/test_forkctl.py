@@ -286,6 +286,36 @@ class ForkctlTest(unittest.TestCase):
         fx.forkctl("apply", "--src", str(src), expect=1)  # versione sbagliata: si rifiuta
 
 
+    def test_refresh_tree_without_git(self):
+        fx = self.fx
+        fx.add_patches(("Uno", "base/feature.cc", "line 1\n", "line 1 x\n"),
+                       ("Due", "other/y.txt", "y cromite\n", "y due\n"))
+        run("git", "init", "-q", cwd=fx.root)
+        run("git", "add", "patches", cwd=fx.root)
+        run("git", "commit", "-qm", "vecchie patch", cwd=fx.root, env=fx.ident_env)
+        old_ref = run("git", "rev-parse", "HEAD", cwd=fx.root).stdout.strip()
+
+        # lo stato salvato: i file con le patch vecchie, senza .git
+        tree = fx.tmp / "stato"
+        kept = "line 1 x\n" + FEATURE_V1.split("\n", 1)[1]
+        write(tree, {"base/feature.cc": kept, "other/y.txt": "y due\n", "untouched.txt": "z\n",
+                     "chrome/app/theme/chromium/BRANDING": BRANDING.replace("=Chromium\n", "=Cromite\n")})
+        for rel in ("base/feature.cc", "untouched.txt"):
+            os.utime(tree / rel, ns=(10**18, 10**18))
+
+        # patch nuove: via "Due", aggiunta "Tre"
+        (fx.root / "patches" / "series").write_text("common/0001-uno.patch\n")
+        (fx.root / "patches" / "common" / "0002-due.patch").unlink()
+        fx.add_patches(("Tre", "chrome/app/theme/chromium/BRANDING", "=Cromite", "=Fork"))
+        self.assertNotIn("common/0002-due.patch", fx.series())
+        fx.forkctl("refresh", "--src", str(tree), "--old-ref", old_ref)
+
+        self.assertIn("PRODUCT_FULLNAME=Fork", (tree / "chrome/app/theme/chromium/BRANDING").read_text())
+        self.assertEqual((tree / "other/y.txt").read_text(), "y cromite\n")  # patch tolta: torna a Cromite
+        self.assertEqual((tree / "base/feature.cc").read_text(), kept)
+        for rel in ("base/feature.cc", "untouched.txt"):  # non riscritti: ninja non li ricompila
+            self.assertEqual((tree / rel).stat().st_mtime_ns, 10**18)
+
     def test_patches_use_public_author(self):
         fx = self.fx
         fx.add_patches(("Uno", "base/feature.cc", "line 1\n", "line 1 x\n"))

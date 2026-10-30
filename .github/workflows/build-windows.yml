@@ -1,8 +1,9 @@
 # Build Windows sui runner gratuiti di GitHub, a tappe (stesso schema di ungoogled-chromium):
 # ogni tappa compila per poche ore e passa la cartella di build alla successiva.
 # Le tappe dopo la fine della build vengono saltate.
-# Se una tappa fallisce lo stato viene salvato lo stesso: dopo la correzione si rilancia con
-# resume_run = id di quella run e si riparte da lì (lo stato resta 2 giorni).
+# Lo stato si salva anche se una tappa fallisce e a fine build (resta 30 giorni): con
+# resume_run = id di quella run si riparte da lì, si aggiornano le patch e si ricompila solo
+# quello che cambia. È il modo normale di provare le patch.
 name: Build Windows
 
 on:

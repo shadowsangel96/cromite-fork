@@ -6,7 +6,8 @@ Due comandi, due step del workflow:
   perché ogni tappa è una macchina nuova). Nella tappa 1 scarica anche Chromium con gclient
   (gli stessi strumenti che usa Cromite), applica Cromite e le nostre patch e lancia gn gen.
   Nelle tappe che ripartono da uno stato salvato riscrive solo args.gn, se gn_args/ è cambiato:
-  ninja allora rigenera da sé i suoi file.
+  ninja allora rigenera da sé i suoi file. Se lo stato viene da un'altra run porta anche le nostre
+  patch a quelle di adesso, scrivendo solo i file che cambiano.
 - build: compila con ninja finché resta tempo nel job (GitHub lo ferma a 6 ore), poi si
   ferma pulita lasciando il resto alla tappa successiva, che riparte dalla cartella salvata
   come artifact.
@@ -301,6 +302,19 @@ def package():
     print(f"pronto: {archive}")
 
 
+def refresh_patches(env):
+    """Lo stato salvato da un'altra run ha le patch del commit di quella run: porta a quelle di
+    adesso solo i file che cambiano (lo stato non ha .git, quindi niente reapply)."""
+    old = subprocess.run(["gh", "run", "view", os.environ["RESUME_RUN"], "-R", os.environ["GITHUB_REPOSITORY"],
+                          "--json", "headSha", "--jq", ".headSha"], capture_output=True, text=True,
+                         check=True).stdout.strip()
+    if old == os.environ.get("GITHUB_SHA"):
+        print("stesso commit della run da riprendere: patch già a posto")
+        return
+    say(f"aggiorno le patch dal commit {old[:10]}")
+    run([*FORKCTL, "refresh", "--src", SRC, "--old-ref", old], env=env)
+
+
 def prepare(stage):
     fresh = stage == 1 and not os.environ.get("RESUME_RUN")
     setup_git()
@@ -316,6 +330,8 @@ def prepare(stage):
     if fresh:
         sync_and_patch(env)
     else:
+        if os.environ.get("RESUME_RUN"):
+            refresh_patches(env)
         write_gn_args(env)
 
 

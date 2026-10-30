@@ -62,6 +62,8 @@ jobs:
 
       - name: Prepara (Windows SDK, sorgenti, patch, gn)
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python tools\build\gh_windows_stage.py prepare
 
       - name: Compila
@@ -69,11 +71,21 @@ jobs:
         shell: pwsh
         run: python tools\build\gh_windows_stage.py build
 
+      - name: Carica il pacchetto
+        if: steps.build.outputs.finished == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-windows
+          path: dist/*.zip
+          compression-level: 0
+          retention-days: 7
+
       # -mtc=on conserva gli orari dei file: ninja riparte da dove si era fermato.
-      # Anche se ninja fallisce: dopo la correzione si riprende da qui (resume_run in build-windows.yml).
+      # Anche se ninja fallisce e a fine build: la build dopo riprende da qui e ricompila solo
+      # quello che cambia (resume_run in build-windows.yml).
       - name: Salva lo stato per la tappa successiva
         id: save
-        if: (success() || failure()) && steps.build.outcome != 'skipped' && steps.build.outputs.finished != 'true'
+        if: (success() || failure()) && steps.build.outcome != 'skipped'
         shell: pwsh
         run: |
           7z a -tzip "$env:FORK_BUILD_DIR\state.zip" "$env:FORK_BUILD_DIR\chromium\src" -mx=1 -mtc=on '-xr!.git' | Select-Object -Last 3
@@ -90,14 +102,7 @@ jobs:
           name: windows-build-state
           path: ${{ env.FORK_BUILD_DIR }}\state.zip
           compression-level: 0
-          retention-days: 2
+          # le tappe intermedie le sostituisce quella dopo; l'ultima resta per la build successiva
+          retention-days: ${{ steps.build.outputs.finished == 'false' && 2 || 30 }}
           overwrite: true
 
-      - name: Carica il pacchetto
-        if: steps.build.outputs.finished == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-windows
-          path: dist/*.zip
-          compression-level: 0
-          retention-days: 7

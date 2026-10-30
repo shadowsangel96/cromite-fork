@@ -9,7 +9,7 @@ aggiornamenti di Cromite come tutto il resto.
 - Sistema di patch che si riapplica a ogni release di Cromite (`tools/forkctl.py`, rerere,
   controllo giornaliero).
 - Repo pubblico solo per le build, con controllo dei dati personali in CI.
-- Build Windows a tappe sui runner gratuiti di GitHub (prima esecuzione in corso).
+- Build Windows a tappe sui runner gratuiti di GitHub, con prova di avvio dopo ogni build.
 
 ## 1. Prima build Windows installabile, poi build veloci
 
@@ -32,23 +32,16 @@ aggiornamenti di Cromite come tutto il resto.
   (lì la pagina rimanda all'app TestFlight). Il controllo passa dalla VPN come la navigazione
   (task 7) e non manda identificativi: legge solo il file della release.
 
-**Riuso della build precedente.** Oggi ogni build riparte da zero (i runner di GitHub sono puliti
-a ogni esecuzione), quindi dura come la prima. Per gli aggiornamenti mensili di Chromium va bene,
-perché cambiano comunque quasi tutti i file. Mentre sviluppiamo le nostre patch, invece, serve
-una build che ricompili solo quello che cambia:
+**Riuso della build precedente (fatto).** È il modo normale di provare le patch su GitHub, senza
+una macchina nostra: `build-windows.yml` con `resume_run` = id dell'ultima run riprende lo stato
+salvato (si salva anche a fine build e se ninja fallisce; resta 30 giorni), `forkctl refresh` porta
+alle patch di adesso solo i file che cambiano, ninja ricompila quelli e ciò che ne dipende, poi il
+link finale e la prova di avvio.
 
-- a fine build si salva la cartella di build completa (sorgenti e `out/`, orari dei file
-  conservati) come artifact legato alla versione di Chromium e al tag di Cromite;
-- se la build successiva ha la stessa versione di Chromium e lo stesso Cromite, parte da lì
-  invece di riscaricare tutto;
-- si riscrivono solo i file toccati dalle patch, vecchie e nuove. Il contenuto originale (Chromium
-  più Cromite) lo dà il mini-albero di `forkctl`, e i file identici non si riscrivono, così
-  ninja non li considera cambiati;
-- ninja ricompila solo i file toccati e ciò che ne dipende, più il link finale;
-- da misurare con la prima build: quanto spazio occupa l'artifact, quanto a lungo GitHub lo
-  conserva gratis per un repo pubblico, quanto dura il link finale di `chrome.dll` con le
-  ottimizzazioni complete. Se il link pesa troppo, una configurazione "di sviluppo" con
-  ottimizzazioni ridotte, separata da quella delle release.
+- Misure sulla prima build: stato di ~11 GB; download da 3 a 48 minuti, estrazione ~15; link di
+  `chrome.dll` ~40 minuti. Quindi una prova richiede almeno un'ora e mezza, anche per una riga.
+- Se il link pesa troppo: una configurazione "di sviluppo" con ottimizzazioni ridotte, separata da
+  quella delle release.
 
 ## 2. Anti-fingerprinting: base di Cromite + randomizzazione come Brave
 
