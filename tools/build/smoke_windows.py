@@ -16,7 +16,6 @@ Nei risultati: pagina.png (la pagina di prova disegnata) e i log del browser.
 import functools
 import http.server
 import json
-import re
 import subprocess
 import sys
 import tempfile
@@ -31,6 +30,9 @@ PAGE = """<!doctype html><meta charset="utf-8"><title>prova</title>
 <script>document.getElementById("r").textContent = "ok " + (6 * 7);</script>
 """
 EXPECTED = "ok 42"
+# Se il primo avvio nel suo AppContainer fallisce, il servizio di rete riparte senza sandbox
+# (IsNetworkSandboxEnabledInternal in system_network_context_manager.cc): la pagina si carica lo
+# stesso, l'unico segno è in questi due messaggi del log.
 SANDBOX_ERROR = "Sandbox cannot access executable"
 NETWORK_CRASH = "Network service crashed"
 APP_PACKAGES = ["*S-1-15-2-1:(OI)(CI)(RX)", "*S-1-15-2-2:(OI)(CI)(RX)"]
@@ -80,13 +82,6 @@ def round_(browser, tag, page, url, shot):
                           f"{url}/prova.html")
         if not (shot.exists() and shot.stat().st_size > 1000):
             problems.append(f"nessuno screenshot della pagina di prova (codice {res.returncode})")
-    # solo informativo: chrome://sandbox dice se il servizio di rete è davvero isolato
-    res = browser.run(f"{tag}-sandbox", "--allow-chrome-scheme-url", "--virtual-time-budget=8000",
-                      "--dump-dom", "chrome://sandbox")
-    (browser.logs / f"{tag}-sandbox.html").write_text(res.stdout, encoding="utf-8")
-    row = re.search(r"<tr>(?:(?!</tr>).)*Network Service(?:(?!</tr>).)*</tr>", res.stdout, re.S)
-    print(f"sandbox del servizio di rete ({tag}): "
-          + (re.sub(r"<[^>]+>", " | ", row.group(0))[:300] if row else "(riga non trovata)"), flush=True)
     print(f"giro \"{tag}\": " + ("tutto bene" if not problems else "; ".join(problems)), flush=True)
     return problems
 
