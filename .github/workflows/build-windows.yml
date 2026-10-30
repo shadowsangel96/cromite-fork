@@ -91,6 +91,12 @@ jobs:
     with:
       stage: 10
 
+  # il pacchetto si avvia su un Windows pulito? Se no la build fallisce e la release non parte
+  smoke:
+    needs: [stage-1, stage-2, stage-3, stage-4, stage-5, stage-6, stage-7, stage-8, stage-9, stage-10]
+    if: always() && contains(needs.*.outputs.finished, 'true')
+    uses: ./.github/workflows/smoke-windows.yml
+
   # fallisce se una tappa è fallita o se le tappe non sono bastate
   check:
     needs: [stage-1, stage-2, stage-3, stage-4, stage-5, stage-6, stage-7, stage-8, stage-9, stage-10]
