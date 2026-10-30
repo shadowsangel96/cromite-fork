@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 19:18:13 +0100
+Subject: [PATCH] mac: lingua dei renderer risolta a una che ha locale.pak
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Override-Navigator-Language di Cromite passa ai renderer la prima lingua accettata
+(it-IT). Su Windows e Linux GetApplicationLocale la riduce alla più vicina
+disponibile; sul Mac la usava così com'è, non trovava it_IT.lproj e il CHECK in
+chrome_main_delegate.cc uccideva ogni renderer: l'interfaccia si apriva, le pagine
+restavano vuote.
+
+Fork-Patch: macos/0005-lingua-dei-renderer-risolta-a-una-che-ha-locale-pak.patch
+
+diff --git a/ui/base/l10n/l10n_util.cc b/ui/base/l10n/l10n_util.cc
+index 2e02f0973f0c2eb76b96be96de57ada71b7cb70e..b2cd29ce3627a80f88c739bbdd9edcc6dde42a4d 100644
+--- a/ui/base/l10n/l10n_util.cc
++++ b/ui/base/l10n/l10n_util.cc
+@@ -136,7 +136,10 @@ std::string GetApplicationLocaleInternalMac(std::string_view pref_locale) {
+   if (app_locale.empty())
+     app_locale = "en-US";
+ 
+-  return app_locale;
++  // Override-Navigator-Language passes the first accept-language to the
++  // renderers as --lang (e.g. it-IT), and there is no it_IT.lproj: resolve it to
++  // a locale with a locale.pak, as GetApplicationLocaleInternalNonMac() does.
++  return l10n_util::CheckAndResolveLocale(app_locale).value_or("en-US");
+ }
+ #endif
+ 

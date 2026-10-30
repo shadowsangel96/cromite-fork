@@ -5,3 +5,4 @@ macos/0001-showtoast-vuoto-nel-dialogo-file.patch
 macos/0002-niente-unexportable-key-deletion-senza-bound-session-credent.patch
 macos/0003-parametro-della-sandbox-translatekit-solo-con-la-traduzione.patch
 macos/0004-niente-pagina-unexportable-keys-internals-senza-bound-sessio.patch
+macos/0005-lingua-dei-renderer-risolta-a-una-che-ha-locale-pak.patch
