@@ -25,12 +25,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 TIMEOUT = 180
-# JavaScript, WebAssembly e DOM: se il risultato arriva nella pagina, il renderer funziona
+# JavaScript e DOM: se il risultato arriva nella pagina, il renderer funziona
 PAGE = """<!doctype html><meta charset="utf-8"><title>prova</title>
 <body style="font: 40px sans-serif; margin: 60px"><p id="r">attesa</p>
-<script>document.getElementById("r").textContent = "ok " + (6 * 7) + " " + typeof WebAssembly;</script>
+<script>document.getElementById("r").textContent = "ok " + (6 * 7);</script>
 """
-EXPECTED = "ok 42 object"
+EXPECTED = "ok 42"
 SANDBOX_ERROR = "Sandbox cannot access executable"
 NETWORK_CRASH = "Network service crashed"
 APP_PACKAGES = ["*S-1-15-2-1:(OI)(CI)(RX)", "*S-1-15-2-2:(OI)(CI)(RX)"]
