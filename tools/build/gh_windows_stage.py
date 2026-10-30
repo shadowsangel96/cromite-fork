@@ -340,8 +340,7 @@ def local():
         if not APPLIED.exists() or APPLIED.read_text() != patches_stamp():
             say("le nostre patch sono cambiate: le riapplico")
             APPLIED.unlink(missing_ok=True)
-            run(["git", "reset", "-q", "--hard", "refs/tags/forkctl-cromite"], cwd=SRC)
-            run([*FORKCTL, "apply", "--src", SRC], env=env)
+            run([*FORKCTL, "reapply", "--src", SRC, "--base", "refs/tags/forkctl-cromite"], env=env)
             APPLIED.write_text(patches_stamp())
         write_gn_args(env)
     ninja(env)

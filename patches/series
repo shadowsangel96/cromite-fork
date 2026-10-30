@@ -1,3 +1,4 @@
 # Ordine di applicazione delle nostre patch, sopra Cromite.
 # Generato da `forkctl export`: ogni patch porta il trailer Fork-Patch.
 common/0001-branding-nome-del-fork-e-bundle-id-per-macos-ios.patch
+macos/0001-showtoast-vuoto-nel-dialogo-file.patch

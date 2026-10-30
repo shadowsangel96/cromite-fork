@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 12:46:38 +0100
+Subject: [PATCH] mac: ShowToast vuoto nel dialogo file
+
+Add-bookmark-import-export-actions di Cromite aggiunge il metodo virtuale puro
+SelectFileDialog::ShowToast con le implementazioni per Android, Linux e Windows,
+non per il Mac. Come su Linux e Windows non fa niente: serve solo su Android.
+
+Fork-Patch: macos/0001-showtoast-vuoto-nel-dialogo-file.patch
+
+diff --git a/ui/shell_dialogs/select_file_dialog_mac.h b/ui/shell_dialogs/select_file_dialog_mac.h
+index 6e34041a4c6bb0d5c9cc60b5055f60b7517b2546..1dfdfd544ec9a25afee64e68bc091a2815808cc5 100644
+--- a/ui/shell_dialogs/select_file_dialog_mac.h
++++ b/ui/shell_dialogs/select_file_dialog_mac.h
+@@ -37,6 +37,7 @@ class SHELL_DIALOGS_EXPORT SelectFileDialogImpl : public ui::SelectFileDialog {
+   // BaseShellDialog implementation.
+   bool IsRunning(gfx::NativeWindow parent_window) const override;
+   void ListenerDestroyed() override;
++  void ShowToast(const std::string& message) override;
+ 
+  protected:
+   // SelectFileDialog implementation.
+diff --git a/ui/shell_dialogs/select_file_dialog_mac.mm b/ui/shell_dialogs/select_file_dialog_mac.mm
+index 5da67cfb7362d01fac8d0be4565d319087ec3cf9..e160ba73fa11859b09a013992ea0624bea8b1aa3 100644
+--- a/ui/shell_dialogs/select_file_dialog_mac.mm
++++ b/ui/shell_dialogs/select_file_dialog_mac.mm
+@@ -32,6 +32,10 @@
+     std::unique_ptr<ui::SelectFilePolicy> policy)
+     : SelectFileDialog(listener, std::move(policy)), weak_factory_(this) {}
+ 
++void SelectFileDialogImpl::ShowToast(const std::string& message) {
++  // nothing to do, used only on android
++}
++
+ bool SelectFileDialogImpl::IsRunning(gfx::NativeWindow parent_window) const {
+   for (const auto& dialog_data : dialog_data_list_) {
+     if (dialog_data.parent_window == parent_window)

@@ -103,8 +103,7 @@ prepare_source() {
   fi
   say "applico le nostre patch"
   rm -f "$CHECKOUT/.forkctl-applied"
-  git reset -q --hard refs/tags/forkctl-cromite
-  "${FORKCTL[@]}" apply --src "$SRC"
+  "${FORKCTL[@]}" reapply --src "$SRC" --base refs/tags/forkctl-cromite
   echo "$stamp" > "$CHECKOUT/.forkctl-applied"
 }
 

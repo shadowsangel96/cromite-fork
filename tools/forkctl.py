@@ -1029,6 +1029,25 @@ def cmd_apply(args):
     return EXIT_OK
 
 
+def cmd_reapply(args):
+    """Come apply, ripartendo da --base. I file che alla fine hanno lo stesso contenuto di prima
+    tengono il loro orario: ninja ricompila solo quello che le patch hanno cambiato davvero."""
+    src = Path(args.src).resolve()
+    changed = text(git("diff", "--name-only", "--no-renames", args.base, "HEAD", cwd=src)).splitlines()
+    before = {}
+    for rel in changed:
+        path = src / rel
+        if path.is_file():
+            before[rel] = (path.stat().st_mtime_ns, hashlib.sha1(path.read_bytes()).digest())
+    git("reset", "-q", "--hard", args.base, cwd=src)
+    code = cmd_apply(args)
+    for rel, (mtime, digest) in before.items():
+        path = src / rel
+        if path.is_file() and hashlib.sha1(path.read_bytes()).digest() == digest:
+            os.utime(path, ns=(mtime, mtime))
+    return code
+
+
 def merged_gn_args(target_os, target_cpu):
     """args.gn = Cromite + gn_args/common.gn + gn_args/<os>.gn; i nostri valori vincono."""
     ours = []
@@ -1208,6 +1227,11 @@ def main():
     p = sub.add_parser("apply", help="(host di build) applica le nostre patch e overlay/")
     p.add_argument("--src", required=True)
     p.set_defaults(fn=cmd_apply)
+    p = sub.add_parser("reapply", help="(host di build) riapplica le nostre patch da --base senza "
+                                        "cambiare l'orario dei file rimasti uguali")
+    p.add_argument("--src", required=True)
+    p.add_argument("--base", required=True)
+    p.set_defaults(fn=cmd_reapply)
     p = sub.add_parser("gn-args", help="args.gn finale per una piattaforma")
     p.add_argument("--os", required=True, choices=["win", "mac", "ios", "linux", "android"])
     p.add_argument("--cpu", required=True)

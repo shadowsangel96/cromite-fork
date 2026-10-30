@@ -262,6 +262,7 @@ class ForkctlTest(unittest.TestCase):
         run("git", "commit", "-qm", "v8 submodule", cwd=src, env=fx.ident_env)
 
         fx.forkctl("apply-cromite", "--src", str(src))
+        run("git", "tag", "forkctl-cromite", cwd=src)
         fx.forkctl("apply", "--src", str(src))
         self.assertIn("PRODUCT_FULLNAME=Fork", (src / "chrome/app/theme/chromium/BRANDING").read_text())
         self.assertEqual((src / "other/y.txt").read_text(), "y cromite\n")
@@ -270,6 +271,15 @@ class ForkctlTest(unittest.TestCase):
         log = run("git", "log", "--format=%s", cwd=src).stdout.split("\n")
         self.assertEqual(log[:6], ["fork: overlay", "v8 nostro", "Branding", "v8 tweak", "Cromite-Branding",
                                    ":NOEXPORT: v8 repo"])
+        self.assertEqual(run("git", "status", "--porcelain", cwd=src).stdout, "")
+
+        # reapply: stesso contenuto, stesso orario (ninja non ricompila)
+        branding = src / "chrome/app/theme/chromium/BRANDING"
+        os.utime(branding, ns=(10**18, 10**18))
+        fx.forkctl("reapply", "--src", str(src), "--base", "refs/tags/forkctl-cromite")
+        self.assertEqual(branding.stat().st_mtime_ns, 10**18)
+        self.assertIn("PRODUCT_FULLNAME=Fork", branding.read_text())
+        self.assertEqual(run("git", "log", "--format=%s", cwd=src).stdout.split("\n")[:6], log[:6])
         self.assertEqual(run("git", "status", "--porcelain", cwd=src).stdout, "")
 
         fx.set_lock(TAG1, V1)
