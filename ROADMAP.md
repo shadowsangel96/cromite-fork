@@ -613,3 +613,8 @@ in modo naturale invece che frase per frase.
 - Aggiornamento in-app da `update.json` (Cromite su Windows disattiva l'updater di Chromium),
   dalla pagina "Informazioni su": pacchetto firmato con una nostra chiave e verificato prima di
   installarlo, sostituzione dei file al riavvio, versione precedente tenuta per tornare indietro.
+- Installazione: la cartella del browser deve dare i permessi di lettura ai processi in
+  AppContainer, come fa l'installer di Chrome, altrimenti il servizio di rete non parte nella sua
+  sandbox. Oggi lo fa `Imposta-permessi.cmd` nello zip; poi lo farà l'aggiornamento in-app da solo.
+- Prova di avvio dopo ogni build (`smoke-windows.yml`): se il pacchetto non parte, la release non
+  esce. Non copre la prova a mano di finestre e menu.

@@ -5,10 +5,9 @@ ma ferma subito un pacchetto che non si apre, prima che arrivi in una release.
 
 Due giri:
 1. dalla cartella estratta così com'è, come chi scompatta lo zip (solo informativo);
-2. dopo aver dato alla cartella i permessi di Program Files per i processi in AppContainer
-   (ALL APPLICATION PACKAGES e ALL RESTRICTED APPLICATION PACKAGES), come fa l'installer di
-   Chrome: il servizio di rete gira in un AppContainer ristretto che deve leggere chrome.exe.
-   Questo giro deve passare tutto.
+2. dopo Imposta-permessi.cmd del pacchetto, che dà alla cartella i permessi di Program Files per
+   i processi in AppContainer, come fa l'installer di Chrome: il servizio di rete gira in un
+   AppContainer ristretto che deve leggere chrome.exe. Questo giro deve passare tutto.
 
 uso: smoke_windows.py <cartella con il pacchetto estratto> <cartella per i risultati>
 Nei risultati: pagina.png (la pagina di prova disegnata) e i log del browser.
@@ -17,6 +16,7 @@ Nei risultati: pagina.png (la pagina di prova disegnata) e i log del browser.
 import functools
 import http.server
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -80,6 +80,13 @@ def round_(browser, tag, page, url, shot):
                           f"{url}/prova.html")
         if not (shot.exists() and shot.stat().st_size > 1000):
             problems.append(f"nessuno screenshot della pagina di prova (codice {res.returncode})")
+    # solo informativo: chrome://sandbox dice se il servizio di rete è davvero isolato
+    res = browser.run(f"{tag}-sandbox", "--allow-chrome-scheme-url", "--virtual-time-budget=8000",
+                      "--dump-dom", "chrome://sandbox")
+    (browser.logs / f"{tag}-sandbox.html").write_text(res.stdout, encoding="utf-8")
+    row = re.search(r"<tr>(?:(?!</tr>).)*Network Service(?:(?!</tr>).)*</tr>", res.stdout, re.S)
+    print(f"sandbox del servizio di rete ({tag}): "
+          + (re.sub(r"<[^>]+>", " | ", row.group(0))[:300] if row else "(riga non trovata)"), flush=True)
     print(f"giro \"{tag}\": " + ("tutto bene" if not problems else "; ".join(problems)), flush=True)
     return problems
 
@@ -103,7 +110,11 @@ def main():
     browser = Browser(exe, work, out)
 
     plain = round_(browser, "estratto", page, url, None)
-    subprocess.run(["icacls", str(exe.parent), "/grant", *APP_PACKAGES, "/T", "/Q"], check=True)
+    script = exe.parent / "Imposta-permessi.cmd"
+    if script.exists():
+        subprocess.run(["cmd", "/c", str(script)], check=True, stdin=subprocess.DEVNULL)
+    else:  # pacchetti di prima che lo script esistesse
+        subprocess.run(["icacls", str(exe.parent), "/grant", *APP_PACKAGES, "/T", "/Q"], check=True)
     failed = round_(browser, "permessi", page, url, out / "pagina.png")
 
     # solo informativo: nome e versione che il browser mostra di sé

@@ -159,6 +159,12 @@ Chromium completo richiede ~32 GB di RAM (16 al minimo), ~250 GB di disco e ore 
 Windows si compila da Linux x86-64; macOS e iOS solo su un Mac con Xcode completo.
 Variabili: `FORK_BUILD_DIR` (default `~/fork-build`), `FORK_DIST_DIR`, `FORK_KEEP_OLD=1`.
 
+### Provare il pacchetto Windows
+
+Estrarre lo zip in una cartella, lanciare una volta `Imposta-permessi.cmd` (non servono diritti di
+amministratore: permette al servizio di rete di girare nella sua sandbox) e aprire `chrome.exe`.
+Il pacchetto non è firmato, quindi al primo avvio Windows può mostrare l'avviso di SmartScreen.
+
 ### Build Windows su un PC Windows
 
 Molto più veloce delle tappe su GitHub, e dalla seconda volta ricompila solo quello che cambia.

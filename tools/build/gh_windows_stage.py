@@ -62,6 +62,16 @@ PACKAGE_FILES = ["chrome.dll", "chrome.exe", "chrome_100_percent.pak", "chrome_2
                  "snapshot_blob.bin", "VkICD_mock_icd.dll", "VkLayer_khronos_validation.dll",
                  "vk_swiftshader.dll", "vulkan-1.dll"]
 REQUIRED = {"chrome.exe", "chrome.dll", "chrome_elf.dll", "resources.pak", "icudtl.dat"}
+# Il servizio di rete gira in un AppContainer ristretto che deve poter leggere la cartella del
+# browser: l'installer di Chrome gliene dà il permesso, uno zip estratto no (il servizio riparte
+# senza sandbox). Sono gli stessi permessi di Program Files.
+PERMISSIONS_SCRIPT = "Imposta-permessi.cmd"
+PERMISSIONS_CMD = """@echo off
+rem Da lanciare una volta dopo aver estratto lo zip: il servizio di rete del browser
+rem gira isolato e deve poter leggere questa cartella. Non servono diritti di amministratore.
+icacls "%~dp0." /grant "*S-1-15-2-1:(OI)(CI)(RX)" "*S-1-15-2-2:(OI)(CI)(RX)" /T /Q
+pause
+"""
 
 
 def say(msg):
@@ -286,6 +296,7 @@ def package():
         else:
             print(f"(non prodotto: {f})")
     shutil.copytree(out / "locales", pkg / "locales")
+    (pkg / PERMISSIONS_SCRIPT).write_bytes(PERMISSIONS_CMD.replace("\n", "\r\n").encode("ascii"))
     archive = shutil.make_archive(str(pkg), "zip", DIST, pkg.name)
     print(f"pronto: {archive}")
 
