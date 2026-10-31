@@ -1,0 +1,460 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 19:38:09 +0100
+Subject: [PATCH] VPN: pagina di errore, conferma e barra rossa come negli
+ schizzi
+
+Fork-Patch: common/0006-vpn-pagina-di-errore-conferma-e-barra-rossa-come-negli-schiz.patch
+
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index 18d3ac9e2989631149cb4fe5da8261a2d9f3e5c4..b5996577fac99d4b6277e196ac9fc01ffb27c288 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/fork/vpn_status.h"
+ #include "chrome/browser/chrome_content_browser_client.h"
+ 
+ #include <algorithm>
+@@ -230,6 +231,7 @@
+ #include "chrome/common/webui_url_utils.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "chrome/installer/util/google_update_settings.h"
++#include "components/grit/components_resources.h"
+ #include "components/autofill/core/common/autofill_features.h"
+ #include "components/autofill/core/common/autofill_switches.h"
+ #include "components/blocked_content/popup_blocker.h"
+@@ -8588,6 +8590,33 @@ ChromeContentBrowserClient::GetAlternativeErrorPageOverrideInfo(
+     content::BrowserContext* browser_context,
+     int32_t error_code) {
+   const GURL& url = navigation_handle.GetURL();
++  // Our own proxy doesn't answer: the page of the sketches. A proxy of the system
++  // keeps the normal one.
++  if (error_code == net::ERR_PROXY_CONNECTION_FAILED &&
++      navigation_handle.IsInPrimaryMainFrame()) {
++    using Route = browser_fork::VpnStatus::Route;
++    const Route route = browser_fork::VpnStatus::Get()->route();
++    if (route == Route::kVpn || route == Route::kVpnDown) {
++      auto info = content::mojom::AlternativeErrorPageOverrideInfo::New();
++      info->resource_id = IDR_NET_ERROR_HTML;
++      base::DictValue& params = info->alternative_error_page_params;
++      params.Set(error_page::kOverrideErrorPage, base::Value(true));
++      params.Set("iconClass", "icon-vpn");
++      params.Set("errorCode", "");
++      params.SetByDottedPath("heading.msg", "Il server VPN non risponde");
++      params.SetByDottedPath(
++          "summary.msg",
++          "Per non mostrare l'IP di casa ai siti, il browser non passa da solo "
++          "alla connessione diretta.");
++      if (!navigation_handle.IsPost()) {
++        params.SetByDottedPath("reloadButton.msg", "Riprova");
++        params.SetByDottedPath("reloadButton.reloadUrl", url.spec());
++      }
++      params.SetByDottedPath("vpnDirectButton.msg",
++                             "Naviga diretto (riserva)");
++      return info;
++    }
++  }
+   Profile* profile = Profile::FromBrowserContext(browser_context);
+   if (enterprise_net::IsEnterpriseProxyErrorHandlingEnabled() && profile) {
+     auto* error_service =
+diff --git a/chrome/browser/fork/vpn_tab_helper.cc b/chrome/browser/fork/vpn_tab_helper.cc
+index a489db2a35c3ec8362039d86510853eb4490df51..169c4a2f78079b124dc886742cdfc1554d74ff78 100644
+--- a/chrome/browser/fork/vpn_tab_helper.cc
++++ b/chrome/browser/fork/vpn_tab_helper.cc
+@@ -2,12 +2,17 @@
+ 
+ #include <memory>
+ #include <string>
++#include <utility>
+ 
+ #include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/task/sequenced_task_runner.h"
+ #include "base/time/time.h"
+ #include "chrome/browser/infobars/confirm_infobar_creator.h"
++#include "chrome/browser/ui/views/infobars/confirm_infobar.h"
++#include "components/constrained_window/constrained_window_views.h"
+ #include "components/infobars/content/content_infobar_manager.h"
+ #include "components/infobars/core/confirm_infobar_delegate.h"
+ #include "components/infobars/core/infobar.h"
+@@ -17,7 +22,18 @@
+ #include "content/public/browser/navigation_handle.h"
+ #include "content/public/browser/web_contents.h"
+ #include "net/base/net_errors.h"
+-#include "ui/gfx/vector_icon_types.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/dialog_model.h"
++#include "ui/gfx/font.h"
++#include "ui/gfx/range/range.h"
++#include "ui/views/background.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/styled_label.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/widget/widget_delegate.h"
++#include "ui/views/window/dialog_delegate.h"
+ #include "url/gurl.h"
+ 
+ namespace browser_fork {
+@@ -28,6 +44,12 @@ namespace {
+ constexpr infobars::InfoBarDelegate::InfoBarIdentifier kInfoBarId =
+     infobars::InfoBarDelegate::TEST_INFOBAR;
+ 
++// The red of the direct connection, in the sketches.
++constexpr SkColor kDirectRed = SkColorSetRGB(0xC4, 0x00, 0x1A);
++
++constexpr char16_t kDirectBarTitle[] = u"Connessione diretta.";
++constexpr char16_t kDirectBarText[] = u" I siti vedono l'IP di casa.";
++
+ // The network service gets the new route on its own pipe: without a moment the
+ // reload could still go the old way.
+ constexpr base::TimeDelta kReloadDelay = base::Milliseconds(500);
+@@ -46,72 +68,81 @@ void ReloadSoon(content::WebContents* web_contents) {
+       kReloadDelay);
+ }
+ 
+-// Asks before the reserve starts: this is the only way into it.
+-class ConfirmReserveInfoBarDelegate : public ConfirmInfoBarDelegate {
+- public:
+-  ConfirmReserveInfoBarDelegate() = default;
+-
+- private:
+-  // ConfirmInfoBarDelegate:
+-  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override {
+-    return kInfoBarId;
+-  }
+-  const gfx::VectorIcon& GetVectorIcon() const override {
+-    return vector_icons::kWarningIcon;
+-  }
+-  std::u16string GetMessageText() const override {
+-    return u"Navigare senza VPN? I siti vedranno l'IP di casa. La modalità "
+-           u"diretta scade alla chiusura del browser o dopo 24 ore.";
++// The only way into the reserve: asks, from the button of the error page.
++void ShowReserveDialog(content::WebContents* contents) {
++  auto model =
++      ui::DialogModel::Builder()
++          .SetTitle(u"Navigare senza VPN?")
++          .AddParagraph(ui::DialogModelLabel(
++              u"I siti vedranno l'IP di casa. La modalità diretta scade alla "
++              u"chiusura del browser o dopo 24 ore, e torna da sola alla VPN "
++              u"quando il server risponde."))
++          .AddOkButton(
++              base::BindOnce(
++                  [](base::WeakPtr<content::WebContents> web_contents) {
++                    VpnStatus::Get()->StartDirectReserve();
++                    if (web_contents) {
++                      ReloadSoon(web_contents.get());
++                    }
++                  },
++                  contents->GetWeakPtr()),
++              ui::DialogModel::Button::Params().SetLabel(u"Naviga diretto"))
++          .AddCancelButton(
++              base::DoNothing(),
++              ui::DialogModel::Button::Params().SetLabel(u"Annulla"))
++          .OverrideDefaultButton(ui::mojom::DialogButton::kCancel)
++          .Build();
++  views::Widget* widget =
++      constrained_window::ShowWebModal(std::move(model), contents);
++  if (auto* dialog = widget ? widget->widget_delegate()->AsDialogDelegate()
++                            : nullptr;
++      dialog && dialog->GetOkButton()) {
++    dialog->GetOkButton()->SetBgColorOverrideDeprecated(kDirectRed);
++    dialog->GetOkButton()->SetEnabledTextColors(SK_ColorWHITE);
+   }
+-  std::u16string GetButtonLabel(InfoBarButton button) const override {
+-    return button == BUTTON_OK ? u"Naviga diretto" : u"Annulla";
+-  }
+-  bool Accept() override {
+-    content::WebContents* contents =
+-        infobars::ContentInfoBarManager::WebContentsFromInfoBar(infobar());
+-    // Not from here: the bars of the tabs change, this one included.
+-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+-        FROM_HERE, base::BindOnce([] {
+-          VpnStatus::Get()->StartDirectReserve();
+-        }));
+-    ReloadSoon(contents);
+-    return true;
+-  }
+-};
++}
++
++// Red, with the first words in bold and an outlined button, as in the sketches.
++class DirectReserveInfoBar : public ConfirmInfoBar {
++  METADATA_HEADER(DirectReserveInfoBar, ConfirmInfoBar)
+ 
+-// Shows up when a page finds the proxy down, and only then.
+-class ProxyDownInfoBarDelegate : public ConfirmInfoBarDelegate {
+  public:
+-  ProxyDownInfoBarDelegate() = default;
++  explicit DirectReserveInfoBar(std::unique_ptr<ConfirmInfoBarDelegate> delegate)
++      : ConfirmInfoBar(std::move(delegate)) {
++    const std::u16string title(kDirectBarTitle);
++    const std::u16string text = title + kDirectBarText;
++    auto label = CreateStyledLabel(text);
++    label->SetAutoColorReadabilityEnabled(false);
++    views::StyledLabel::RangeStyleInfo bold;
++    bold.custom_font =
++        label->GetFontList().DeriveWithWeight(gfx::Font::Weight::BOLD);
++    bold.override_color = SK_ColorWHITE;
++    views::StyledLabel::RangeStyleInfo normal;
++    normal.override_color = SK_ColorWHITE;
++    label->AddStyleRange(gfx::Range(0, title.size()), bold);
++    label->AddStyleRange(gfx::Range(title.size(), text.size()), normal);
++    label_ = AssignMessageLabel(std::move(label));
+ 
+- private:
+-  // ConfirmInfoBarDelegate:
+-  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override {
+-    return kInfoBarId;
+-  }
+-  const gfx::VectorIcon& GetVectorIcon() const override {
+-    return vector_icons::kWarningIcon;
+-  }
+-  std::u16string GetMessageText() const override {
+-    return u"Il server VPN non risponde. Per non mostrare l'IP di casa ai "
+-           u"siti, il browser non passa da solo alla connessione diretta.";
+-  }
+-  std::u16string GetButtonLabel(InfoBarButton button) const override {
+-    return button == BUTTON_OK ? u"Riprova" : u"Naviga diretto (riserva)";
+-  }
+-  bool Accept() override {
+-    infobars::ContentInfoBarManager::WebContentsFromInfoBar(infobar())
+-        ->GetController()
+-        .Reload(content::ReloadType::NORMAL, /*check_for_repost=*/true);
+-    return true;
++    views::MdTextButton* button = ok_button_for_testing();
++    button->SetBgColorOverrideDeprecated(SK_ColorTRANSPARENT);
++    button->SetStrokeColorOverrideDeprecated(SK_ColorWHITE);
++    button->SetEnabledTextColors(SK_ColorWHITE);
+   }
+-  bool Cancel() override {
+-    infobar()->owner()->AddInfoBar(
+-        CreateConfirmInfoBar(std::make_unique<ConfirmReserveInfoBarDelegate>()));
+-    return true;
++
++  // views::View:
++  void OnThemeChanged() override {
++    ConfirmInfoBar::OnThemeChanged();
++    SetBackground(views::CreateSolidBackground(kDirectRed));
++    label_->SetDisplayedOnBackgroundColor(kDirectRed);
+   }
++
++ private:
++  raw_ptr<views::StyledLabel> label_;
+ };
+ 
++BEGIN_METADATA(DirectReserveInfoBar)
++END_METADATA
++
+ }  // namespace
+ 
+ // Stays on the tab for as long as the reserve is on.
+@@ -130,15 +161,12 @@ class DirectReserveInfoBarDelegate : public ConfirmInfoBarDelegate {
+   infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override {
+     return kInfoBarId;
+   }
+-  const gfx::VectorIcon& GetVectorIcon() const override {
+-    return vector_icons::kWarningIcon;
+-  }
+   bool ShouldExpire(const NavigationDetails& details) const override {
+     return false;
+   }
+   bool IsCloseable() const override { return false; }
+   std::u16string GetMessageText() const override {
+-    return u"Connessione diretta. I siti vedono l'IP di casa.";
++    return std::u16string(kDirectBarTitle) + kDirectBarText;
+   }
+   int GetButtons() const override { return BUTTON_OK; }
+   std::u16string GetButtonLabel(InfoBarButton button) const override {
+@@ -168,20 +196,26 @@ VpnTabHelper::~VpnTabHelper() {
+   VpnStatus::Get()->RemoveObserver(this);
+ }
+ 
++bool VpnTabHelper::OfferDirectReserve() {
++  const VpnStatus::Route route = VpnStatus::Get()->route();
++  if (!on_proxy_error_page_ || (route != VpnStatus::Route::kVpn &&
++                                route != VpnStatus::Route::kVpnDown)) {
++    return false;
++  }
++  ShowReserveDialog(web_contents());
++  return true;
++}
++
+ void VpnTabHelper::DidFinishNavigation(content::NavigationHandle* handle) {
+   if (!handle->IsInPrimaryMainFrame() || handle->IsSameDocument() ||
+       !handle->HasCommitted()) {
+     return;
+   }
+   UpdateReserveBar();
+-  if (handle->GetNetErrorCode() == net::ERR_PROXY_CONNECTION_FAILED) {
++  on_proxy_error_page_ =
++      handle->GetNetErrorCode() == net::ERR_PROXY_CONNECTION_FAILED;
++  if (on_proxy_error_page_) {
+     VpnStatus::Get()->ReportProxyDown();
+-    auto* manager =
+-        infobars::ContentInfoBarManager::FromWebContents(web_contents());
+-    if (manager && VpnStatus::Get()->route() == VpnStatus::Route::kVpnDown) {
+-      manager->AddInfoBar(
+-          CreateConfirmInfoBar(std::make_unique<ProxyDownInfoBarDelegate>()));
+-    }
+   } else if (handle->GetNetErrorCode() == net::OK &&
+              handle->GetURL().SchemeIsHTTPOrHTTPS()) {
+     VpnStatus::Get()->ReportPageLoaded();
+@@ -222,7 +256,8 @@ void VpnTabHelper::UpdateReserveBar() {
+   }
+   auto delegate = std::make_unique<DirectReserveInfoBarDelegate>();
+   base::WeakPtr<DirectReserveInfoBarDelegate> weak = delegate->GetWeakPtr();
+-  if (manager->AddInfoBar(CreateConfirmInfoBar(std::move(delegate)))) {
++  if (manager->AddInfoBar(
++          std::make_unique<DirectReserveInfoBar>(std::move(delegate)))) {
+     reserve_bar_ = weak;
+   }
+ }
+diff --git a/chrome/browser/fork/vpn_tab_helper.h b/chrome/browser/fork/vpn_tab_helper.h
+index 48f72ad208e83f1ab3ae67e364630c5e448ef7e8..77e9b1ffcda74470a268488fa3b25a175bcd836a 100644
+--- a/chrome/browser/fork/vpn_tab_helper.h
++++ b/chrome/browser/fork/vpn_tab_helper.h
+@@ -10,14 +10,18 @@ namespace browser_fork {
+ 
+ class DirectReserveInfoBarDelegate;
+ 
+-// The bars about the VPN in a tab: the offer of the reserve when a page finds the
+-// server down, the warning while the reserve is on.
++// The VPN in a tab: the reserve offered by the error page when the server is down,
++// the red bar while the reserve is on.
+ class VpnTabHelper : public content::WebContentsObserver,
+                      public content::WebContentsUserData<VpnTabHelper>,
+                      public VpnStatus::Observer {
+  public:
+   ~VpnTabHelper() override;
+ 
++  // From the button of the error page: asks whether to go without the VPN. False
++  // if this tab isn't on that page.
++  bool OfferDirectReserve();
++
+  private:
+   friend class content::WebContentsUserData<VpnTabHelper>;
+ 
+@@ -32,6 +36,7 @@ class VpnTabHelper : public content::WebContentsObserver,
+ 
+   void UpdateReserveBar();
+ 
++  bool on_proxy_error_page_ = false;
+   base::WeakPtr<DirectReserveInfoBarDelegate> reserve_bar_;
+ 
+   WEB_CONTENTS_USER_DATA_KEY_DECL();
+diff --git a/chrome/browser/net/net_error_tab_helper.cc b/chrome/browser/net/net_error_tab_helper.cc
+index 05b6acba0f0fbbe2117bbe78fe66251791f1609c..fdfb07907fbb3bfb7842440399fa50d9b8e91cf9 100644
+--- a/chrome/browser/net/net_error_tab_helper.cc
++++ b/chrome/browser/net/net_error_tab_helper.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/net/net_error_tab_helper.h"
+ 
++#include "chrome/browser/fork/vpn_tab_helper.h"  // nogncheck
++
+ #include "base/functional/bind.h"
+ #include "base/logging.h"
+ #include "chrome/browser/net/dns_probe_service.h"
+@@ -291,6 +293,14 @@ void NetErrorTabHelper::RunNetworkDiagnostics(const GURL& url) {
+   if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS())
+     return;
+ 
++  // On our page for a VPN that doesn't answer this is the button of the reserve.
++  if (auto* vpn = browser_fork::VpnTabHelper::FromWebContents(web_contents());
++      vpn &&
++      IsValidEasterEggTarget(network_diagnostics_receivers_.CurrentTargetFrame()) &&
++      vpn->OfferDirectReserve()) {
++    return;
++  }
++
+   // Sanitize URL prior to running diagnostics on it.
+   RunNetworkDiagnosticsHelper(url.DeprecatedGetOriginAsURL().spec());
+ }
+diff --git a/components/neterror/resources/neterror.css b/components/neterror/resources/neterror.css
+index dbdbeac156b5043c34fde9bddf19a0d0b60a1891..bae37b61436fc3b747057f8c322b7012841eac0d 100644
+--- a/components/neterror/resources/neterror.css
++++ b/components/neterror/resources/neterror.css
+@@ -263,6 +263,51 @@ html[subframe] body {
+   }
+ }
+ 
++/* The page for a VPN that doesn't answer, as in the sketches: the two buttons
++   together under the text, the shield in place of the sad page. */
++.icon-vpn {
++  content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%239a4f00' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M8 1.8 3 3.6v4.1c0 3 2.1 5.4 5 6.5 2.9-1.1 5-3.5 5-6.5V3.6z'/%3E%3Cpath d='M8 5.5v3'/%3E%3Cpath d='M8 10.6v.1'/%3E%3C/svg%3E");
++}
++
++.nav-wrapper:has(.vpn-direct) {
++  align-items: center;
++  display: flex;
++  gap: 12px;
++  justify-content: flex-start;
++  margin-top: 24px;
++  position: static;
++}
++
++.nav-wrapper:has(.vpn-direct) #control-buttons {
++  float: none;
++  margin: 0;
++}
++
++.nav-wrapper:has(.vpn-direct) #reload-button {
++  margin: 0;
++}
++
++#details-button.vpn-direct {
++  background: transparent;
++  border: 0;
++  color: #c4001a;
++  float: none;
++  margin: 0;
++  min-width: auto;
++  white-space: nowrap;
++}
++
++@media (prefers-color-scheme: dark) {
++  .icon-vpn {
++    content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23ffad33' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M8 1.8 3 3.6v4.1c0 3 2.1 5.4 5 6.5 2.9-1.1 5-3.5 5-6.5V3.6z'/%3E%3Cpath d='M8 5.5v3'/%3E%3Cpath d='M8 10.6v.1'/%3E%3C/svg%3E");
++    filter: none;
++  }
++
++  #details-button.vpn-direct {
++    color: #ff6b6b;
++  }
++}
++
+ /* details-button is special; it's a <button> element that looks like a link. */
+ #details-button {
+   box-shadow: none;
+diff --git a/components/neterror/resources/neterror.ts b/components/neterror/resources/neterror.ts
+index c638ccd028a6f78901ec398f6d759aea033eecc6..8770569e390bee11ca022a1b11f2dbc7920ed65e 100644
+--- a/components/neterror/resources/neterror.ts
++++ b/components/neterror/resources/neterror.ts
+@@ -34,6 +34,7 @@ interface ErrorPageController {
+ }
+ 
+ interface TemplateData {
++  vpnDirectButton?: {msg: string};
+   // Properties that exist in both error pages and chrome://dino.
+   errorCode: string;
+   heading: {
+@@ -354,6 +355,12 @@ function getHtml(data: TemplateData, showingDetails: boolean) {
+             ${getDetailsButtonText(data, showingDetails)}
+           </button>
+         ` : ''}
++        ${data.vpnDirectButton ? html`
++          <button id="details-button" class="secondary-button text-button
++              small-link vpn-direct" @click="${diagnoseErrors}">
++            ${data.vpnDirectButton.msg}
++          </button>
++        ` : ''}
+       </div>
+       ${data.suggestionsDetails ? html`
+         <div id="details">
