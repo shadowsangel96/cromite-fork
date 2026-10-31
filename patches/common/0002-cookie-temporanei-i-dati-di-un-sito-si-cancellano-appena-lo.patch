@@ -1,0 +1,672 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 11:56:57 +0100
+Subject: [PATCH] Cookie temporanei: i dati di un sito si cancellano appena lo
+ lasci
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Nuova modalità predefinita. I cookie e gli altri dati di un sito durano la visita e
+si cancellano quando nessuna scheda lo tiene aperto, salvo i siti da ricordare. Unica
+attesa, al massimo 5 minuti: i giri fuori e ritorno che il sito stesso fa fare (form
+verso un altro sito, redirect, login esterni, pagamenti). All'avvio si cancella quello
+che la sessione precedente può aver lasciato. Modalità Normale e Blocca tutti.
+
+Fork-Patch: common/0002-cookie-temporanei-i-dati-di-un-sito-si-cancellano-appena-lo.patch
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 0b5aeb5dd26244d50f6ff87b7b27a332989bc095..3650174022d0fa2dd739dfe347333c26e2e3cdd6 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -839,6 +839,12 @@ source_set("core") {
+   sources = [
+     "about_flags.cc",
+     "adblock/adblock_chrome_content_browser_client.cc",
++    "fork/temporary_site_data_service.cc",
++    "fork/temporary_site_data_service.h",
++    "fork/temporary_site_data_service_factory.cc",
++    "fork/temporary_site_data_service_factory.h",
++    "fork/temporary_site_data_tab_helper.cc",
++    "fork/temporary_site_data_tab_helper.h",
+     "adblock/adblock_chrome_content_browser_client.h",
+     "after_startup_task_utils.cc",
+     "browser_about_handler.cc",
+diff --git a/chrome/browser/fork/temporary_site_data_service.cc b/chrome/browser/fork/temporary_site_data_service.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..d18e84c1de133a6e922d0b88e71b3f31735e0eed
+--- /dev/null
++++ b/chrome/browser/fork/temporary_site_data_service.cc
+@@ -0,0 +1,220 @@
++#include "chrome/browser/fork/temporary_site_data_service.h"
++
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/strings/string_util.h"
++#include "base/task/single_thread_task_runner.h"
++#include "base/values.h"
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/content_settings/core/common/content_settings_pattern.h"
++#include "components/content_settings/core/common/content_settings_types.h"
++#include "components/pref_registry/pref_registry_syncable.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/browser_context.h"
++#include "content/public/browser/browsing_data_filter_builder.h"
++#include "content/public/browser/browsing_data_remover.h"
++#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
++#include "net/base/schemeful_site.h"
++#include "net/cookies/cookie_partition_key_collection.h"
++#include "url/gurl.h"
++
++namespace browser_fork {
++
++namespace {
++
++using Remover = content::BrowsingDataRemover;
++using FilterBuilder = content::BrowsingDataFilterBuilder;
++
++// Everything a site can read back. Site permissions (such as "allow WebGL") stay
++// and so does the HTTP cache, which is already separated by top-level site.
++constexpr uint64_t kSiteDataMask =
++    Remover::DATA_TYPE_COOKIES | Remover::DATA_TYPE_DOM_STORAGE |
++    Remover::DATA_TYPE_MEDIA_LICENSES | Remover::DATA_TYPE_DEVICE_BOUND_SESSIONS;
++constexpr uint64_t kOriginMask =
++    Remover::ORIGIN_TYPE_UNPROTECTED_WEB | Remover::ORIGIN_TYPE_PROTECTED_WEB;
++
++}  // namespace
++
++// static
++void TemporarySiteDataService::RegisterProfilePrefs(
++    user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterIntegerPref(kCookieModePref,
++                                static_cast<int>(CookieMode::kTemporary));
++  registry->RegisterListPref(kRememberedSitesPref);
++}
++
++// static
++std::string TemporarySiteDataService::SiteForUrl(const GURL& url) {
++  if (!url.SchemeIsHTTPOrHTTPS()) {
++    return std::string();
++  }
++  std::string domain = net::registry_controlled_domains::GetDomainAndRegistry(
++      url, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
++  return domain.empty() ? std::string(url.host()) : domain;
++}
++
++TemporarySiteDataService::TemporarySiteDataService(Profile* profile)
++    : profile_(profile) {
++  registrar_.Init(profile_->GetPrefs());
++  auto changed = base::BindRepeating(
++      &TemporarySiteDataService::OnSettingsChanged, base::Unretained(this));
++  registrar_.Add(kCookieModePref, changed);
++  registrar_.Add(kRememberedSitesPref, changed);
++  ReadRememberedSites();
++  if (mode() == CookieMode::kTemporary) {
++    // What the last session left behind: closing the browser or a crash can
++    // interrupt a deletion.
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(&TemporarySiteDataService::Sweep,
++                                  weak_factory_.GetWeakPtr()));
++  }
++}
++
++TemporarySiteDataService::~TemporarySiteDataService() = default;
++
++void TemporarySiteDataService::Shutdown() {
++  shut_down_ = true;
++  holds_.clear();
++  registrar_.RemoveAll();
++}
++
++CookieMode TemporarySiteDataService::mode() const {
++  return static_cast<CookieMode>(profile_->GetPrefs()->GetInteger(kCookieModePref));
++}
++
++void TemporarySiteDataService::ReadRememberedSites() {
++  remembered_.clear();
++  for (const base::Value& entry :
++       profile_->GetPrefs()->GetList(kRememberedSitesPref)) {
++    if (!entry.is_string()) {
++      continue;
++    }
++    std::string text = base::ToLowerASCII(entry.GetString());
++    base::TrimWhitespaceASCII(text, base::TRIM_ALL, &text);
++    if (text.empty()) {
++      continue;
++    }
++    GURL url(text.find("://") == std::string::npos ? "https://" + text : text);
++    std::string site = SiteForUrl(url);
++    if (!site.empty()) {
++      remembered_.insert(std::move(site));
++    }
++  }
++}
++
++void TemporarySiteDataService::OnSettingsChanged() {
++  ReadRememberedSites();
++  ApplyCookieContentSetting();
++  if (mode() == CookieMode::kTemporary) {
++    Sweep();
++  }
++}
++
++void TemporarySiteDataService::ApplyCookieContentSetting() {
++  HostContentSettingsMap* map =
++      HostContentSettingsMapFactory::GetForProfile(profile_);
++  map->ClearSettingsForOneType(ContentSettingsType::COOKIES);
++  if (mode() != CookieMode::kBlockAll) {
++    map->SetDefaultContentSetting(ContentSettingsType::COOKIES,
++                                  CONTENT_SETTING_DEFAULT);
++    return;
++  }
++  map->SetDefaultContentSetting(ContentSettingsType::COOKIES,
++                                CONTENT_SETTING_BLOCK);
++  for (const std::string& site : remembered_) {
++    map->SetContentSettingCustomScope(
++        ContentSettingsPattern::FromString("[*.]" + site),
++        ContentSettingsPattern::Wildcard(), ContentSettingsType::COOKIES,
++        CONTENT_SETTING_ALLOW);
++  }
++}
++
++void TemporarySiteDataService::TabEntered(const std::string& site) {
++  ++open_tabs_[site];
++}
++
++void TemporarySiteDataService::TabLeft(const std::string& site) {
++  auto it = open_tabs_.find(site);
++  if (it == open_tabs_.end()) {
++    return;
++  }
++  if (--it->second == 0) {
++    open_tabs_.erase(it);
++    MaybeClear(site);
++  }
++}
++
++void TemporarySiteDataService::Hold(const std::string& site) {
++  auto& timer = holds_[site];
++  if (!timer) {
++    timer = std::make_unique<base::OneShotTimer>();
++  }
++  timer->Start(FROM_HERE, kRoundTripHold,
++               base::BindOnce(&TemporarySiteDataService::Release,
++                              base::Unretained(this), site));
++}
++
++void TemporarySiteDataService::Release(const std::string& site) {
++  // The copy keeps `site` alive: it can belong to the timer being erased.
++  const std::string copy = site;
++  auto it = holds_.find(copy);
++  if (it == holds_.end()) {
++    return;
++  }
++  holds_.erase(it);
++  MaybeClear(copy);
++}
++
++void TemporarySiteDataService::MaybeClear(const std::string& site) {
++  if (shut_down_ || mode() != CookieMode::kTemporary ||
++      open_tabs_.contains(site) || holds_.contains(site) ||
++      remembered_.contains(site)) {
++    return;
++  }
++  ClearSite(site);
++}
++
++void TemporarySiteDataService::ClearSite(const std::string& site) {
++  Remover* remover = profile_->GetBrowsingDataRemover();
++  auto filter = FilterBuilder::Create(FilterBuilder::Mode::kDelete);
++  filter->AddRegisterableDomain(site);
++  remover->RemoveWithFilter(base::Time(), base::Time::Max(), kSiteDataMask,
++                            kOriginMask, std::move(filter));
++
++  // Cookies are separated by top-level site: those of the third parties
++  // embedded in this site have their own domain, so they need another pass.
++  for (const char* scheme : {"https://", "http://"}) {
++    auto partitioned = FilterBuilder::Create(FilterBuilder::Mode::kPreserve);
++    partitioned->SetCookiePartitionKeyCollection(
++        net::CookiePartitionKeyCollection::MatchesSite(
++            net::SchemefulSite(GURL(scheme + site))));
++    partitioned->SetPartitionedCookiesOnly(true);
++    remover->RemoveWithFilter(base::Time(), base::Time::Max(),
++                              Remover::DATA_TYPE_COOKIES, kOriginMask,
++                              std::move(partitioned));
++  }
++}
++
++void TemporarySiteDataService::Sweep() {
++  if (shut_down_) {
++    return;
++  }
++  auto filter = FilterBuilder::Create(FilterBuilder::Mode::kPreserve);
++  for (const std::string& site : remembered_) {
++    filter->AddRegisterableDomain(site);
++  }
++  for (const auto& [site, count] : open_tabs_) {
++    filter->AddRegisterableDomain(site);
++  }
++  for (const auto& [site, timer] : holds_) {
++    filter->AddRegisterableDomain(site);
++  }
++  profile_->GetBrowsingDataRemover()->RemoveWithFilter(
++      base::Time(), base::Time::Max(), kSiteDataMask, kOriginMask,
++      std::move(filter));
++}
++
++}  // namespace browser_fork
+diff --git a/chrome/browser/fork/temporary_site_data_service.h b/chrome/browser/fork/temporary_site_data_service.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..f9627ec7bfd7ee63dc85009d2f865fa5b6a3ab11
+--- /dev/null
++++ b/chrome/browser/fork/temporary_site_data_service.h
+@@ -0,0 +1,83 @@
++// Temporary cookies: what a site stores lasts for the visit and is deleted as
++// soon as the site is left, unless the user chose to remember the site.
++
++#ifndef CHROME_BROWSER_FORK_TEMPORARY_SITE_DATA_SERVICE_H_
++#define CHROME_BROWSER_FORK_TEMPORARY_SITE_DATA_SERVICE_H_
++
++#include <map>
++#include <memory>
++#include <set>
++#include <string>
++
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/time/time.h"
++#include "base/timer/timer.h"
++#include "components/keyed_service/core/keyed_service.h"
++#include "components/prefs/pref_change_registrar.h"
++
++class GURL;
++class Profile;
++
++namespace user_prefs {
++class PrefRegistrySyncable;
++}
++
++namespace browser_fork {
++
++enum class CookieMode : int {
++  kTemporary = 0,  // Kept during the visit, deleted when the site is left.
++  kNormal = 1,     // As in Chromium.
++  kBlockAll = 2,   // Nothing is stored, except by the remembered sites.
++};
++
++inline constexpr char kCookieModePref[] = "fork.cookie_mode";
++inline constexpr char kRememberedSitesPref[] = "fork.remembered_sites";
++
++// How long the data of a site survives a round trip that the site itself
++// started, such as a payment on the page of a bank or an external login.
++inline constexpr base::TimeDelta kRoundTripHold = base::Minutes(5);
++
++class TemporarySiteDataService : public KeyedService {
++ public:
++  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
++
++  // The site data is grouped by: the registrable domain, or the host when it
++  // has none (an IP address, a local name). Empty for anything but http(s).
++  static std::string SiteForUrl(const GURL& url);
++
++  explicit TemporarySiteDataService(Profile* profile);
++  ~TemporarySiteDataService() override;
++
++  // A tab shows, or stopped showing, a page of `site`.
++  void TabEntered(const std::string& site);
++  void TabLeft(const std::string& site);
++
++  // Keeps the data of `site` for at most kRoundTripHold.
++  void Hold(const std::string& site);
++  void Release(const std::string& site);
++
++  // KeyedService:
++  void Shutdown() override;
++
++ private:
++  CookieMode mode() const;
++  void OnSettingsChanged();
++  void ReadRememberedSites();
++  void ApplyCookieContentSetting();
++  void MaybeClear(const std::string& site);
++  void ClearSite(const std::string& site);
++  void Sweep();
++
++  raw_ptr<Profile> profile_;
++  PrefChangeRegistrar registrar_;
++  std::set<std::string> remembered_;
++  std::map<std::string, int> open_tabs_;
++  std::map<std::string, std::unique_ptr<base::OneShotTimer>> holds_;
++  bool shut_down_ = false;
++  base::WeakPtrFactory<TemporarySiteDataService> weak_factory_{this};
++};
++
++}  // namespace browser_fork
++
++#endif  // CHROME_BROWSER_FORK_TEMPORARY_SITE_DATA_SERVICE_H_
+diff --git a/chrome/browser/fork/temporary_site_data_service_factory.cc b/chrome/browser/fork/temporary_site_data_service_factory.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..543ca7708056116b2e650e9d224a1a630f0e4804
+--- /dev/null
++++ b/chrome/browser/fork/temporary_site_data_service_factory.cc
+@@ -0,0 +1,37 @@
++#include "chrome/browser/fork/temporary_site_data_service_factory.h"
++
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/fork/temporary_site_data_service.h"
++#include "chrome/browser/profiles/profile.h"
++
++namespace browser_fork {
++
++// static
++TemporarySiteDataService* TemporarySiteDataServiceFactory::GetForProfile(
++    Profile* profile) {
++  return static_cast<TemporarySiteDataService*>(
++      GetInstance()->GetServiceForBrowserContext(profile, /*create=*/true));
++}
++
++// static
++TemporarySiteDataServiceFactory* TemporarySiteDataServiceFactory::GetInstance() {
++  static base::NoDestructor<TemporarySiteDataServiceFactory> instance;
++  return instance.get();
++}
++
++TemporarySiteDataServiceFactory::TemporarySiteDataServiceFactory()
++    : ProfileKeyedServiceFactory("TemporarySiteDataService",
++                                 ProfileSelections::BuildForRegularProfile()) {
++  DependsOn(HostContentSettingsMapFactory::GetInstance());
++}
++
++TemporarySiteDataServiceFactory::~TemporarySiteDataServiceFactory() = default;
++
++std::unique_ptr<KeyedService>
++TemporarySiteDataServiceFactory::BuildServiceInstanceForBrowserContext(
++    content::BrowserContext* context) const {
++  return std::make_unique<TemporarySiteDataService>(
++      Profile::FromBrowserContext(context));
++}
++
++}  // namespace browser_fork
+diff --git a/chrome/browser/fork/temporary_site_data_service_factory.h b/chrome/browser/fork/temporary_site_data_service_factory.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..dfc1b1ab2587ac1c43586c45518f3cc6fcffa809
+--- /dev/null
++++ b/chrome/browser/fork/temporary_site_data_service_factory.h
+@@ -0,0 +1,34 @@
++#ifndef CHROME_BROWSER_FORK_TEMPORARY_SITE_DATA_SERVICE_FACTORY_H_
++#define CHROME_BROWSER_FORK_TEMPORARY_SITE_DATA_SERVICE_FACTORY_H_
++
++#include <memory>
++
++#include "base/no_destructor.h"
++#include "chrome/browser/profiles/profile_keyed_service_factory.h"
++
++class Profile;
++
++namespace browser_fork {
++
++class TemporarySiteDataService;
++
++class TemporarySiteDataServiceFactory : public ProfileKeyedServiceFactory {
++ public:
++  // Null for the profiles without one, such as incognito.
++  static TemporarySiteDataService* GetForProfile(Profile* profile);
++  static TemporarySiteDataServiceFactory* GetInstance();
++
++ private:
++  friend base::NoDestructor<TemporarySiteDataServiceFactory>;
++
++  TemporarySiteDataServiceFactory();
++  ~TemporarySiteDataServiceFactory() override;
++
++  // BrowserContextKeyedServiceFactory:
++  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
++      content::BrowserContext* context) const override;
++};
++
++}  // namespace browser_fork
++
++#endif  // CHROME_BROWSER_FORK_TEMPORARY_SITE_DATA_SERVICE_FACTORY_H_
+diff --git a/chrome/browser/fork/temporary_site_data_tab_helper.cc b/chrome/browser/fork/temporary_site_data_tab_helper.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..2413e1b00af6720a0b251ed5e02d1a97857b8596
+--- /dev/null
++++ b/chrome/browser/fork/temporary_site_data_tab_helper.cc
+@@ -0,0 +1,124 @@
++#include "chrome/browser/fork/temporary_site_data_tab_helper.h"
++
++#include <algorithm>
++#include <string_view>
++#include <vector>
++
++#include "chrome/browser/fork/temporary_site_data_service.h"
++#include "chrome/browser/fork/temporary_site_data_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "content/public/browser/navigation_handle.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/base/page_transition_types.h"
++#include "url/gurl.h"
++
++namespace browser_fork {
++
++namespace {
++
++// True when the site itself sent the user away, so that it may expect them back:
++// a form sent to another site, a redirect of its server or of its scripts, a link
++// that carries the address to return to. Not when the user left: a plain link,
++// the address bar, the back button.
++bool SiteStartedRoundTrip(content::NavigationHandle* handle,
++                          const std::string& old_site) {
++  if (handle->GetPageTransition() & ui::PAGE_TRANSITION_FORWARD_BACK) {
++    return false;
++  }
++  if (handle->IsPost()) {
++    return true;
++  }
++  const std::vector<GURL>& chain = handle->GetRedirectChain();
++  if (handle->WasServerRedirect() && !chain.empty() &&
++      TemporarySiteDataService::SiteForUrl(chain.front()) == old_site) {
++    return true;
++  }
++  if (handle->IsRendererInitiated() && !handle->HasUserGesture()) {
++    return true;
++  }
++  return handle->GetURL().query().find("redirect_uri=") !=
++         std::string_view::npos;
++}
++
++}  // namespace
++
++TemporarySiteDataTabHelper::TemporarySiteDataTabHelper(
++    content::WebContents* web_contents)
++    : content::WebContentsObserver(web_contents),
++      content::WebContentsUserData<TemporarySiteDataTabHelper>(*web_contents),
++      site_(TemporarySiteDataService::SiteForUrl(
++          web_contents->GetLastCommittedURL())) {
++  if (auto* s = service(); s && !site_.empty()) {
++    s->TabEntered(site_);
++  }
++}
++
++TemporarySiteDataTabHelper::~TemporarySiteDataTabHelper() = default;
++
++TemporarySiteDataService* TemporarySiteDataTabHelper::service() {
++  return TemporarySiteDataServiceFactory::GetForProfile(
++      Profile::FromBrowserContext(web_contents()->GetBrowserContext()));
++}
++
++void TemporarySiteDataTabHelper::ReleaseHeldSites() {
++  TemporarySiteDataService* s = service();
++  for (const std::string& site : held_sites_) {
++    if (s) {
++      s->Release(site);
++    }
++  }
++  held_sites_.clear();
++}
++
++void TemporarySiteDataTabHelper::DidFinishNavigation(
++    content::NavigationHandle* handle) {
++  if (!handle->IsInPrimaryMainFrame() || !handle->HasCommitted() ||
++      handle->IsSameDocument()) {
++    return;
++  }
++  std::string new_site = TemporarySiteDataService::SiteForUrl(handle->GetURL());
++  if (new_site == site_) {
++    return;
++  }
++  TemporarySiteDataService* s = service();
++  if (!s) {
++    return;
++  }
++  const std::string old_site = site_;
++  const bool round_trip =
++      !old_site.empty() && SiteStartedRoundTrip(handle, old_site);
++  site_ = new_site;
++  if (!new_site.empty()) {
++    s->TabEntered(new_site);
++  }
++  if (round_trip) {
++    s->Hold(old_site);
++    held_sites_.push_back(old_site);
++  } else if (!held_sites_.empty()) {
++    // The user went elsewhere, or came back: the trip is over.
++    ReleaseHeldSites();
++  }
++  if (round_trip && std::ranges::contains(held_sites_, new_site)) {
++    // The trip ended with a redirect back to a site that was waiting.
++    ReleaseHeldSites();
++  }
++  if (!old_site.empty()) {
++    s->TabLeft(old_site);
++  }
++}
++
++void TemporarySiteDataTabHelper::WebContentsDestroyed() {
++  TemporarySiteDataService* s = service();
++  if (!s) {
++    return;
++  }
++  ReleaseHeldSites();
++  if (!site_.empty()) {
++    s->TabLeft(site_);
++    site_.clear();
++  }
++}
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(TemporarySiteDataTabHelper);
++
++}  // namespace browser_fork
+diff --git a/chrome/browser/fork/temporary_site_data_tab_helper.h b/chrome/browser/fork/temporary_site_data_tab_helper.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..a03c1817478d52d7c58fbf297bdd05622cbfab12
+--- /dev/null
++++ b/chrome/browser/fork/temporary_site_data_tab_helper.h
+@@ -0,0 +1,42 @@
++#ifndef CHROME_BROWSER_FORK_TEMPORARY_SITE_DATA_TAB_HELPER_H_
++#define CHROME_BROWSER_FORK_TEMPORARY_SITE_DATA_TAB_HELPER_H_
++
++#include <string>
++#include <vector>
++
++#include "content/public/browser/web_contents_observer.h"
++#include "content/public/browser/web_contents_user_data.h"
++
++namespace browser_fork {
++
++class TemporarySiteDataService;
++
++// Tells TemporarySiteDataService which site a tab is showing.
++class TemporarySiteDataTabHelper
++    : public content::WebContentsObserver,
++      public content::WebContentsUserData<TemporarySiteDataTabHelper> {
++ public:
++  ~TemporarySiteDataTabHelper() override;
++
++ private:
++  friend class content::WebContentsUserData<TemporarySiteDataTabHelper>;
++
++  explicit TemporarySiteDataTabHelper(content::WebContents* web_contents);
++
++  // content::WebContentsObserver:
++  void DidFinishNavigation(content::NavigationHandle* handle) override;
++  void WebContentsDestroyed() override;
++
++  TemporarySiteDataService* service();
++  void ReleaseHeldSites();
++
++  std::string site_;
++  // The sites this tab left on a round trip they started and may come back to.
++  std::vector<std::string> held_sites_;
++
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++}  // namespace browser_fork
++
++#endif  // CHROME_BROWSER_FORK_TEMPORARY_SITE_DATA_TAB_HELPER_H_
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index 6efce2a9e84848b825b219c515855193f9375340..ce0b2de6ae69d335c5a8d66341220b5e3809e2d3 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -33,6 +33,7 @@
+ #include "chrome/browser/enterprise/reporting/prefs.h"
+ #include "chrome/browser/enterprise/util/managed_browser_utils.h"
+ #include "chrome/browser/external_protocol/external_protocol_handler.h"
++#include "chrome/browser/fork/temporary_site_data_service.h"
+ #include "chrome/browser/finds/core/finds_service.h"
+ #include "chrome/browser/first_run/first_run.h"
+ #include "chrome/browser/glic/glic_pref_names.h"
+@@ -1759,6 +1760,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+   TRACE_EVENT0("browser", "chrome::RegisterProfilePrefs");
+   // User prefs. Please keep this list alphabetized.
+   AccessibilityLabelsService::RegisterProfilePrefs(registry);
++  browser_fork::TemporarySiteDataService::RegisterProfilePrefs(registry);
+   AccessibilityUIMessageHandler::RegisterProfilePrefs(registry);
+   accessibility_annotator::prefs::RegisterProfilePrefs(registry);
+   AimEligibilityService::RegisterProfilePrefs(registry);
+diff --git a/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc b/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
+index d29ad6afcfc3048985ef7b620514921611426edc..06f4ffd19a3bd3094e86cf1f3ba63ce9cea5b58b 100644
+--- a/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
++++ b/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
+@@ -109,6 +109,7 @@
+ #include "chrome/browser/file_system_access/file_system_access_permission_context_factory.h"
+ #include "chrome/browser/finds/finds_service_factory.h"
+ #include "chrome/browser/first_party_sets/first_party_sets_policy_service_factory.h"
++#include "chrome/browser/fork/temporary_site_data_service_factory.h"
+ #include "chrome/browser/font_pref_change_notifier_factory.h"
+ #include "chrome/browser/glic/browser_ui/glic_actor_task_icon_manager_factory.h"
+ #include "chrome/browser/glic/public/glic_enabling.h"
+@@ -712,6 +713,7 @@ ChromeBrowserMainExtraPartsProfiles::~ChromeBrowserMainExtraPartsProfiles() =
+ // static
+ void ChromeBrowserMainExtraPartsProfiles::
+     EnsureBrowserContextKeyedServiceFactoriesBuilt() {
++  browser_fork::TemporarySiteDataServiceFactory::GetInstance();
+   // ---------------------------------------------------------------------------
+   // Redirect to those lists for factories that are part of those modules.
+   // Module specific registration functions:
+diff --git a/chrome/browser/ui/tab_helpers.cc b/chrome/browser/ui/tab_helpers.cc
+index df95c3d95573a0f774209cd00c08befb871fcab6..47a43b9f25174a0f701eae8c997525b2c3674ce0 100644
+--- a/chrome/browser/ui/tab_helpers.cc
++++ b/chrome/browser/ui/tab_helpers.cc
+@@ -34,6 +34,7 @@
+ #include "chrome/browser/contextual_tasks/aim_user_agent_tab_helper.h"
+ #include "chrome/browser/external_protocol/external_protocol_observer.h"
+ #include "chrome/browser/favicon/favicon_utils.h"
++#include "chrome/browser/fork/temporary_site_data_tab_helper.h"
+ #include "chrome/browser/file_system_access/file_system_access_features.h"
+ #include "chrome/browser/file_system_access/file_system_access_permission_request_manager.h"
+ #include "chrome/browser/file_system_access/file_system_access_tab_helper.h"
+@@ -409,6 +410,9 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents,
+   }
+   ChainedBackNavigationTracker::CreateForWebContents(web_contents);
+   chrome_browser_net::NetErrorTabHelper::CreateForWebContents(web_contents);
++  if (!profile->IsOffTheRecord()) {
++    browser_fork::TemporarySiteDataTabHelper::CreateForWebContents(web_contents);
++  }
+   // Password manager and password reuse detection rely on ChromeAutofillClient
+   // initialized by browser autofill, which is gated by enable_browser_autofill.
+   if (enable_browser_autofill) {

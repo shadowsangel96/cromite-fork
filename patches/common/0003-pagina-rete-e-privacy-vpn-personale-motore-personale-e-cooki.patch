@@ -1,0 +1,360 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 11:56:57 +0100
+Subject: [PATCH] Pagina Rete e privacy: VPN personale, motore personale e
+ cookie
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In cima a chrome://proxy: l'indirizzo del proxy della VPN del proprio server (con le
+reti di casa e Tailscale escluse), l'indirizzo di SearXNG come motore predefinito, la
+modalità dei cookie e i siti da ricordare. Gli indirizzi stanno nelle preferenze, mai
+nel codice.
+
+Fork-Patch: common/0003-pagina-rete-e-privacy-vpn-personale-motore-personale-e-cooki.patch
+
+diff --git a/chrome/browser/resources/proxy_config.css b/chrome/browser/resources/proxy_config.css
+index 0ce4fc031fa12d473c5eb8b2ddf9ef549b92806f..c138310ec26e0760a9397626d6a89caf828f80fe 100644
+--- a/chrome/browser/resources/proxy_config.css
++++ b/chrome/browser/resources/proxy_config.css
+@@ -59,3 +59,16 @@ textarea {
+   width: 95%;
+   height: 4em;
+ }
++
++button.fork-inline {
++  display: inline-block;
++  font-size: 100%;
++  margin: 0 0 0 6px;
++  padding: 0.4em 1em;
++  width: auto;
++}
++
++#fork-settings h2 {
++  margin-bottom: 0.5em;
++  margin-top: 1.5em;
++}
+diff --git a/chrome/browser/resources/proxy_config.html b/chrome/browser/resources/proxy_config.html
+index 71df46a98a6014c4f216935ff85ab8992b4a475a..b12953bcd380599126ae414e57b8efcc82431aa0 100644
+--- a/chrome/browser/resources/proxy_config.html
++++ b/chrome/browser/resources/proxy_config.html
+@@ -14,10 +14,43 @@
+ <script type="module" src="chrome://proxy/proxy_config.js"></script>
+ <link rel="stylesheet" href="chrome://resources/css/text_defaults.css">
+ <link rel="stylesheet" href="proxy_config.css">
+-<title>Proxy configuration</title>
++<title>Rete e privacy</title>
+ </head>
+ <body>
+   <div id="main-container">
++    <div id="fork-settings">
++      <h2>VPN personale</h2>
++      <p>Solo il browser esce dalla VPN del tuo server. Se il server non risponde le pagine danno
++        errore: non si esce mai direttamente senza che tu lo sappia. Restano fuori dalla VPN le reti
++        di casa e Tailscale, così il server stesso si raggiunge sempre.</p>
++      <p><label>Indirizzo del proxy
++        <input id="fork-vpn-address" size="30" placeholder="indirizzo:porta"></label>
++        <button class="fork-inline" id="fork-vpn-on">Attiva</button>
++        <button class="fork-inline" id="fork-vpn-off">Disattiva</button></p>
++      <p id="fork-vpn-status"></p>
++
++      <h2>Motore di ricerca personale</h2>
++      <p>Le ricerche dalla barra degli indirizzi vanno al tuo SearXNG.</p>
++      <p><label>Indirizzo di SearXNG
++        <input id="fork-search-url" size="30" placeholder="http://indirizzo:porta"></label>
++        <button class="fork-inline" id="fork-search-on">Usa</button>
++        <button class="fork-inline" id="fork-search-off">Togli</button></p>
++      <p id="fork-search-status"></p>
++
++      <h2>Cookie e dati dei siti</h2>
++      <p><label><input type="radio" name="fork-cookie-mode" value="0"> <b>Temporanei:</b> i dati
++        di un sito durano la visita e si cancellano appena lo lasci.</label></p>
++      <p><label><input type="radio" name="fork-cookie-mode" value="1"> <b>Normale:</b> come in
++        Chrome, con i cookie separati per sito.</label></p>
++      <p><label><input type="radio" name="fork-cookie-mode" value="2"> <b>Blocca tutti:</b> nessun
++        sito salva dati, i login non funzionano. Valgono solo i siti da ricordare.</label></p>
++      <h3>Siti da ricordare</h3>
++      <p>Uno per riga. Qui resti collegato: i loro dati non si cancellano mai.</p>
++      <textarea id="fork-remembered" rows="8" cols="40"></textarea>
++      <p><button class="fork-inline" id="fork-remembered-save">Salva l'elenco</button></p>
++      <p id="fork-remembered-status"></p>
++      <hr>
++    </div>
+     <!--
+       =========================================================================
+       View for "pending" state.
+diff --git a/chrome/browser/resources/proxy_config.js b/chrome/browser/resources/proxy_config.js
+index 280e2b9c41f2778c3c5f4d5108334f6e7fb29fa9..30906df80b690d091ba850c125798a4bc7c5919a 100644
+--- a/chrome/browser/resources/proxy_config.js
++++ b/chrome/browser/resources/proxy_config.js
+@@ -276,3 +276,105 @@ var ProxyConfigView = (function() {
+ 
+   return ProxyConfigView;
+ })();
++
++/**
++ * VPN personale, motore di ricerca personale e cookie: i controlli in cima alla pagina.
++ */
++window.ForkSettings = (function() {
++  'use strict';
++
++  // Le reti di casa e Tailscale non passano dal proxy: il server stesso resta raggiungibile.
++  const kBypass = '<local>;10.0.0.0/8;172.16.0.0/12;192.168.0.0/16;100.64.0.0/10;*.ts.net';
++
++  function setStatus(id, text) {
++    $(id).textContent = text;
++  }
++
++  function vpnFromConfig(config) {
++    const rules = config && config.rules;
++    if (!rules || rules.type !== 'list' || !rules.single_proxies) {
++      return '';
++    }
++    return rules.single_proxies.replace(/^(PROXY|HTTPS)\s+/i, '').split(';')[0].trim();
++  }
++
++  function refreshVpn() {
++    const address = vpnFromConfig(window.ProxyConfigView.getInstance().currentConfig);
++    if (address) {
++      $('fork-vpn-address').value = address;
++      setStatus('fork-vpn-status', 'Attiva: il browser esce da ' + address + '.');
++    } else {
++      setStatus('fork-vpn-status', 'Spenta: il browser esce dalla connessione normale.');
++    }
++  }
++
++  function bind() {
++    $('fork-vpn-on').onclick = function() {
++      const address = $('fork-vpn-address').value.trim();
++      if (!address) {
++        setStatus('fork-vpn-status', 'Scrivi prima l\'indirizzo del proxy.');
++        return;
++      }
++      chrome.send('apply', [{
++        'auto_detect': false,
++        'rules': {
++          'bypass_rules': kBypass,
++          'reverse_bypass': false,
++          'type': 'list',
++          'single_proxies': 'PROXY ' + address.replace(/^https?:\/\//, ''),
++        },
++      }]);
++    };
++    $('fork-vpn-off').onclick = function() {
++      chrome.send('clear', []);
++    };
++    $('fork-search-on').onclick = function() {
++      chrome.send('setPersonalSearch', [$('fork-search-url').value.trim()]);
++    };
++    $('fork-search-off').onclick = function() {
++      chrome.send('setPersonalSearch', ['']);
++    };
++    document.getElementsByName('fork-cookie-mode').forEach(function(radio) {
++      radio.onchange = function() {
++        chrome.send('setCookieMode', [Number(radio.value)]);
++      };
++    });
++    $('fork-remembered-save').onclick = function() {
++      const sites = $('fork-remembered').value.split('\n')
++          .map(function(line) { return line.trim(); })
++          .filter(function(line) { return line.length > 0; });
++      chrome.send('setRememberedSites', [sites]);
++      setStatus('fork-remembered-status', 'Elenco salvato: ' + sites.length + ' siti.');
++    };
++
++    const view = window.ProxyConfigView.getInstance();
++    const original = view.onProxyConfigChanged;
++    view.onProxyConfigChanged = function(state) {
++      original.call(view, state);
++      refreshVpn();
++    };
++  }
++
++  return {
++    init: function() {
++      bind();
++      chrome.send('getForkSettings');
++    },
++
++    loaded: function(settings) {
++      document.getElementsByName('fork-cookie-mode').forEach(function(radio) {
++        radio.checked = Number(radio.value) === settings.cookieMode;
++      });
++      $('fork-remembered').value = settings.rememberedSites.join('\n');
++      $('fork-search-url').value = settings.personalSearch;
++      setStatus('fork-search-status', settings.personalSearch ?
++          'Attivo: le ricerche vanno a ' + settings.personalSearch + '.' :
++          'Spento: le ricerche vanno al motore predefinito.');
++      refreshVpn();
++    },
++  };
++})();
++
++document.addEventListener('DOMContentLoaded', function() {
++  window.ForkSettings.init();
++});
+diff --git a/chrome/browser/ui/webui/proxy_config_ui.cc b/chrome/browser/ui/webui/proxy_config_ui.cc
+index e4d5c3aeb911eedbdf441ec24f639b2de74371a8..c0b0e4388e5fb6b913fb7db8fa7529dcd6b7ea4d 100644
+--- a/chrome/browser/ui/webui/proxy_config_ui.cc
++++ b/chrome/browser/ui/webui/proxy_config_ui.cc
+@@ -35,7 +35,12 @@
+ #include "chrome/browser/policy/profile_policy_connector.h"
+ #include "chrome/browser/platform_util.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/fork/temporary_site_data_service.h"
++#include "chrome/browser/search_engines/template_url_service_factory.h"
+ #include "chrome/common/url_constants.h"
++#include "components/search_engines/template_url.h"
++#include "components/search_engines/template_url_data.h"
++#include "components/search_engines/template_url_service.h"
+ #include "chrome/grit/browser_resources.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
+@@ -78,6 +83,10 @@ class ProxyConfigMessageHandler
+   void OnEnableNotifyUIWithState(const base::ListValue& args);
+   void OnApply(const base::ListValue& args);
+   void OnClear(const base::ListValue& args);
++  void OnGetForkSettings(const base::ListValue& args);
++  void OnSetCookieMode(const base::ListValue& args);
++  void OnSetRememberedSites(const base::ListValue& args);
++  void OnSetPersonalSearch(const base::ListValue& args);
+ 
+   // net::ProxyConfigService::Observer implementation:
+   // Calls ProxyConfigView.onProxyConfigChanged JavaScript function in the
+@@ -88,6 +97,9 @@ class ProxyConfigMessageHandler
+ 
+  private:
+   // Not owned.
++  void SendForkSettings();
++
++  raw_ptr<Profile> profile_;
+   raw_ptr<PrefService> pref_service_;
+   std::unique_ptr<net::ProxyConfigService> proxy_config_service_;
+   // Monitors global and Profile prefs related to proxy configuration.
+@@ -102,6 +114,7 @@ class ProxyConfigMessageHandler
+ };
+ 
+ ProxyConfigMessageHandler::ProxyConfigMessageHandler(Profile *profile) {
++  profile_ = profile;
+ 
+   // used to set new configuration preferences
+   pref_service_ = g_browser_process->local_state();
+@@ -230,6 +243,117 @@ void ProxyConfigMessageHandler::RegisterMessages() {
+       "clear",
+       base::BindRepeating(&ProxyConfigMessageHandler::OnClear,
+                           base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "getForkSettings",
++      base::BindRepeating(&ProxyConfigMessageHandler::OnGetForkSettings,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "setCookieMode",
++      base::BindRepeating(&ProxyConfigMessageHandler::OnSetCookieMode,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "setRememberedSites",
++      base::BindRepeating(&ProxyConfigMessageHandler::OnSetRememberedSites,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "setPersonalSearch",
++      base::BindRepeating(&ProxyConfigMessageHandler::OnSetPersonalSearch,
++                          base::Unretained(this)));
++}
++
++namespace {
++
++constexpr char16_t kPersonalSearchKeyword[] = u"searxng";
++constexpr char16_t kSearchFallbackKeyword[] = u"duckduckgo.com/lite";
++constexpr char kPersonalSearchPath[] = "/search?q={searchTerms}";
++
++}  // namespace
++
++void ProxyConfigMessageHandler::SendForkSettings() {
++  PrefService* prefs = profile_->GetPrefs();
++  base::DictValue settings;
++  settings.Set("cookieMode", prefs->GetInteger(browser_fork::kCookieModePref));
++  settings.Set("rememberedSites",
++               prefs->GetList(browser_fork::kRememberedSitesPref).Clone());
++  std::string search;
++  TemplateURLService* service =
++      TemplateURLServiceFactory::GetForProfile(profile_);
++  if (service && service->loaded()) {
++    if (const TemplateURL* url =
++            service->GetTemplateURLForKeyword(kPersonalSearchKeyword)) {
++      search = url->url();
++      base::ReplaceFirstSubstringAfterOffset(&search, 0, kPersonalSearchPath,
++                                             "");
++    }
++  }
++  settings.Set("personalSearch", search);
++  web_ui()->CallJavascriptFunctionUnsafe("ForkSettings.loaded",
++                                         std::move(settings));
++}
++
++void ProxyConfigMessageHandler::OnGetForkSettings(const base::ListValue& list) {
++  TemplateURLService* service =
++      TemplateURLServiceFactory::GetForProfile(profile_);
++  if (service && !service->loaded()) {
++    service->Load();
++  }
++  SendForkSettings();
++}
++
++void ProxyConfigMessageHandler::OnSetCookieMode(const base::ListValue& list) {
++  if (list.size() == 1 && list[0].is_int() && list[0].GetInt() >= 0 &&
++      list[0].GetInt() <= static_cast<int>(browser_fork::CookieMode::kBlockAll)) {
++    profile_->GetPrefs()->SetInteger(browser_fork::kCookieModePref, list[0].GetInt());
++  }
++  SendForkSettings();
++}
++
++void ProxyConfigMessageHandler::OnSetRememberedSites(
++    const base::ListValue& list) {
++  if (list.size() == 1 && list[0].is_list()) {
++    profile_->GetPrefs()->SetList(browser_fork::kRememberedSitesPref,
++                                  list[0].GetList().Clone());
++  }
++  SendForkSettings();
++}
++
++void ProxyConfigMessageHandler::OnSetPersonalSearch(
++    const base::ListValue& list) {
++  TemplateURLService* service =
++      TemplateURLServiceFactory::GetForProfile(profile_);
++  if (!service || !service->loaded() || list.size() != 1 ||
++      !list[0].is_string()) {
++    SendForkSettings();
++    return;
++  }
++  std::string base_url;
++  base::TrimString(list[0].GetString(), " \t/", &base_url);
++  const GURL url(base_url);
++
++  TemplateURL* fallback =
++      service->GetTemplateURLForKeyword(kSearchFallbackKeyword);
++  // The default engine can't be removed: step away from it first.
++  if (TemplateURL* old =
++          service->GetTemplateURLForKeyword(kPersonalSearchKeyword);
++      old && fallback) {
++    if (service->GetDefaultSearchProvider() == old) {
++      service->SetUserSelectedDefaultSearchProvider(fallback);
++    }
++    service->Remove(old);
++  }
++  if (url.is_valid() && url.SchemeIsHTTPOrHTTPS()) {
++    TemplateURLData data;
++    data.SetShortName(u"SearXNG personale");
++    data.SetKeyword(kPersonalSearchKeyword);
++    data.SetURL(base_url + kPersonalSearchPath);
++    data.suggestions_url = base_url + "/autocompleter?q={searchTerms}";
++    data.safe_for_autoreplace = false;
++    if (TemplateURL* added =
++            service->Add(std::make_unique<TemplateURL>(data))) {
++      service->SetUserSelectedDefaultSearchProvider(added);
++    }
++  }
++  SendForkSettings();
+ }
+ 
+ // The proxy configuration UI is not notified of state changes until this function runs.

@@ -8,3 +8,5 @@ macos/0004-niente-pagina-unexportable-keys-internals-senza-bound-sessio.patch
 macos/0005-lingua-dei-renderer-risolta-a-una-che-ha-locale-pak.patch
 macos/0006-cartella-del-profilo-e-voce-del-portachiavi-nostre.patch
 macos/0007-stringhe-di-cancella-i-dati-alla-chiusura-anche-sul-mac.patch
+common/0002-cookie-temporanei-i-dati-di-un-sito-si-cancellano-appena-lo.patch
+common/0003-pagina-rete-e-privacy-vpn-personale-motore-personale-e-cooki.patch

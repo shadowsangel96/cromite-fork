@@ -1,4 +1,5 @@
-# Prova di avvio del pacchetto Windows (tools/build/smoke_windows.py) su un runner pulito.
+# Prova del pacchetto Windows su un runner pulito: si avvia (tools/build/smoke_windows.py) e le
+# nostre funzioni fanno quello che promettono (tools/build/prova_funzioni.py).
 # La usa build-windows.yml dopo l'ultima tappa; a mano prova il pacchetto di un'altra run.
 name: Prova di avvio Windows
 
@@ -21,7 +22,7 @@ permissions:
 jobs:
   smoke:
     runs-on: windows-2025
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       PYTHONUTF8: "1"
     steps:
@@ -48,6 +49,13 @@ jobs:
       - name: Avvia il browser
         shell: pwsh
         run: python tools\build\smoke_windows.py pkg smoke
+
+      # dopo la prova di avvio: lì si danno alla cartella i permessi che servono al servizio di rete
+      - name: Prova le funzioni
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem pkg -Recurse -Filter chrome.exe | Select-Object -First 1).FullName
+          python tools\build\prova_funzioni.py $exe smoke
 
       - name: Carica screenshot e log
         if: always()

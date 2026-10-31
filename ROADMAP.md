@@ -10,6 +10,11 @@ aggiornamenti di Cromite come tutto il resto.
   controllo giornaliero).
 - Repo pubblico solo per le build, con controllo dei dati personali in CI.
 - Build Windows a tappe sui runner gratuiti di GitHub, con prova di avvio dopo ogni build.
+- Pagina "Rete e privacy" (`chrome://proxy`): VPN personale, motore personale, cookie temporanei
+  con i giri di login e i siti da ricordare. WebGL resta spento come in Cromite. Provato da
+  `tools/build/prova_funzioni.py`, che su Windows gira dopo ogni build. Restano da fare, nelle
+  voci qui sotto: indicatore e riserva della VPN, ripiego su DuckDuckGo Light, "Ricorda questo
+  sito" nel pannello del sito, assistente all'accesso.
 
 ## 1. Prima build Windows installabile, poi build veloci
 

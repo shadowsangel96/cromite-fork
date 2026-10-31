@@ -124,7 +124,7 @@ Il repo è pubblico: dentro ci sono solo le patch e gli strumenti, mai dati pers
 | `upstream.yml` | ogni giorno + a mano | nuovo Cromite → `update` → commit su `main` + build; se serve una decisione, fallisce con il report nel riepilogo |
 | `verify.yml` | ogni push | controllo privacy, test di forkctl, `verify` sulla versione bloccata |
 | `build.yml` | dopo ogni aggiornamento + a mano | build e release con `update.json`: Windows sui server GitHub (`build-windows.yml`, a tappe), macOS/iOS su un Mac self-hosted |
-| `smoke-windows.yml` | dopo ogni build Windows + a mano (id di una run) | avvia il pacchetto su un Windows pulito: JavaScript, pagina disegnata, screenshot; se non parte la build fallisce e la release non esce |
+| `smoke-windows.yml` | dopo ogni build Windows + a mano (id di una run) | avvia il pacchetto su un Windows pulito (JavaScript, pagina disegnata, screenshot) e prova le nostre funzioni (`prova_funzioni.py`); se qualcosa non va la build fallisce e la release non esce |
 
 Da configurare nel repo GitHub:
 
