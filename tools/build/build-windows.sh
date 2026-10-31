@@ -70,5 +70,6 @@ cp ./*.manifest chrome.dll chrome.exe chrome_100_percent.pak chrome_200_percent.
    snapshot_blob.bin VkICD_mock_icd.dll VkLayer_khronos_validation.dll vk_swiftshader.dll vulkan-1.dll "$PKG/"
 cp "$TOOLCHAIN/Windows Kits/10/Redist/D3D/x64/d3dcompiler_47.dll" "$PKG/"
 cp -r locales "$PKG/"
+mkdir -p "$PKG/resources" && cp -r resources/ublock "$PKG/resources/"
 (cd "$DIST" && zip -qr "$FORK_NAME-windows-x64.zip" "$FORK_NAME-windows-x64")
 say "pronto: $PKG.zip"

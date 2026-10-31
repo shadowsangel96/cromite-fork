@@ -297,6 +297,7 @@ def package():
         else:
             print(f"(non prodotto: {f})")
     shutil.copytree(out / "locales", pkg / "locales")
+    shutil.copytree(out / "resources" / "ublock", pkg / "resources" / "ublock")
     (pkg / PERMISSIONS_SCRIPT).write_bytes(PERMISSIONS_CMD.replace("\n", "\r\n").encode("ascii"))
     archive = shutil.make_archive(str(pkg), "zip", DIST, pkg.name)
     print(f"pronto: {archive}")

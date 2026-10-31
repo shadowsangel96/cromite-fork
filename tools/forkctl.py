@@ -36,6 +36,7 @@ import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -44,6 +45,7 @@ PATCHES = ROOT / "patches"
 SERIES = PATCHES / "series"
 RETIRED = PATCHES / "retired"
 OVERLAY = ROOT / "overlay"
+UBLOCK_DIR = "chrome/browser/resources/ublock"
 GN_ARGS = ROOT / "gn_args"
 LOCK = ROOT / "upstream.lock"
 RR_CACHE = ROOT / "state" / "rr-cache"
@@ -1004,6 +1006,59 @@ def cmd_apply_cromite(args):
     return EXIT_OK
 
 
+def install_ublock(src):
+    """uBlock Origin integrato: la release ufficiale indicata in fork-ublock.json, verificata con lo
+    sha256 e aperta accanto ai nostri file di overlay. Non sta nel repo e non entra in git."""
+    ours = OVERLAY / UBLOCK_DIR
+    pin = json.loads((ours / "fork-ublock.json").read_text())
+    dest = src / UBLOCK_DIR
+    marker = dest / ".versione"
+    if marker.is_file() and marker.read_text() == pin["sha256"]:
+        return
+    archive = ROOT / ".cache" / "ublock" / f"uBlock0_{pin['version']}.chromium.zip"
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    if not archive.is_file() or hashlib.sha256(archive.read_bytes()).hexdigest() != pin["sha256"]:
+        log(f"Scarico uBlock Origin {pin['version']}")
+        archive.write_bytes(http_get(pin["url"]))
+        if hashlib.sha256(archive.read_bytes()).hexdigest() != pin["sha256"]:
+            archive.unlink()
+            raise ForkError("uBlock Origin scaricato: lo sha256 non corrisponde")
+    keep = {f.name for f in ours.iterdir()}
+    for entry in dest.iterdir():
+        if entry.name not in keep:
+            shutil.rmtree(entry) if entry.is_dir() else entry.unlink()
+    with tempfile.TemporaryDirectory() as tmp, zipfile.ZipFile(archive) as z:
+        z.extractall(tmp)
+        shutil.copytree(Path(tmp) / "uBlock0.chromium", dest, dirs_exist_ok=True)
+    manifest = json.loads((dest / "manifest.json").read_text())
+    manifest["key"] = pin["key"]
+    manifest.pop("commands", None)
+    manifest["browser_action"]["default_popup"] = "blocco.html"
+    (dest / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    marker.write_text(pin["sha256"])
+    log(f"uBlock Origin {pin['version']} pronto in {UBLOCK_DIR}.")
+
+
+def cmd_ublock_update(args):
+    """Controllo giornaliero: se uBlock Origin ha una release nuova aggiorna fork-ublock.json."""
+    path = OVERLAY / UBLOCK_DIR / "fork-ublock.json"
+    pin = json.loads(path.read_text())
+    headers = {"Accept": "application/vnd.github+json"}
+    if os.environ.get("GITHUB_TOKEN"):
+        headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
+    release = json.loads(http_get("https://api.github.com/repos/gorhill/uBlock/releases/latest", headers=headers))
+    version = release["tag_name"]
+    if version == pin["version"]:
+        log(f"uBlock Origin {version}: aggiornato")
+        return EXIT_OK
+    url = next(a["browser_download_url"] for a in release["assets"]
+               if a["name"] == f"uBlock0_{version}.chromium.zip")
+    pin.update(version=version, url=url, sha256=hashlib.sha256(http_get(url)).hexdigest())
+    path.write_text(json.dumps(pin, indent=2) + "\n")
+    log(f"uBlock Origin {version}: fork-ublock.json aggiornato")
+    return EXIT_OK
+
+
 def cmd_apply(args):
     lock = read_lock()
     series = read_series()
@@ -1025,6 +1080,7 @@ def cmd_apply(args):
             copied += 1
     if copied:
         git(*identity_args(src), "commit", "-q", "--no-verify", "-m", "fork: overlay", cwd=src)
+    install_ublock(src)
     log(f"Applicate {len(series)} patch e {copied} file overlay su {src}.")
     return EXIT_OK
 
@@ -1093,6 +1149,7 @@ def cmd_refresh(args):
             log(f"  scritto {rel}")
             changed += 1
     shutil.rmtree(WORK, ignore_errors=True)
+    install_ublock(src)
     log(f"Patch aggiornate su {src}: {changed} file cambiati su {len(wanted)} controllati.")
     return EXIT_OK
 
@@ -1248,6 +1305,7 @@ def main():
     p.add_argument("--to")
     p.add_argument("--github-output", action="store_true")
     p.set_defaults(fn=cmd_check)
+    sub.add_parser("ublock-update", help="c'è un uBlock Origin più nuovo? Aggiorna fork-ublock.json").set_defaults(fn=cmd_ublock_update)
     sub.add_parser("verify", help="le patch si applicano sulla versione bloccata?").set_defaults(fn=cmd_verify)
     sub.add_parser("privacy-check", help="cerca dati personali in file e commit").set_defaults(fn=cmd_privacy_check)
     p = sub.add_parser("update", help="riapplica le patch su un Cromite nuovo (rebase a 3 vie)")

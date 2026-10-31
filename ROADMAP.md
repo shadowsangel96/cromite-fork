@@ -16,8 +16,14 @@ aggiornamenti di Cromite come tutto il resto.
   voci qui sotto: assistente all'accesso.
 - Mac, primo giro sulla tavola degli schizzi: vetro vero (il `GlassFrame` di Chromium, NSGlassEffectView)
   su schede e barra come un foglio solo, schede a capsula, pulsanti raggruppati in capsule, condividi e
-  menu insieme, profilo solo icona, niente barra dei segnalibri e niente stella. Mancano uBlock,
-  Claude, i loro pannelli e le schede "nella barra". Windows resta standard.
+  menu insieme, profilo solo icona, niente barra dei segnalibri e niente stella. Mancano Claude, il
+  suo pannello e le schede "nella barra". Windows resta standard.
+- uBlock Origin integrato: la release ufficiale, verificata con lo sha256 e indicata in
+  `overlay/chrome/browser/resources/ublock/fork-ublock.json`, gira come componente interno. Non sta tra
+  le estensioni. Pulsante con il contatore nella barra e pannello "Blocco contenuti" come nella tavola,
+  con i numeri veri di uBlock. L'adblock di Cromite si spegne una volta sola e resta disponibile. Il
+  controllo giornaliero segue anche le sue release. Mancano le impostazioni dentro la pagina delle
+  impostazioni: per ora "Impostazioni" apre quella di uBlock Origin.
 - Pannello del sito: scudo nella barra e pannello come nella tavola, in tema chiaro e scuro, con la
   strada dei dati, WebGL per sito e "Ricorda questo sito". Scrive solo protezioni misurate sul browser
   vero. Manca il contatore dei tentativi (numeri per riga, totale, "Mostra tutte e 15 le categorie",

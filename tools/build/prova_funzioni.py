@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Prova delle nostre funzioni sul browser compilato: impostazioni, cookie temporanei, giri di
-login, siti da ricordare, VPN, motore personale, WebGL spento. Dura una decina di minuti, perché
+login, siti da ricordare, VPN, motore personale, WebGL spento, uBlock Origin. Dura una decina di minuti, perché
 aspetta anche i 5 minuti dei giri di login.
 
 Profilo temporaneo e finestra invisibile: non tocca i dati di chi la lancia. I siti sono finti, un
@@ -245,6 +245,25 @@ if OUT and "result" in shot:
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, "rete_e_privacy.png"), "wb") as f:
         f.write(base64.b64decode(shot["result"]["data"]))
+b.close_tab(t)
+
+print("--- uBlock Origin integrato", flush=True)
+UBLOCK_ID = "kkmdaeadfdjhhlfdpadhpjjommebkohi"
+check("uBlock Origin gira come componente", any(f"{UBLOCK_ID}/background" in x.get("url", "") for x in b.get("json/list")))
+t = b.open("about:blank")
+nav(t, url("pagina-ublock.test"))
+t.send("Network.enable")
+blocked = False
+end = time.time() + 120
+while time.time() < end and not blocked:
+    t.events.clear()
+    # non uno di quelli che uBlock sostituisce con uno script vuoto (gtm.js, analytics.js): darebbero 200
+    t.eval("(() => { const s = document.createElement('script'); s.src = 'https://connect.facebook.net/en_US/fbevents.js?x=' + Date.now(); document.head.append(s); return 1; })()")
+    time.sleep(2)
+    t.eval("1")
+    blocked = any(e.get("method") == "Network.loadingFailed" and "ERR_BLOCKED_BY_CLIENT" in e["params"].get("errorText", "") for e in t.events)
+check("uBlock Origin blocca i tracker", blocked)
+t.send("Network.disable")
 b.close_tab(t)
 
 print("--- cookie temporanei", flush=True)
@@ -551,7 +570,11 @@ check("tornati alla VPN, le pagine ripassano dal proxy", any("dopo-ritorno" in l
 b.close_tab(t)
 check("il browser è ancora vivo alla fine", b.alive())
 
+time.sleep(12)  # le preferenze finiscono su disco ogni 10 s
 b.close()
+with open(os.path.join(PROFILE, "Default", "Preferences"), errors="replace") as f:
+    prefs = json.load(f)
+check("l'adblock di Cromite è spento", prefs.get("adblock", {}).get("handed_to_ublock") is True, prefs.get("adblock"))
 with open(PROFILE + ".log", errors="replace") as f:
     log = f.read()
 for needle in ("FATAL", "Check failed"):

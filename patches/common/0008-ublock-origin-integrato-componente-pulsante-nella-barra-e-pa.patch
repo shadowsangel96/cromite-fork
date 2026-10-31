@@ -1,0 +1,779 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 22:49:43 +0100
+Subject: [PATCH] uBlock Origin integrato: componente, pulsante nella barra e
+ pannello
+
+Gira come componente interno, dalla release ufficiale indicata in
+overlay/chrome/browser/resources/ublock/fork-ublock.json. Il pulsante legge
+contatore e icona dall'azione dell'estensione; il pannello "Blocco contenuti"
+parla con uBlock come il suo popup. L'adblock di Cromite si spegne una volta
+sola e resta disponibile.
+
+Fork-Patch: common/0008-ublock-origin-integrato-componente-pulsante-nella-barra-e-pa.patch
+
+diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
+index 5886f2ff4fb391caee64a566769149e394ef2068..ab067d42f3ac6605c39ebdb182af10e44b023609 100644
+--- a/chrome/BUILD.gn
++++ b/chrome/BUILD.gn
+@@ -121,7 +121,10 @@ group("assert_no_deps") {
+   }
+ 
+   if (is_win) {
+-    deps += [ ":chrome_dll" ]
++    deps += [
++      ":chrome_dll",
++      ":fork_ublock_resources",
++    ]
+   }
+ 
+   # This should not pull in installer strings. This is will bloat the binary
+@@ -130,6 +133,13 @@ group("assert_no_deps") {
+   assert_no_deps = [ "//chrome/installer/util:strings" ]
+ }
+ 
++if (is_win) {
++  copy("fork_ublock_resources") {
++    sources = [ "//chrome/browser/resources/ublock" ]
++    outputs = [ "$root_out_dir/resources/ublock" ]
++  }
++}
++
+ if (!is_android && !is_mac) {
+   group("chrome") {
+     public_deps = [ ":chrome_initial" ]
+@@ -1088,6 +1098,7 @@ if (is_win) {
+ 
+   bundle_data("chrome_framework_resources") {
+     sources = [
++      "//chrome/browser/resources/ublock",
+       "//ui/gl/resources/angle-metal/gpu_shader_cache.bin",
+ 
+       # This image is used to badge the lock icon in the
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index e4a56ecb7c50a56a4cbf5eb090b1f00da54f6bb7..f3c09bb22f4c13010ec0bce4a1fde682bd18286c 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -849,6 +849,7 @@ source_set("core") {
+     "fork/temporary_site_data_tab_helper.cc",
+     "fork/temporary_site_data_tab_helper.h",
+     "fork/vpn_status.cc",
++    "fork/ublock_extension.h",
+     "fork/vpn_status.h",
+     "fork/vpn_tab_helper.cc",
+     "fork/vpn_tab_helper.h",
+diff --git a/chrome/browser/extensions/component_loader.cc b/chrome/browser/extensions/component_loader.cc
+index e926dac16915aa29bccd3f63d60c25edc8f0b540..874a308fc5636327eb44fd2e64e9f8b502bc15ac 100644
+--- a/chrome/browser/extensions/component_loader.cc
++++ b/chrome/browser/extensions/component_loader.cc
+@@ -599,6 +599,14 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
+   }
+ #endif  // BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
+ 
++  // uBlock Origin is part of the browser: its files sit next to the resources.
++  if (!skip_session_components && !should_disable_background_extensions) {
++    base::FilePath resources;
++    if (base::PathService::Get(chrome::DIR_RESOURCES, &resources)) {
++      AddOrReplace(resources.AppendASCII("ublock"));
++    }
++  }
++
+   if (should_disable_background_extensions) {
+     return;
+   }
+diff --git a/chrome/browser/fork/ublock_extension.h b/chrome/browser/fork/ublock_extension.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..7bc30a36a40bed47a10374720847299be4ed9c02
+--- /dev/null
++++ b/chrome/browser/fork/ublock_extension.h
+@@ -0,0 +1,12 @@
++#ifndef CHROME_BROWSER_FORK_UBLOCK_EXTENSION_H_
++#define CHROME_BROWSER_FORK_UBLOCK_EXTENSION_H_
++
++namespace browser_fork {
++
++// uBlock Origin, built into the browser as a component extension. The id comes
++// from the public key in overlay/chrome/browser/resources/ublock/fork-ublock.json.
++inline constexpr char kUBlockExtensionId[] = "kkmdaeadfdjhhlfdpadhpjjommebkohi";
++
++}  // namespace browser_fork
++
++#endif  // CHROME_BROWSER_FORK_UBLOCK_EXTENSION_H_
+diff --git a/chrome/browser/resources/site_panel.html b/chrome/browser/resources/site_panel.html
+index 83f0409e5ad919bd1e9b79c55be1c9479444f445..517f56222a4e0149cb9a649e9f091331377841d4 100644
+--- a/chrome/browser/resources/site_panel.html
++++ b/chrome/browser/resources/site_panel.html
+@@ -104,6 +104,7 @@ figcaption { margin-top: 4px; font-size: 11px; color: var(--sub); }
+   <div class="group">
+     <button class="row" id="remember"><span>Ricorda questo sito</span><span class="value" id="remember-value"></span></button>
+     <button class="row" id="cookies"><span>Cookie e dati dei siti</span><span class="value" id="cookies-value"></span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"></path></svg></button>
++    <button class="row" id="blocking"><span>Tracker e pubblicità bloccati</span><span class="value" id="blocking-value"></span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"></path></svg></button>
+     <button class="row" id="permissions"><span>Autorizzazioni</span><span class="value" id="permissions-value"></span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"></path></svg></button>
+   </div>
+ </section>
+diff --git a/chrome/browser/resources/site_panel.js b/chrome/browser/resources/site_panel.js
+index f88bd12ea050f7ffa92f22e4a876989154161aa7..ad8bf481b51992064a93f00c8c615c935b5bd5ef 100644
+--- a/chrome/browser/resources/site_panel.js
++++ b/chrome/browser/resources/site_panel.js
+@@ -36,6 +36,7 @@ window.SitePanel = (function() {
+                                        'Consenti WebGL su questo sito';
+     $('remember-value').textContent = s.remembered ? 'Sì' : 'No';
+     $('cookies-value').textContent = s.cookies ? s.cookies + ' in uso' : 'Nessuno';
++    $('blocking-value').textContent = s.blocked || '0';
+     $('permissions-value').textContent =
+         s.permissions ? String(s.permissions) : 'Nessuna';
+   }
+@@ -46,6 +47,7 @@ window.SitePanel = (function() {
+     $('webgl').onclick = () => chrome.send('setWebgl', [!state.webgl]);
+     $('remember').onclick = () => chrome.send('setRemembered', [!state.remembered]);
+     $('cookies').onclick = () => chrome.send('openPageInfo');
++    $('blocking').onclick = () => chrome.send('openBlocking');
+     $('permissions').onclick = () => chrome.send('openPageInfo');
+     chrome.send('ready');
+   });
+diff --git a/chrome/browser/ui/toolbar/toolbar_actions_model.cc b/chrome/browser/ui/toolbar/toolbar_actions_model.cc
+index 3a45f6445857a467611e44834daa0245e1e489e6..1304ebd165cd19ee9461baa114da3009577f2785 100644
+--- a/chrome/browser/ui/toolbar/toolbar_actions_model.cc
++++ b/chrome/browser/ui/toolbar/toolbar_actions_model.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/fork/ublock_extension.h"
+ #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
+ 
+ #include <algorithm>
+@@ -342,6 +343,11 @@ void ToolbarActionsModel::OnReady() {
+ 
+ bool ToolbarActionsModel::ShouldAddExtension(
+     const extensions::Extension* extension) {
++  // uBlock Origin has its own button in the location bar.
++  if (extension->id() == browser_fork::kUBlockExtensionId) {
++    return false;
++  }
++
+   // In incognito mode, don't add any extensions that aren't incognito-enabled.
+   if (profile_->IsOffTheRecord() &&
+       !extensions::util::IsIncognitoEnabled(extension->id(), profile_)) {
+diff --git a/chrome/browser/ui/views/extensions/extension_popup.cc b/chrome/browser/ui/views/extensions/extension_popup.cc
+index d03dcf1f0f18ed60da2e735fa690591dbc1052b4..dff32d8be01a6b21d19054b5fcbbf453bd1d3d0d 100644
+--- a/chrome/browser/ui/views/extensions/extension_popup.cc
++++ b/chrome/browser/ui/views/extensions/extension_popup.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/fork/ublock_extension.h"
+ #include "chrome/browser/ui/views/extensions/extension_popup.h"
+ 
+ #include "base/check.h"
+@@ -79,7 +80,7 @@ ExtensionPopup* ExtensionPopup::last_popup_for_testing() {
+ }
+ 
+ // static
+-void ExtensionPopup::ShowPopup(
++views::Widget* ExtensionPopup::ShowPopup(
+     BrowserWindowInterface* browser,
+     std::unique_ptr<extensions::ExtensionViewHost> host,
+     views::BubbleAnchor anchor,
+@@ -101,6 +102,7 @@ void ExtensionPopup::ShowPopup(
+       native_view, wm::WINDOW_VISIBILITY_ANIMATION_TYPE_VERTICAL);
+   wm::SetWindowVisibilityAnimationVerticalPosition(native_view, -3.0f);
+ #endif
++  return popup->GetWidget();
+ }
+ 
+ ExtensionPopup::~ExtensionPopup() {
+@@ -283,6 +285,11 @@ ExtensionPopup::ExtensionPopup(
+   g_last_popup_for_testing = this;
+   SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
+   set_use_round_corners(false);
++  // The panel of the built-in uBlock Origin follows the boards.
++  if (host_->extension()->id() == browser_fork::kUBlockExtensionId) {
++    set_use_round_corners(true);
++    set_corner_radius(18);
++  }
+ 
+   set_margins(gfx::Insets());
+   SetLayoutManager(std::make_unique<views::FillLayout>());
+diff --git a/chrome/browser/ui/views/extensions/extension_popup.h b/chrome/browser/ui/views/extensions/extension_popup.h
+index bca97f93ce39a5784229eefb2bcd0c46b97c5cc3..b3868fa8b52ff5460014fafee16cd9c897f62dcf 100644
+--- a/chrome/browser/ui/views/extensions/extension_popup.h
++++ b/chrome/browser/ui/views/extensions/extension_popup.h
+@@ -60,7 +60,7 @@ class ExtensionPopup : public views::BubbleDialogDelegateView,
+   // BOTTOM_*, then the popup 'pops up', otherwise the popup 'drops down'.
+   // The actual display of the popup is delayed until the page contents
+   // finish loading in order to minimize UI flashing and resizing.
+-  static void ShowPopup(BrowserWindowInterface* browser,
++  static views::Widget* ShowPopup(BrowserWindowInterface* browser,
+                         std::unique_ptr<extensions::ExtensionViewHost> host,
+                         views::BubbleAnchor anchor,
+                         views::BubbleBorder::Arrow arrow,
+diff --git a/chrome/browser/ui/views/location_bar/BUILD.gn b/chrome/browser/ui/views/location_bar/BUILD.gn
+index d15829cb543ac0aa69a50c8d3a3312459b244458..533f8aae399cdc8dd3b20459b61fc6d0be7b7e48 100644
+--- a/chrome/browser/ui/views/location_bar/BUILD.gn
++++ b/chrome/browser/ui/views/location_bar/BUILD.gn
+@@ -21,6 +21,7 @@ source_set("location_bar") {
+       "location_bar_view.h",
+       "location_icon_state_helper.h",
+       "location_icon_view.h",
++      "ublock_button.h",
+       "omnibox_chip_button.h",
+       "omnibox_chip_theme.h",
+       "omnibox_popup_file_selector.h",
+@@ -92,6 +93,7 @@ source_set("impl") {
+       "location_bar_view.cc",
+       "location_icon_state_helper.cc",
+       "location_icon_view.cc",
++      "ublock_button.cc",
+       "omnibox_chip_button.cc",
+       "omnibox_popup_file_selector.cc",
+       "record_replay_page_action_controller.cc",
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+index 1378dd01ed47b7d75fe3302fb13c49ebce99fd6d..5ed38209b4107927b60834157eba1de80359b235 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/views/bubble/webui_bubble_manager.h"
++#include "chrome/browser/ui/views/location_bar/ublock_button.h"
+ #include "chrome/browser/ui/webui/site_panel_ui.h"
+ #include "chrome/common/webui_url_constants.h"
+ #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+@@ -432,6 +433,11 @@ void LocationBarView::Init() {
+   selected_keyword_view_ = AddChildView(std::make_unique<SelectedKeywordView>(
+       this, profile_, omnibox_controller_.get(), font_list));
+ 
++  if (browser_) {
++    ublock_button_ = AddChildView(
++        std::make_unique<UBlockButton>(this, browser_.get(), profile_));
++  }
++
+   SkColor icon_color = color_provider->GetColor(kColorOmniboxResultsIcon);
+ 
+   std::vector<std::unique_ptr<ContentSettingImageModel>> models =
+@@ -850,6 +856,14 @@ void LocationBarView::Layout(PassKey) {
+     }
+   };
+ 
++  // uBlock Origin comes last in the bar, as tall as the bar to fit its badge.
++  if (ublock_button_ && ublock_button_->GetVisible()) {
++    trailing_decorations.AddDecoration(0, height(), /*auto_collapse=*/false,
++                                       /*max_fraction=*/0,
++                                       /*intra_item_padding=*/0,
++                                       /*edge_padding=*/2, ublock_button_);
++  }
++
+   // When the AIM page action is shown as the right-most page action in the
+   // location bar, it should be positioned flush against the right edge of the
+   // location bar.
+@@ -1880,6 +1894,7 @@ void LocationBarView::OnChanged() {
+ 
+   location_icon_view_->Update(
+       /*suppress_animations=*/false, GetOmniboxController()->IsPopupOpen());
++  UpdateUBlockButton();
+   clear_all_button_->SetVisible(
+       omnibox_view_ &&
+       GetOmniboxController()->edit_model()->user_input_in_progress() &&
+@@ -2147,6 +2162,18 @@ void LocationBarView::ShowSitePanel() {
+   site_panel_->ShowBubble(anchor, views::BubbleBorder::TOP_LEFT);
+ }
+ 
++void LocationBarView::UpdateUBlockButton() {
++  if (ublock_button_) {
++    ublock_button_->Update(GetWebContents(), ShouldUseSitePanel());
++  }
++}
++
++void LocationBarView::ShowUBlockPanel() {
++  if (ublock_button_) {
++    ublock_button_->ShowPanel();
++  }
++}
++
+ bool LocationBarView::IsSitePanelShowing() const {
+   return site_panel_ && site_panel_->GetBubbleWidget();
+ }
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.h b/chrome/browser/ui/views/location_bar/location_bar_view.h
+index 7e3c7298e7148612d92aae97bb0d9fd8a1b98a6e..def0bbe4eb6d0df90c8a0b52ff4d37432df09aa7 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.h
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.h
+@@ -68,6 +68,7 @@ class OmniboxViewViews;
+ class PermissionChipView;
+ class PermissionDashboardView;
+ class Profile;
++class UBlockButton;
+ class SelectedKeywordView;
+ class PrefChangeRegistrar;
+ 
+@@ -181,6 +182,10 @@ class LocationBarView
+ 
+   LocationIconView* location_icon_view() { return location_icon_view_; }
+ 
++  // uBlock Origin's button: refreshes it, opens its panel.
++  void UpdateUBlockButton();
++  void ShowUBlockPanel();
++
+   SelectedKeywordView* selected_keyword_view() {
+     return selected_keyword_view_;
+   }
+@@ -561,6 +566,8 @@ class LocationBarView
+   // search icon, EV HTTPS bubble, etc.
+   raw_ptr<LocationIconView> location_icon_view_ = nullptr;
+ 
++  raw_ptr<UBlockButton> ublock_button_ = nullptr;
++
+   // Views to show inline autocompletion when an IME is active.  In this case,
+   // we shouldn't change the text or selection inside the OmniboxView itself,
+   // since this will conflict with the IME's control over the text.  So instead
+diff --git a/chrome/browser/ui/views/location_bar/ublock_button.cc b/chrome/browser/ui/views/location_bar/ublock_button.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..72853989b46bf18ded91f041805ecb543b898ad6
+--- /dev/null
++++ b/chrome/browser/ui/views/location_bar/ublock_button.cc
+@@ -0,0 +1,202 @@
++#include "chrome/browser/ui/views/location_bar/ublock_button.h"
++
++#include <algorithm>
++#include <memory>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/strings/string_util.h"
++#include "base/strings/utf_string_conversions.h"
++#include "cc/paint/paint_flags.h"
++#include "chrome/browser/extensions/extension_tab_util.h"
++#include "chrome/browser/extensions/extension_view_host.h"
++#include "chrome/browser/extensions/extension_view_host_factory.h"
++#include "chrome/browser/fork/ublock_extension.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/extensions/extension_popup_types.h"
++#include "chrome/browser/ui/views/extensions/extension_popup.h"
++#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
++#include "content/public/browser/web_contents.h"
++#include "extensions/browser/extension_action.h"
++#include "extensions/browser/extension_action_manager.h"
++#include "extensions/browser/extension_registry.h"
++#include "ui/accessibility/ax_enums.mojom.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/color/color_provider.h"
++#include "ui/gfx/canvas.h"
++#include "ui/gfx/color_utils.h"
++#include "ui/gfx/font_list.h"
++#include "ui/gfx/image/image_skia.h"
++#include "ui/gfx/text_utils.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/bubble/bubble_anchor.h"
++#include "ui/views/bubble/bubble_border.h"
++
++namespace {
++
++// Sizes from the boards: a 30x26 capsule with a 14 dp badge that sticks out
++// 3 dp at the top right. The view is as tall as the bar so the badge fits.
++constexpr int kCapsuleWidth = 30;
++constexpr int kCapsuleHeight = 26;
++constexpr int kBadgeHeight = 14;
++constexpr int kBadgeOverhang = 3;
++constexpr int kIconSize = 16;
++
++}  // namespace
++
++UBlockButton::UBlockButton(LocationBarView* location_bar,
++                           BrowserWindowInterface* browser,
++                           Profile* profile)
++    : views::Button(base::BindRepeating(&UBlockButton::OnPressed,
++                                        base::Unretained(this))),
++      location_bar_(location_bar),
++      browser_(browser),
++      profile_(profile) {
++  SetVisible(false);
++  GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
++  GetViewAccessibility().SetName(u"Blocco contenuti");
++  action_observation_.Observe(
++      extensions::ExtensionActionDispatcher::Get(profile_));
++}
++
++UBlockButton::~UBlockButton() = default;
++
++const extensions::Extension* UBlockButton::GetExtension() const {
++  return extensions::ExtensionRegistry::Get(profile_)
++      ->enabled_extensions()
++      .GetByID(browser_fork::kUBlockExtensionId);
++}
++
++void UBlockButton::Update(content::WebContents* contents, bool show) {
++  const extensions::Extension* extension = GetExtension();
++  extensions::ExtensionAction* action =
++      extension ? extensions::ExtensionActionManager::Get(profile_)
++                      ->GetExtensionAction(*extension)
++                : nullptr;
++  SetVisible(show && action && contents);
++  if (!GetVisible()) {
++    return;
++  }
++  const int tab_id = extensions::ExtensionTabUtil::GetTabId(contents);
++  badge_ = base::UTF8ToUTF16(action->GetDisplayBadgeText(tab_id));
++  // uBlock Origin writes "(off)" in the title when it is off on the site.
++  on_ = !base::EndsWith(action->GetTitle(tab_id), "(off)");
++  icon_ = action->GetExplicitlySetIcon(tab_id);
++  if (icon_.IsEmpty()) {
++    icon_ = action->GetDefaultIconImage();
++  }
++  // The badge can also be "!": the page started before uBlock Origin was ready.
++  const bool counted = !badge_.empty() && base::IsAsciiDigit(badge_[0]);
++  const std::u16string name =
++      on_ ? (counted ? u"Blocco contenuti: " + badge_ + u" elementi bloccati"
++                     : u"Blocco contenuti")
++          : u"Blocco contenuti spento su questo sito";
++  GetViewAccessibility().SetName(name);
++  SetTooltipText(name);
++  SchedulePaint();
++}
++
++void UBlockButton::OnPressed() {
++  // The click that lands here has already closed the open panel.
++  if (base::TimeTicks::Now() - panel_closed_at_ < base::Milliseconds(400)) {
++    return;
++  }
++  ShowPanel();
++}
++
++void UBlockButton::ShowPanel() {
++  const extensions::Extension* extension = GetExtension();
++  if (!extension || panel_observation_.IsObserving()) {
++    return;
++  }
++  std::unique_ptr<extensions::ExtensionViewHost> host =
++      extensions::ExtensionViewHostFactory::CreatePopupHost(
++          *extension, extension->GetResourceURL("blocco.html"), browser_);
++  panel_observation_.Observe(ExtensionPopup::ShowPopup(
++      browser_, std::move(host), views::BubbleAnchor(this),
++      views::BubbleBorder::TOP_RIGHT, PopupShowAction::kShow,
++      base::DoNothing()));
++}
++
++void UBlockButton::OnWidgetDestroying(views::Widget* widget) {
++  panel_observation_.Reset();
++  panel_closed_at_ = base::TimeTicks::Now();
++}
++
++gfx::Size UBlockButton::CalculatePreferredSize(
++    const views::SizeBounds& available_size) const {
++  return gfx::Size(kCapsuleWidth + kBadgeOverhang, kCapsuleHeight);
++}
++
++gfx::Rect UBlockButton::GetAnchorBoundsInScreen() const {
++  // Where the boards put the panel: 42 dp below the top of the bar, 4 dp past
++  // its right edge.
++  const gfx::Rect bar = parent()->GetBoundsInScreen();
++  return gfx::Rect(bar.right() + 3, bar.y(), 1, 42);
++}
++
++void UBlockButton::PaintButtonContents(gfx::Canvas* canvas) {
++  const bool dark = color_utils::IsDark(
++      GetColorProvider()->GetColor(kColorToolbar));
++  const SkColor capsule =
++      on_ ? (dark ? SkColorSetA(SkColorSetRGB(255, 107, 107), 38)
++                  : SkColorSetA(SkColorSetRGB(196, 0, 26), 28))
++          : (dark ? SkColorSetA(SK_ColorWHITE, 26) : SkColorSetA(SK_ColorBLACK, 18));
++  const SkColor badge_color =
++      dark ? SkColorSetRGB(255, 107, 107) : SkColorSetRGB(196, 0, 26);
++  const SkColor badge_text = dark ? SkColorSetRGB(43, 0, 6) : SK_ColorWHITE;
++  const SkColor badge_ring = dark ? SkColorSetRGB(42, 42, 46) : SK_ColorWHITE;
++
++  const gfx::Rect pill(0, (height() - kCapsuleHeight) / 2, kCapsuleWidth,
++                       kCapsuleHeight);
++  cc::PaintFlags flags;
++  flags.setAntiAlias(true);
++  flags.setColor(capsule);
++  canvas->DrawRoundRect(pill, kCapsuleHeight / 2, flags);
++
++  if (!icon_.IsEmpty()) {
++    canvas->DrawImageInt(*icon_.ToImageSkia(), 0, 0, icon_.Width(),
++                         icon_.Height(),
++                         pill.x() + (pill.width() - kIconSize) / 2,
++                         pill.y() + (pill.height() - kIconSize) / 2, kIconSize,
++                         kIconSize, /*filter=*/true);
++  }
++
++  if (!on_ || badge_.empty()) {
++    return;
++  }
++  const gfx::FontList font =
++      gfx::FontList().DeriveWithSizeDelta(9 - gfx::FontList().GetFontSize())
++          .DeriveWithWeight(gfx::Font::Weight::BOLD);
++  const int badge_width =
++      std::max(kBadgeHeight, gfx::GetStringWidth(badge_, font) + 6);
++  const gfx::Rect badge(pill.right() + kBadgeOverhang - badge_width,
++                        std::max(0, pill.y() - kBadgeOverhang), badge_width,
++                        kBadgeHeight);
++  gfx::RectF ring(badge);
++  ring.Outset(1.5f);
++  flags.setColor(badge_ring);
++  canvas->DrawRoundRect(ring, ring.height() / 2, flags);
++  flags.setColor(badge_color);
++  canvas->DrawRoundRect(badge, kBadgeHeight / 2, flags);
++  canvas->DrawStringRectWithFlags(badge_, font, badge_text, badge,
++                                  gfx::Canvas::TEXT_ALIGN_CENTER);
++}
++
++void UBlockButton::OnExtensionActionUpdated(
++    extensions::ExtensionAction* extension_action,
++    content::WebContents* web_contents,
++    content::BrowserContext* browser_context) {
++  if (extension_action->extension_id() == browser_fork::kUBlockExtensionId) {
++    location_bar_->UpdateUBlockButton();
++  }
++}
++
++void UBlockButton::OnShuttingDown() {
++  action_observation_.Reset();
++}
++
++BEGIN_METADATA(UBlockButton)
++END_METADATA
+diff --git a/chrome/browser/ui/views/location_bar/ublock_button.h b/chrome/browser/ui/views/location_bar/ublock_button.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..e76c9d5e53b87bfba5ce241ddb2c3f5cc2182254
+--- /dev/null
++++ b/chrome/browser/ui/views/location_bar/ublock_button.h
+@@ -0,0 +1,77 @@
++#ifndef CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_UBLOCK_BUTTON_H_
++#define CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_UBLOCK_BUTTON_H_
++
++#include <string>
++
++#include "base/memory/raw_ptr.h"
++#include "base/scoped_observation.h"
++#include "base/time/time.h"
++#include "chrome/browser/extensions/extension_action_dispatcher.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/gfx/image/image.h"
++#include "ui/views/controls/button/button.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/widget/widget_observer.h"
++
++class BrowserWindowInterface;
++class LocationBarView;
++class Profile;
++
++// The uBlock Origin button at the right of the address: how many requests it
++// blocked on the page, and the "Blocco contenuti" panel. The number and the
++// icon are the ones uBlock Origin sets on its own extension action.
++class UBlockButton : public views::Button,
++                     public extensions::ExtensionActionDispatcher::Observer,
++                     public views::WidgetObserver {
++  METADATA_HEADER(UBlockButton, views::Button)
++
++ public:
++  UBlockButton(LocationBarView* location_bar,
++               BrowserWindowInterface* browser,
++               Profile* profile);
++  UBlockButton(const UBlockButton&) = delete;
++  UBlockButton& operator=(const UBlockButton&) = delete;
++  ~UBlockButton() override;
++
++  void Update(content::WebContents* contents, bool show);
++  void ShowPanel();
++
++  // views::View:
++  gfx::Size CalculatePreferredSize(
++      const views::SizeBounds& available_size) const override;
++  gfx::Rect GetAnchorBoundsInScreen() const override;
++
++ private:
++  const extensions::Extension* GetExtension() const;
++  void OnPressed();
++
++  // views::Button:
++  void PaintButtonContents(gfx::Canvas* canvas) override;
++
++  // extensions::ExtensionActionDispatcher::Observer:
++  void OnExtensionActionUpdated(
++      extensions::ExtensionAction* extension_action,
++      content::WebContents* web_contents,
++      content::BrowserContext* browser_context) override;
++  void OnShuttingDown() override;
++
++  // views::WidgetObserver:
++  void OnWidgetDestroying(views::Widget* widget) override;
++
++  raw_ptr<LocationBarView> location_bar_;
++  raw_ptr<BrowserWindowInterface> browser_;
++  raw_ptr<Profile> profile_;
++
++  std::u16string badge_;
++  gfx::Image icon_;
++  bool on_ = true;
++
++  base::TimeTicks panel_closed_at_;
++  base::ScopedObservation<views::Widget, views::WidgetObserver>
++      panel_observation_{this};
++  base::ScopedObservation<extensions::ExtensionActionDispatcher,
++                          extensions::ExtensionActionDispatcher::Observer>
++      action_observation_{this};
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_UBLOCK_BUTTON_H_
+diff --git a/chrome/browser/ui/webui/site_panel_ui.cc b/chrome/browser/ui/webui/site_panel_ui.cc
+index 125a4845f53e2d75bf59ea974749dcc9471031a7..ff8fe4bfe950e9be3e9f982ffbdd98301f347502 100644
+--- a/chrome/browser/ui/webui/site_panel_ui.cc
++++ b/chrome/browser/ui/webui/site_panel_ui.cc
+@@ -8,7 +8,9 @@
+ #include "base/functional/callback_helpers.h"
+ #include "base/values.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/browser/fork/temporary_site_data_service.h"
++#include "chrome/browser/fork/ublock_extension.h"
+ #include "chrome/browser/fork/vpn_status.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ssl/chrome_security_state_util.h"
+@@ -16,6 +18,8 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/page_info/page_info_dialog.h"
+ #include "chrome/browser/ui/singleton_tabs.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+ #include "chrome/browser/ui/webui/webui_embedding_context.h"
+ #include "chrome/grit/browser_resources.h"
+ #include "components/browsing_data/content/browsing_data_helper.h"
+@@ -31,6 +35,9 @@
+ #include "content/public/browser/web_ui.h"
+ #include "content/public/browser/web_ui_data_source.h"
+ #include "content/public/browser/web_ui_message_handler.h"
++#include "extensions/browser/extension_action.h"
++#include "extensions/browser/extension_action_manager.h"
++#include "extensions/browser/extension_registry.h"
+ #include "url/gurl.h"
+ 
+ namespace {
+@@ -72,6 +79,7 @@ class SitePanelHandler : public content::WebUIMessageHandler {
+     add("close", &SitePanelHandler::OnClose);
+     add("openPageInfo", &SitePanelHandler::OnOpenPageInfo);
+     add("openVpnSettings", &SitePanelHandler::OnOpenVpnSettings);
++    add("openBlocking", &SitePanelHandler::OnOpenBlocking);
+     add("setRemembered", &SitePanelHandler::OnSetRemembered);
+     add("setWebgl", &SitePanelHandler::OnSetWebgl);
+   }
+@@ -108,6 +116,21 @@ class SitePanelHandler : public content::WebUIMessageHandler {
+     return false;
+   }
+ 
++  // What uBlock Origin shows on its button for this tab; nothing if it's missing.
++  std::string BlockedCount(content::WebContents* contents) {
++    const extensions::Extension* extension =
++        extensions::ExtensionRegistry::Get(GetProfile())
++            ->enabled_extensions()
++            .GetByID(browser_fork::kUBlockExtensionId);
++    extensions::ExtensionAction* action =
++        extension ? extensions::ExtensionActionManager::Get(GetProfile())
++                        ->GetExtensionAction(*extension)
++                  : nullptr;
++    return action ? action->GetDisplayBadgeText(
++                        extensions::ExtensionTabUtil::GetTabId(contents))
++                  : std::string();
++  }
++
+   base::DictValue BuildState(content::WebContents* contents) {
+     const GURL url = contents->GetLastCommittedURL();
+     HostContentSettingsMap* map =
+@@ -135,6 +158,7 @@ class SitePanelHandler : public content::WebUIMessageHandler {
+     state.Set("cookies", cookies);
+     state.Set("permissions", permissions);
+     state.Set("remembered", IsRemembered(url));
++    state.Set("blocked", BlockedCount(contents));
+     state.Set("webgl", map->GetContentSetting(url, url,
+                                               ContentSettingsType::WEBGL) ==
+                            CONTENT_SETTING_ALLOW);
+@@ -183,6 +207,16 @@ class SitePanelHandler : public content::WebUIMessageHandler {
+     }
+   }
+ 
++  void OnOpenBlocking(const base::ListValue& args) {
++    BrowserWindowInterface* browser = GetBrowser();
++    Close();
++    BrowserView* view =
++        browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
++    if (view) {
++      view->GetLocationBarView()->ShowUBlockPanel();
++    }
++  }
++
+   void OnSetRemembered(const base::ListValue& args) {
+     content::WebContents* contents = GetSiteContents();
+     if (!contents || args.size() != 1 || !args[0].is_bool()) {
+diff --git a/components/adblock/content/browser/factories/subscription_service_factory.cc b/components/adblock/content/browser/factories/subscription_service_factory.cc
+index 2d8b721d0d3aae983506d80e3c8f41d5d1c429e0..cb033d899dc95b0ba7827d1c8103feecb0d25fcd 100644
+--- a/components/adblock/content/browser/factories/subscription_service_factory.cc
++++ b/components/adblock/content/browser/factories/subscription_service_factory.cc
+@@ -346,6 +346,16 @@ void TranslateCombinedFilterListsToStandalone(
+   }
+ }
+ 
++// uBlock Origin does the filtering: Cromite's adblock stays available, switched
++// off once so that the two don't filter twice.
++void HandOverToUBlock(PrefService* prefs,
++                      FilteringConfiguration* adblock_filtering_configuration) {
++  if (!prefs->GetBoolean(common::prefs::kAdblockHandedToUBlock)) {
++    adblock_filtering_configuration->SetEnabled(false);
++    prefs->SetBoolean(common::prefs::kAdblockHandedToUBlock, true);
++  }
++}
++
+ void CheckAdblockCliSwitches(
+     FilteringConfiguration* adblock_filtering_configuration) {
+   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+@@ -402,6 +412,7 @@ SubscriptionServiceFactory::BuildServiceInstanceForBrowserContext(
+     }
+     if (persisted_configuration->GetName() ==
+         kAdblockFilteringConfigurationName) {
++      HandOverToUBlock(prefs, persisted_configuration.get());
+       CheckAdblockCliSwitches(persisted_configuration.get());
+       TranslateCombinedFilterListsToStandalone(persisted_configuration.get());
+     }
+@@ -420,6 +431,7 @@ SubscriptionServiceFactory::BuildServiceInstanceForBrowserContext(
+     // "adblock" FilterConfiguration will be created if needed.
+     CheckAndMigrateSettings(prefs, adblock_filtering_configuration);
+     if (adblock_filtering_configuration) {
++      HandOverToUBlock(prefs, adblock_filtering_configuration.get());
+       CheckAdblockCliSwitches(adblock_filtering_configuration.get());
+       if (start_disabled) {
+         adblock_filtering_configuration->SetEnabled(false);
+diff --git a/components/adblock/core/common/adblock_prefs.cc b/components/adblock/core/common/adblock_prefs.cc
+index 7a77170686fb0867d13e583d055b0172d31fc94f..068562ab5efa54dc97e626c1de5b2545f05c165e 100644
+--- a/components/adblock/core/common/adblock_prefs.cc
++++ b/components/adblock/core/common/adblock_prefs.cc
+@@ -28,6 +28,9 @@ const char kEnableAdblockLegacy[] = "adblock.enabled";
+ 
+ const char kAllowPrivilegedFilters[] = "adblock.privilegedfilters_enabled";
+ 
++// Whether the filtering has already been handed over to uBlock Origin.
++const char kAdblockHandedToUBlock[] = "adblock.handed_to_ublock";
++
+ // Legacy: Whether to allow acceptable ads or block them all.
+ // Used now just to map CLI switch. Otherwise use kAdblockSubscriptionsLegacy.
+ const char kEnableAcceptableAdsLegacy[] = "adblock.aa_enable";
+@@ -83,6 +86,7 @@ const char kAutoInstalledSubscriptionsNextUpdateTime[] =
+ 
+ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
+   registry->RegisterBooleanPref(kAllowPrivilegedFilters, false);
++  registry->RegisterBooleanPref(kAdblockHandedToUBlock, false);
+   registry->RegisterBooleanPref(kEnableAdblockLegacy, true);
+   registry->RegisterBooleanPref(kEnableAcceptableAdsLegacy, false);
+   registry->RegisterBooleanPref(kAdblockMoreOptionsEnabled, true);
+diff --git a/components/adblock/core/common/adblock_prefs.h b/components/adblock/core/common/adblock_prefs.h
+index a62285149ce4349a0803ec0b6dd7657686768485..1ba42d809f358209fd3a3b9306c2dd4b93ec20b4 100644
+--- a/components/adblock/core/common/adblock_prefs.h
++++ b/components/adblock/core/common/adblock_prefs.h
+@@ -27,6 +27,7 @@ namespace adblock::common::prefs {
+ 
+ extern const char kEnableAdblockLegacy[];
+ extern const char kAllowPrivilegedFilters[];
++extern const char kAdblockHandedToUBlock[];
+ extern const char kEnableAcceptableAdsLegacy[];
+ extern const char kAdblockAllowedDomainsLegacy[];
+ extern const char kAdblockCustomFiltersLegacy[];

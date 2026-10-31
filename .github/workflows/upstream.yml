@@ -1,4 +1,5 @@
-# Ogni giorno controlla se Cromite ha una nuova release stabile e riapplica le nostre patch.
+# Ogni giorno controlla se Cromite ha una nuova release stabile e riapplica le nostre patch,
+# e se uBlock Origin ha una versione nuova.
 # Nel repo issue e pull request sono disattivate, quindi:
 # - tutto pulito (o conflitti già risolti in passato, via rerere): commit sul ramo + build
 # - conflitto o patch diventata vuota: il workflow fallisce (GitHub avvisa via email) e il
@@ -42,6 +43,22 @@ jobs:
           path: .cache
           key: forkctl-${{ github.run_id }}
           restore-keys: forkctl-
+
+      # Basta il commit: la versione nuova entra nella prossima build.
+      - name: C'è un uBlock Origin nuovo?
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          python3 tools/forkctl.py ublock-update
+          if ! git diff --quiet overlay; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add overlay
+            git commit -m "Aggiorna uBlock Origin"
+            python3 tools/forkctl.py privacy-check
+            git push origin "HEAD:refs/heads/$BRANCH"
+          fi
 
       - name: C'è un Cromite nuovo?
         id: check
