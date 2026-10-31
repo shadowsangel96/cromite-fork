@@ -11,3 +11,4 @@ macos/0007-stringhe-di-cancella-i-dati-alla-chiusura-anche-sul-mac.patch
 common/0002-cookie-temporanei-i-dati-di-un-sito-si-cancellano-appena-lo.patch
 common/0003-pagina-rete-e-privacy-vpn-personale-motore-personale-e-cooki.patch
 common/0004-motore-duckduckgo-light-predefinito-e-ripiego-quando-searxng.patch
+common/0005-vpn-siti-che-escono-diretti-riserva-e-indicatore-nella-barra.patch

@@ -1,0 +1,1163 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 16:11:09 +0100
+Subject: [PATCH] VPN: siti che escono diretti, riserva e indicatore nella
+ barra
+
+Fork-Patch: common/0005-vpn-siti-che-escono-diretti-riserva-e-indicatore-nella-barra.patch
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 054701a6e73a1340e1ea921e262b757c387a534b..e4a56ecb7c50a56a4cbf5eb090b1f00da54f6bb7 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -848,6 +848,10 @@ source_set("core") {
+     "fork/temporary_site_data_service_factory.h",
+     "fork/temporary_site_data_tab_helper.cc",
+     "fork/temporary_site_data_tab_helper.h",
++    "fork/vpn_status.cc",
++    "fork/vpn_status.h",
++    "fork/vpn_tab_helper.cc",
++    "fork/vpn_tab_helper.h",
+     "adblock/adblock_chrome_content_browser_client.h",
+     "after_startup_task_utils.cc",
+     "browser_about_handler.cc",
+diff --git a/chrome/browser/fork/vpn_status.cc b/chrome/browser/fork/vpn_status.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..17bb3daf5dfd943a14a909a18c567f31e156b703
+--- /dev/null
++++ b/chrome/browser/fork/vpn_status.cc
+@@ -0,0 +1,189 @@
++#include "chrome/browser/fork/vpn_status.h"
++
++#include <string>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/time/time.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/net/system_network_context_manager.h"
++#include "components/pref_registry/pref_registry_syncable.h"
++#include "components/prefs/pref_service.h"
++#include "components/proxy_config/pref_proxy_config_tracker_impl.h"
++#include "components/proxy_config/proxy_config_dictionary.h"
++#include "components/proxy_config/proxy_config_pref_names.h"
++#include "net/base/load_flags.h"
++#include "net/http/http_response_headers.h"
++#include "net/proxy_resolution/proxy_config.h"
++#include "net/traffic_annotation/network_traffic_annotation.h"
++#include "services/network/public/cpp/resource_request.h"
++#include "services/network/public/cpp/simple_url_loader.h"
++#include "services/network/public/mojom/fetch_api.mojom-shared.h"
++#include "url/gurl.h"
++
++namespace browser_fork {
++
++namespace {
++
++constexpr base::TimeDelta kReserveLimit = base::Hours(24);
++constexpr base::TimeDelta kServerCheckInterval = base::Minutes(5);
++constexpr base::TimeDelta kServerCheckTimeout = base::Seconds(10);
++
++// The internal firewall of Cromite drops without a word any request whose tag
++// isn't in services/firewall/tools/rules.xml. This one asks the proxy about itself,
++// so it uses the tag that file allows for the proxy.
++constexpr net::NetworkTrafficAnnotationTag kServerCheckAnnotation =
++    net::DefineNetworkTrafficAnnotation("proxy_config_settings", R"(
++      semantics {
++        sender: "VPN reserve"
++        description: "Asks the user's own proxy whether it is up again."
++        trigger: "Every few minutes during the direct reserve."
++        data: "None."
++        destination: OTHER
++      }
++      policy {
++        cookies_allowed: NO
++        setting: "It stops when the reserve ends."
++        policy_exception_justification: "Not implemented."
++      })");
++
++// The proxy the user set, whatever the reserve is doing: an empty string if
++// there is none.
++std::string ProxyServerFromPrefs() {
++  ProxyConfigDictionary dict(
++      g_browser_process->local_state()
++          ->GetDict(proxy_config::prefs::kProxy)
++          .Clone());
++  ProxyPrefs::ProxyMode mode;
++  std::string server;
++  if (!dict.GetMode(&mode) || mode != ProxyPrefs::MODE_FIXED_SERVERS ||
++      !dict.GetProxyServer(&server)) {
++    return std::string();
++  }
++  return server;
++}
++
++}  // namespace
++
++// static
++VpnStatus* VpnStatus::Get() {
++  static base::NoDestructor<VpnStatus> instance;
++  return instance.get();
++}
++
++// static
++void VpnStatus::RegisterProfilePrefs(
++    user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterStringPref(kVpnAddressPref, std::string());
++  registry->RegisterListPref(kVpnDirectSitesPref);
++  registry->RegisterStringPref(kVpnExitCityPref, std::string());
++}
++
++VpnStatus::VpnStatus() = default;
++VpnStatus::~VpnStatus() = default;
++
++VpnStatus::Route VpnStatus::route() const {
++  if (direct_reserve_) {
++    return Route::kDirectReserve;
++  }
++  if (ProxyServerFromPrefs().empty()) {
++    return Route::kNormal;
++  }
++  return proxy_down_ ? Route::kVpnDown : Route::kVpn;
++}
++
++void VpnStatus::AddObserver(Observer* observer) {
++  observers_.AddObserver(observer);
++}
++
++void VpnStatus::RemoveObserver(Observer* observer) {
++  observers_.RemoveObserver(observer);
++}
++
++void VpnStatus::ReportProxyDown() {
++  if (!proxy_down_) {
++    proxy_down_ = true;
++    NotifyRouteChanged();
++  }
++}
++
++void VpnStatus::ReportPageLoaded() {
++  if (proxy_down_) {
++    proxy_down_ = false;
++    NotifyRouteChanged();
++  }
++}
++
++void VpnStatus::SettingsChanged() {
++  proxy_down_ = false;
++  NotifyRouteChanged();
++}
++
++void VpnStatus::StartDirectReserve() {
++  if (direct_reserve_) {
++    return;
++  }
++  direct_reserve_ = true;
++  proxy_down_ = false;
++  PrefProxyConfigTrackerImpl::SetDirectReserve(true);
++  reserve_expiry_.Start(FROM_HERE, kReserveLimit,
++                        base::BindOnce(&VpnStatus::EndDirectReserve,
++                                       base::Unretained(this)));
++  server_check_.Start(FROM_HERE, kServerCheckInterval,
++                      base::BindRepeating(&VpnStatus::CheckServer,
++                                          base::Unretained(this)));
++  NotifyRouteChanged();
++}
++
++void VpnStatus::EndDirectReserve() {
++  if (!direct_reserve_) {
++    return;
++  }
++  direct_reserve_ = false;
++  reserve_expiry_.Stop();
++  server_check_.Stop();
++  check_loader_.reset();
++  PrefProxyConfigTrackerImpl::SetDirectReserve(false);
++  NotifyRouteChanged();
++}
++
++void VpnStatus::NotifyRouteChanged() {
++  observers_.Notify(&Observer::OnRouteChanged);
++}
++
++void VpnStatus::CheckServer() {
++  net::ProxyConfig::ProxyRules rules;
++  rules.ParseFromString(ProxyServerFromPrefs());
++  if (rules.single_proxies.IsEmpty() ||
++      rules.single_proxies.First().is_direct()) {
++    EndDirectReserve();
++    return;
++  }
++  auto request = std::make_unique<network::ResourceRequest>();
++  request->url = GURL(
++      "http://" +
++      rules.single_proxies.First().First().host_port_pair().ToString() + "/");
++  request->credentials_mode = network::mojom::CredentialsMode::kOmit;
++  request->load_flags = net::LOAD_DISABLE_CACHE | net::LOAD_BYPASS_CACHE;
++  check_loader_ = network::SimpleURLLoader::Create(std::move(request),
++                                                   kServerCheckAnnotation);
++  check_loader_->SetAllowHttpErrorResults(true);
++  check_loader_->SetTimeoutDuration(kServerCheckTimeout);
++  // During the reserve this goes out directly, so it reaches the proxy itself:
++  // whatever it answers, it's up.
++  check_loader_->DownloadHeadersOnly(
++      g_browser_process->system_network_context_manager()
++          ->GetURLLoaderFactory(),
++      base::BindOnce(&VpnStatus::OnServerChecked, base::Unretained(this)));
++}
++
++void VpnStatus::OnServerChecked(
++    scoped_refptr<net::HttpResponseHeaders> headers) {
++  check_loader_.reset();
++  if (headers && direct_reserve_) {
++    EndDirectReserve();
++    observers_.Notify(&Observer::OnBackToVpn);
++  }
++}
++
++}  // namespace browser_fork
+diff --git a/chrome/browser/fork/vpn_status.h b/chrome/browser/fork/vpn_status.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..6a6d7d65aad7cd30e21d940966a51e4cc1517aa4
+--- /dev/null
++++ b/chrome/browser/fork/vpn_status.h
+@@ -0,0 +1,93 @@
++#ifndef CHROME_BROWSER_FORK_VPN_STATUS_H_
++#define CHROME_BROWSER_FORK_VPN_STATUS_H_
++
++#include <memory>
++
++#include "base/memory/scoped_refptr.h"
++#include "base/no_destructor.h"
++#include "base/observer_list.h"
++#include "base/observer_list_types.h"
++#include "base/timer/timer.h"
++
++namespace net {
++class HttpResponseHeaders;
++}  // namespace net
++
++namespace network {
++class SimpleURLLoader;
++}  // namespace network
++
++namespace user_prefs {
++class PrefRegistrySyncable;
++}  // namespace user_prefs
++
++namespace browser_fork {
++
++// What the page chrome://proxy remembers when the VPN is off.
++inline constexpr char kVpnAddressPref[] = "fork.vpn_address";
++inline constexpr char kVpnDirectSitesPref[] = "fork.vpn_direct_sites";
++// The name of the place the VPN goes out from, shown next to it: only the user
++// knows it, the browser doesn't ask anyone.
++inline constexpr char kVpnExitCityPref[] = "fork.vpn_exit_city";
++
++// Where the browser goes out from, and the reserve for when the server of the
++// VPN is down: a direct connection the user asks for, which ends by itself. It
++// lives in memory, so it also ends with the browser, even after a crash.
++class VpnStatus {
++ public:
++  enum class Route {
++    kNormal,         // No VPN set.
++    kVpn,            // Through the VPN.
++    kVpnDown,        // The VPN is set, the last page found it down.
++    kDirectReserve,  // Without the VPN, for now.
++  };
++
++  class Observer : public base::CheckedObserver {
++   public:
++    virtual void OnRouteChanged() {}
++    // The server answers again and the reserve ended without the user.
++    virtual void OnBackToVpn() {}
++  };
++
++  static VpnStatus* Get();
++  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
++
++  VpnStatus(const VpnStatus&) = delete;
++  VpnStatus& operator=(const VpnStatus&) = delete;
++
++  Route route() const;
++
++  void AddObserver(Observer* observer);
++  void RemoveObserver(Observer* observer);
++
++  // What the tabs see: a page that found the proxy down, a page that loaded.
++  void ReportProxyDown();
++  void ReportPageLoaded();
++
++  // The address of the proxy may have changed.
++  void SettingsChanged();
++
++  void StartDirectReserve();
++  void EndDirectReserve();
++
++ private:
++  friend class base::NoDestructor<VpnStatus>;
++
++  VpnStatus();
++  ~VpnStatus();
++
++  void NotifyRouteChanged();
++  void CheckServer();
++  void OnServerChecked(scoped_refptr<net::HttpResponseHeaders> headers);
++
++  bool proxy_down_ = false;
++  bool direct_reserve_ = false;
++  base::OneShotTimer reserve_expiry_;
++  base::RepeatingTimer server_check_;
++  std::unique_ptr<network::SimpleURLLoader> check_loader_;
++  base::ObserverList<Observer> observers_;
++};
++
++}  // namespace browser_fork
++
++#endif  // CHROME_BROWSER_FORK_VPN_STATUS_H_
+diff --git a/chrome/browser/fork/vpn_tab_helper.cc b/chrome/browser/fork/vpn_tab_helper.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..a489db2a35c3ec8362039d86510853eb4490df51
+--- /dev/null
++++ b/chrome/browser/fork/vpn_tab_helper.cc
+@@ -0,0 +1,232 @@
++#include "chrome/browser/fork/vpn_tab_helper.h"
++
++#include <memory>
++#include <string>
++
++#include "base/functional/bind.h"
++#include "base/memory/weak_ptr.h"
++#include "base/task/sequenced_task_runner.h"
++#include "base/time/time.h"
++#include "chrome/browser/infobars/confirm_infobar_creator.h"
++#include "components/infobars/content/content_infobar_manager.h"
++#include "components/infobars/core/confirm_infobar_delegate.h"
++#include "components/infobars/core/infobar.h"
++#include "components/infobars/core/simple_alert_infobar_delegate.h"
++#include "components/vector_icons/vector_icons.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/navigation_handle.h"
++#include "content/public/browser/web_contents.h"
++#include "net/base/net_errors.h"
++#include "ui/gfx/vector_icon_types.h"
++#include "url/gurl.h"
++
++namespace browser_fork {
++
++namespace {
++
++// The infobar identifiers only serve metrics, which we don't have.
++constexpr infobars::InfoBarDelegate::InfoBarIdentifier kInfoBarId =
++    infobars::InfoBarDelegate::TEST_INFOBAR;
++
++// The network service gets the new route on its own pipe: without a moment the
++// reload could still go the old way.
++constexpr base::TimeDelta kReloadDelay = base::Milliseconds(500);
++
++void ReloadSoon(content::WebContents* web_contents) {
++  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
++      FROM_HERE,
++      base::BindOnce(
++          [](base::WeakPtr<content::WebContents> contents) {
++            if (contents) {
++              contents->GetController().Reload(content::ReloadType::NORMAL,
++                                               /*check_for_repost=*/true);
++            }
++          },
++          web_contents->GetWeakPtr()),
++      kReloadDelay);
++}
++
++// Asks before the reserve starts: this is the only way into it.
++class ConfirmReserveInfoBarDelegate : public ConfirmInfoBarDelegate {
++ public:
++  ConfirmReserveInfoBarDelegate() = default;
++
++ private:
++  // ConfirmInfoBarDelegate:
++  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override {
++    return kInfoBarId;
++  }
++  const gfx::VectorIcon& GetVectorIcon() const override {
++    return vector_icons::kWarningIcon;
++  }
++  std::u16string GetMessageText() const override {
++    return u"Navigare senza VPN? I siti vedranno l'IP di casa. La modalità "
++           u"diretta scade alla chiusura del browser o dopo 24 ore.";
++  }
++  std::u16string GetButtonLabel(InfoBarButton button) const override {
++    return button == BUTTON_OK ? u"Naviga diretto" : u"Annulla";
++  }
++  bool Accept() override {
++    content::WebContents* contents =
++        infobars::ContentInfoBarManager::WebContentsFromInfoBar(infobar());
++    // Not from here: the bars of the tabs change, this one included.
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce([] {
++          VpnStatus::Get()->StartDirectReserve();
++        }));
++    ReloadSoon(contents);
++    return true;
++  }
++};
++
++// Shows up when a page finds the proxy down, and only then.
++class ProxyDownInfoBarDelegate : public ConfirmInfoBarDelegate {
++ public:
++  ProxyDownInfoBarDelegate() = default;
++
++ private:
++  // ConfirmInfoBarDelegate:
++  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override {
++    return kInfoBarId;
++  }
++  const gfx::VectorIcon& GetVectorIcon() const override {
++    return vector_icons::kWarningIcon;
++  }
++  std::u16string GetMessageText() const override {
++    return u"Il server VPN non risponde. Per non mostrare l'IP di casa ai "
++           u"siti, il browser non passa da solo alla connessione diretta.";
++  }
++  std::u16string GetButtonLabel(InfoBarButton button) const override {
++    return button == BUTTON_OK ? u"Riprova" : u"Naviga diretto (riserva)";
++  }
++  bool Accept() override {
++    infobars::ContentInfoBarManager::WebContentsFromInfoBar(infobar())
++        ->GetController()
++        .Reload(content::ReloadType::NORMAL, /*check_for_repost=*/true);
++    return true;
++  }
++  bool Cancel() override {
++    infobar()->owner()->AddInfoBar(
++        CreateConfirmInfoBar(std::make_unique<ConfirmReserveInfoBarDelegate>()));
++    return true;
++  }
++};
++
++}  // namespace
++
++// Stays on the tab for as long as the reserve is on.
++class DirectReserveInfoBarDelegate : public ConfirmInfoBarDelegate {
++ public:
++  DirectReserveInfoBarDelegate() = default;
++
++  base::WeakPtr<DirectReserveInfoBarDelegate> GetWeakPtr() {
++    return weak_factory_.GetWeakPtr();
++  }
++
++  void Remove() { infobar()->RemoveSelf(); }
++
++ private:
++  // ConfirmInfoBarDelegate:
++  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override {
++    return kInfoBarId;
++  }
++  const gfx::VectorIcon& GetVectorIcon() const override {
++    return vector_icons::kWarningIcon;
++  }
++  bool ShouldExpire(const NavigationDetails& details) const override {
++    return false;
++  }
++  bool IsCloseable() const override { return false; }
++  std::u16string GetMessageText() const override {
++    return u"Connessione diretta. I siti vedono l'IP di casa.";
++  }
++  int GetButtons() const override { return BUTTON_OK; }
++  std::u16string GetButtonLabel(InfoBarButton button) const override {
++    return u"Torna alla VPN";
++  }
++  bool Accept() override {
++    content::WebContents* contents =
++        infobars::ContentInfoBarManager::WebContentsFromInfoBar(infobar());
++    // Not from here: VpnTabHelper removes this bar when the reserve ends.
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE,
++        base::BindOnce([] { VpnStatus::Get()->EndDirectReserve(); }));
++    ReloadSoon(contents);
++    return false;
++  }
++
++  base::WeakPtrFactory<DirectReserveInfoBarDelegate> weak_factory_{this};
++};
++
++VpnTabHelper::VpnTabHelper(content::WebContents* web_contents)
++    : content::WebContentsObserver(web_contents),
++      content::WebContentsUserData<VpnTabHelper>(*web_contents) {
++  VpnStatus::Get()->AddObserver(this);
++}
++
++VpnTabHelper::~VpnTabHelper() {
++  VpnStatus::Get()->RemoveObserver(this);
++}
++
++void VpnTabHelper::DidFinishNavigation(content::NavigationHandle* handle) {
++  if (!handle->IsInPrimaryMainFrame() || handle->IsSameDocument() ||
++      !handle->HasCommitted()) {
++    return;
++  }
++  UpdateReserveBar();
++  if (handle->GetNetErrorCode() == net::ERR_PROXY_CONNECTION_FAILED) {
++    VpnStatus::Get()->ReportProxyDown();
++    auto* manager =
++        infobars::ContentInfoBarManager::FromWebContents(web_contents());
++    if (manager && VpnStatus::Get()->route() == VpnStatus::Route::kVpnDown) {
++      manager->AddInfoBar(
++          CreateConfirmInfoBar(std::make_unique<ProxyDownInfoBarDelegate>()));
++    }
++  } else if (handle->GetNetErrorCode() == net::OK &&
++             handle->GetURL().SchemeIsHTTPOrHTTPS()) {
++    VpnStatus::Get()->ReportPageLoaded();
++  }
++}
++
++void VpnTabHelper::OnRouteChanged() {
++  UpdateReserveBar();
++}
++
++void VpnTabHelper::OnBackToVpn() {
++  auto* manager =
++      infobars::ContentInfoBarManager::FromWebContents(web_contents());
++  if (manager &&
++      web_contents()->GetVisibility() == content::Visibility::VISIBLE) {
++    manager->AddInfoBar(
++        CreateConfirmInfoBar(std::make_unique<SimpleAlertInfoBarDelegate>(
++            kInfoBarId, &vector_icons::kInfoIcon,
++            u"Il server VPN risponde di nuovo: il browser è tornato a uscire "
++            u"dalla VPN.",
++            /*auto_expire=*/true, /*should_animate=*/true)));
++  }
++}
++
++void VpnTabHelper::UpdateReserveBar() {
++  const bool on =
++      VpnStatus::Get()->route() == VpnStatus::Route::kDirectReserve;
++  if (!on) {
++    if (reserve_bar_) {
++      reserve_bar_->Remove();
++    }
++    return;
++  }
++  auto* manager =
++      infobars::ContentInfoBarManager::FromWebContents(web_contents());
++  if (reserve_bar_ || !manager) {
++    return;
++  }
++  auto delegate = std::make_unique<DirectReserveInfoBarDelegate>();
++  base::WeakPtr<DirectReserveInfoBarDelegate> weak = delegate->GetWeakPtr();
++  if (manager->AddInfoBar(CreateConfirmInfoBar(std::move(delegate)))) {
++    reserve_bar_ = weak;
++  }
++}
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(VpnTabHelper);
++
++}  // namespace browser_fork
+diff --git a/chrome/browser/fork/vpn_tab_helper.h b/chrome/browser/fork/vpn_tab_helper.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..48f72ad208e83f1ab3ae67e364630c5e448ef7e8
+--- /dev/null
++++ b/chrome/browser/fork/vpn_tab_helper.h
+@@ -0,0 +1,42 @@
++#ifndef CHROME_BROWSER_FORK_VPN_TAB_HELPER_H_
++#define CHROME_BROWSER_FORK_VPN_TAB_HELPER_H_
++
++#include "base/memory/weak_ptr.h"
++#include "chrome/browser/fork/vpn_status.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "content/public/browser/web_contents_user_data.h"
++
++namespace browser_fork {
++
++class DirectReserveInfoBarDelegate;
++
++// The bars about the VPN in a tab: the offer of the reserve when a page finds the
++// server down, the warning while the reserve is on.
++class VpnTabHelper : public content::WebContentsObserver,
++                     public content::WebContentsUserData<VpnTabHelper>,
++                     public VpnStatus::Observer {
++ public:
++  ~VpnTabHelper() override;
++
++ private:
++  friend class content::WebContentsUserData<VpnTabHelper>;
++
++  explicit VpnTabHelper(content::WebContents* web_contents);
++
++  // content::WebContentsObserver:
++  void DidFinishNavigation(content::NavigationHandle* handle) override;
++
++  // VpnStatus::Observer:
++  void OnRouteChanged() override;
++  void OnBackToVpn() override;
++
++  void UpdateReserveBar();
++
++  base::WeakPtr<DirectReserveInfoBarDelegate> reserve_bar_;
++
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++}  // namespace browser_fork
++
++#endif  // CHROME_BROWSER_FORK_VPN_TAB_HELPER_H_
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index ce0b2de6ae69d335c5a8d66341220b5e3809e2d3..d46792f586a409c0b4ee53d46652935c19055c66 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -34,6 +34,7 @@
+ #include "chrome/browser/enterprise/util/managed_browser_utils.h"
+ #include "chrome/browser/external_protocol/external_protocol_handler.h"
+ #include "chrome/browser/fork/temporary_site_data_service.h"
++#include "chrome/browser/fork/vpn_status.h"
+ #include "chrome/browser/finds/core/finds_service.h"
+ #include "chrome/browser/first_run/first_run.h"
+ #include "chrome/browser/glic/glic_pref_names.h"
+@@ -1761,6 +1762,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+   // User prefs. Please keep this list alphabetized.
+   AccessibilityLabelsService::RegisterProfilePrefs(registry);
+   browser_fork::TemporarySiteDataService::RegisterProfilePrefs(registry);
++  browser_fork::VpnStatus::RegisterProfilePrefs(registry);
+   AccessibilityUIMessageHandler::RegisterProfilePrefs(registry);
+   accessibility_annotator::prefs::RegisterProfilePrefs(registry);
+   AimEligibilityService::RegisterProfilePrefs(registry);
+diff --git a/chrome/browser/resources/proxy_config.html b/chrome/browser/resources/proxy_config.html
+index 57b220eb3e833c469c963d5f9236cf59c2f82f7f..7760a25f828d8c8b90dd20a0c8a5c0c3d7a99786 100644
+--- a/chrome/browser/resources/proxy_config.html
++++ b/chrome/browser/resources/proxy_config.html
+@@ -25,9 +25,18 @@
+         di casa e Tailscale, così il server stesso si raggiunge sempre.</p>
+       <p><label>Indirizzo del proxy
+         <input id="fork-vpn-address" size="30" placeholder="indirizzo:porta"></label>
++        <label>Città di uscita
++        <input id="fork-vpn-city" size="14" placeholder="Roma"></label>
+         <button class="fork-inline" id="fork-vpn-on">Attiva</button>
+         <button class="fork-inline" id="fork-vpn-off">Disattiva</button></p>
+       <p id="fork-vpn-status"></p>
++      <p><button class="fork-inline" id="fork-vpn-back" hidden>Torna alla VPN</button></p>
++      <h3>Siti che escono diretti</h3>
++      <p>Uno per riga: banche e servizi che bloccano gli indirizzi delle VPN. Questi siti vedono
++        l'indirizzo IP di casa tua.</p>
++      <textarea id="fork-vpn-direct" rows="4" cols="40"></textarea>
++      <p><button class="fork-inline" id="fork-vpn-direct-save">Salva l'elenco</button></p>
++      <p id="fork-vpn-direct-status"></p>
+ 
+       <h2>Motore di ricerca personale</h2>
+       <p>Le ricerche dalla barra degli indirizzi vanno al tuo SearXNG. Se non risponde entro qualche
+diff --git a/chrome/browser/resources/proxy_config.js b/chrome/browser/resources/proxy_config.js
+index 30906df80b690d091ba850c125798a4bc7c5919a..9a43ebe1896556cb3b687464e8f78d5203df1414 100644
+--- a/chrome/browser/resources/proxy_config.js
++++ b/chrome/browser/resources/proxy_config.js
+@@ -286,10 +286,36 @@ window.ForkSettings = (function() {
+   // Le reti di casa e Tailscale non passano dal proxy: il server stesso resta raggiungibile.
+   const kBypass = '<local>;10.0.0.0/8;172.16.0.0/12;192.168.0.0/16;100.64.0.0/10;*.ts.net';
+ 
++  let reserve = false;
++
+   function setStatus(id, text) {
+     $(id).textContent = text;
+   }
+ 
++  // "https://www.sito.it/pagina" -> "sito.it"
++  function cleanSite(line) {
++    return line.trim().toLowerCase().replace(/^[a-z]+:\/\//, '')
++        .replace(/\/.*$/, '').replace(/^www\./, '');
++  }
++
++  function directSites() {
++    return $('fork-vpn-direct').value.split('\n').map(cleanSite)
++        .filter(function(site) { return site.length > 0; });
++  }
++
++  function applyVpn(address, sites) {
++    const rules = sites.flatMap(function(site) { return [site, '*.' + site]; });
++    chrome.send('apply', [{
++      'auto_detect': false,
++      'rules': {
++        'bypass_rules': [kBypass].concat(rules).join(';'),
++        'reverse_bypass': false,
++        'type': 'list',
++        'single_proxies': 'PROXY ' + address,
++      },
++    }]);
++  }
++
+   function vpnFromConfig(config) {
+     const rules = config && config.rules;
+     if (!rules || rules.type !== 'list' || !rules.single_proxies) {
+@@ -300,7 +326,10 @@ window.ForkSettings = (function() {
+ 
+   function refreshVpn() {
+     const address = vpnFromConfig(window.ProxyConfigView.getInstance().currentConfig);
+-    if (address) {
++    $('fork-vpn-back').hidden = !reserve;
++    if (reserve) {
++      setStatus('fork-vpn-status', 'Connessione diretta di riserva: il tuo IP è visibile.');
++    } else if (address) {
+       $('fork-vpn-address').value = address;
+       setStatus('fork-vpn-status', 'Attiva: il browser esce da ' + address + '.');
+     } else {
+@@ -310,20 +339,27 @@ window.ForkSettings = (function() {
+ 
+   function bind() {
+     $('fork-vpn-on').onclick = function() {
+-      const address = $('fork-vpn-address').value.trim();
++      const address = $('fork-vpn-address').value.trim().replace(/^https?:\/\//, '');
+       if (!address) {
+         setStatus('fork-vpn-status', 'Scrivi prima l\'indirizzo del proxy.');
+         return;
+       }
+-      chrome.send('apply', [{
+-        'auto_detect': false,
+-        'rules': {
+-          'bypass_rules': kBypass,
+-          'reverse_bypass': false,
+-          'type': 'list',
+-          'single_proxies': 'PROXY ' + address.replace(/^https?:\/\//, ''),
+-        },
+-      }]);
++      const sites = directSites();
++      chrome.send('setVpnSettings', [address, sites, $('fork-vpn-city').value.trim()]);
++      applyVpn(address, sites);
++    };
++    $('fork-vpn-back').onclick = function() {
++      chrome.send('setVpnReserve', [false]);
++    };
++    $('fork-vpn-direct-save').onclick = function() {
++      const sites = directSites();
++      const current = vpnFromConfig(window.ProxyConfigView.getInstance().currentConfig);
++      chrome.send('setVpnSettings',
++          [$('fork-vpn-address').value.trim(), sites, $('fork-vpn-city').value.trim()]);
++      if (current) {
++        applyVpn(current, sites);
++      }
++      setStatus('fork-vpn-direct-status', 'Elenco salvato: ' + sites.length + ' siti.');
+     };
+     $('fork-vpn-off').onclick = function() {
+       chrome.send('clear', []);
+@@ -367,6 +403,14 @@ window.ForkSettings = (function() {
+       });
+       $('fork-remembered').value = settings.rememberedSites.join('\n');
+       $('fork-search-url').value = settings.personalSearch;
++      reserve = settings.vpnReserve;
++      if (settings.vpnAddress && !$('fork-vpn-address').value) {
++        $('fork-vpn-address').value = settings.vpnAddress;
++      }
++      $('fork-vpn-direct').value = settings.vpnDirectSites.join('\n');
++      if (settings.vpnExitCity && !$('fork-vpn-city').value) {
++        $('fork-vpn-city').value = settings.vpnExitCity;
++      }
+       setStatus('fork-search-status', settings.personalSearch ?
+           'Attivo: le ricerche vanno a ' + settings.personalSearch + '.' :
+           'Spento: le ricerche vanno al motore predefinito.');
+diff --git a/chrome/browser/ui/tab_helpers.cc b/chrome/browser/ui/tab_helpers.cc
+index b03831a5d4176941d31c7b13bb0752b92d963060..029ae236427aaa3a4dfb709dacfd978860869df7 100644
+--- a/chrome/browser/ui/tab_helpers.cc
++++ b/chrome/browser/ui/tab_helpers.cc
+@@ -36,6 +36,7 @@
+ #include "chrome/browser/favicon/favicon_utils.h"
+ #include "chrome/browser/fork/personal_search_tab_helper.h"
+ #include "chrome/browser/fork/temporary_site_data_tab_helper.h"
++#include "chrome/browser/fork/vpn_tab_helper.h"
+ #include "chrome/browser/file_system_access/file_system_access_features.h"
+ #include "chrome/browser/file_system_access/file_system_access_permission_request_manager.h"
+ #include "chrome/browser/file_system_access/file_system_access_tab_helper.h"
+@@ -412,6 +413,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents,
+   ChainedBackNavigationTracker::CreateForWebContents(web_contents);
+   chrome_browser_net::NetErrorTabHelper::CreateForWebContents(web_contents);
+   browser_fork::PersonalSearchTabHelper::CreateForWebContents(web_contents);
++  browser_fork::VpnTabHelper::CreateForWebContents(web_contents);
+   if (!profile->IsOffTheRecord()) {
+     browser_fork::TemporarySiteDataTabHelper::CreateForWebContents(web_contents);
+   }
+diff --git a/chrome/browser/ui/views/toolbar/BUILD.gn b/chrome/browser/ui/views/toolbar/BUILD.gn
+index 0f29e63644028f5482e539653c60abaa1724dfa0..afb71bd510a34f4a30f894175f923de79decd4d0 100644
+--- a/chrome/browser/ui/views/toolbar/BUILD.gn
++++ b/chrome/browser/ui/views/toolbar/BUILD.gn
+@@ -150,6 +150,8 @@ source_set("impl") {
+     "toolbar_icon_container_view.cc",
+     "toolbar_ink_drop_util.cc",
+     "toolbar_view.cc",
++    "vpn_status_button.cc",
++    "vpn_status_button.h",
+     "webui_app_menu_control.cc",
+     "webui_avatar_toolbar_button.cc",
+     "webui_back_forward_control.cc",
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index e2901c9e70f286a576e9439d42833300b930a50e..f0855b6e25a8524e764f488e1cee16359fc7e8c0 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -95,6 +95,7 @@
+ #include "chrome/browser/ui/views/toolbar/app_menu.h"
+ #include "chrome/browser/ui/views/toolbar/app_menu_control.h"
+ #include "chrome/browser/ui/views/toolbar/avatar_toolbar_button_interface.h"
++#include "chrome/browser/ui/views/toolbar/vpn_status_button.h"
+ #include "chrome/browser/ui/views/toolbar/back_forward_button.h"
+ #include "chrome/browser/ui/views/toolbar/browser_app_menu_button.h"
+ #include "chrome/browser/ui/views/toolbar/chrome_labs/chrome_labs_coordinator.h"
+@@ -466,6 +467,8 @@ void ToolbarView::Init() {
+     location_bar_ = toolbar_webview_->GetLocationBar();
+   }
+ 
++  AddChildView(std::make_unique<VpnStatusButton>(browser_));
++
+   bool is_glic_left_of_profile =
+       features::kGlicToolbarButtonLocationParam.Get() ==
+           features::GlicToolbarButtonLocation::kLeftOfProfileChip ||
+diff --git a/chrome/browser/ui/views/toolbar/vpn_status_button.cc b/chrome/browser/ui/views/toolbar/vpn_status_button.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..ccc00f8aa837c01907245bc6c18809896e45ae30
+--- /dev/null
++++ b/chrome/browser/ui/views/toolbar/vpn_status_button.cc
+@@ -0,0 +1,124 @@
++#include "chrome/browser/ui/views/toolbar/vpn_status_button.h"
++
++#include <string>
++
++#include "base/functional/bind.h"
++#include "base/strings/utf_string_conversions.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/singleton_tabs.h"
++#include "components/prefs/pref_service.h"
++#include "components/proxy_config/proxy_config_pref_names.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/color/color_provider.h"
++#include "ui/gfx/color_utils.h"
++#include "ui/gfx/font.h"
++#include "ui/gfx/font_list.h"
++#include "ui/views/controls/label.h"
++#include "url/gurl.h"
++
++namespace {
++
++using Route = browser_fork::VpnStatus::Route;
++
++// The colors of the sketches, on a light and on a dark toolbar.
++SkColor PillColor(Route route, bool dark) {
++  switch (route) {
++    case Route::kNormal:
++      return dark ? SkColorSetRGB(0xAE, 0xAE, 0xB2)
++                  : SkColorSetRGB(0x6E, 0x6E, 0x73);
++    case Route::kVpn:
++      return dark ? SkColorSetRGB(0x4C, 0xD2, 0x7F)
++                  : SkColorSetRGB(0x15, 0x70, 0x38);
++    case Route::kVpnDown:
++      return dark ? SkColorSetRGB(0xFF, 0xAD, 0x33)
++                  : SkColorSetRGB(0x9A, 0x4F, 0x00);
++    case Route::kDirectReserve:
++      return SkColorSetRGB(0xC4, 0x00, 0x1A);
++  }
++}
++
++}  // namespace
++
++VpnStatusButton::VpnStatusButton(BrowserWindowInterface* browser)
++    : browser_(browser) {
++  SetCallback(base::BindRepeating(&VpnStatusButton::OnPressed,
++                                  base::Unretained(this)));
++  label()->SetFontList(
++      label()->font_list().DeriveWithWeight(gfx::Font::Weight::SEMIBOLD));
++  browser_fork::VpnStatus::Get()->AddObserver(this);
++  proxy_pref_.Init(g_browser_process->local_state());
++  proxy_pref_.Add(proxy_config::prefs::kProxy,
++                  base::BindRepeating(&VpnStatusButton::OnRouteChanged,
++                                      base::Unretained(this)));
++}
++
++VpnStatusButton::~VpnStatusButton() {
++  browser_fork::VpnStatus::Get()->RemoveObserver(this);
++}
++
++void VpnStatusButton::OnThemeChanged() {
++  ToolbarButton::OnThemeChanged();
++  OnRouteChanged();
++}
++
++bool VpnStatusButton::ShouldBlendHighlightColor() const {
++  return browser_fork::VpnStatus::Get()->route() != Route::kDirectReserve;
++}
++
++std::optional<SkColor> VpnStatusButton::GetHighlightTextColor() const {
++  if (browser_fork::VpnStatus::Get()->route() == Route::kDirectReserve) {
++    return SK_ColorWHITE;
++  }
++  return std::nullopt;
++}
++
++std::optional<SkColor> VpnStatusButton::GetHighlightBorderColor() const {
++  // The pill of the sketches has no border.
++  return GetBackgroundColor();
++}
++
++void VpnStatusButton::OnRouteChanged() {
++  const ui::ColorProvider* colors = GetColorProvider();
++  if (!colors) {
++    return;
++  }
++  const Route route = browser_fork::VpnStatus::Get()->route();
++  std::u16string label;
++  switch (route) {
++    case Route::kNormal:
++      label = u"● VPN spenta";
++      SetTooltipText(u"VPN spenta: esci dalla connessione normale.");
++      break;
++    case Route::kVpn: {
++      label = u"● VPN";
++      const std::string city = browser_->GetProfile()->GetPrefs()->GetString(
++          browser_fork::kVpnExitCityPref);
++      if (!city.empty()) {
++        label += u" · " + base::UTF8ToUTF16(city);
++      }
++      SetTooltipText(u"Esci dalla VPN del tuo server.");
++      break;
++    }
++    case Route::kVpnDown:
++      label = u"● VPN non raggiungibile";
++      SetTooltipText(
++          u"Il server VPN non risponde: nessuna pagina esce diretta.");
++      break;
++    case Route::kDirectReserve:
++      label = u"● Diretto · IP visibile";
++      SetTooltipText(u"Connessione diretta: i siti vedono l'IP di casa.");
++      break;
++  }
++  SetHighlight(label, PillColor(route, color_utils::IsDark(colors->GetColor(
++                                           kColorToolbar))));
++}
++
++void VpnStatusButton::OnPressed() {
++  ShowSingletonTab(browser_, GURL("chrome://proxy"));
++}
++
++BEGIN_METADATA(VpnStatusButton)
++END_METADATA
+diff --git a/chrome/browser/ui/views/toolbar/vpn_status_button.h b/chrome/browser/ui/views/toolbar/vpn_status_button.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..5240ece47c720636ac1a1b7f64c456e8730f8e54
+--- /dev/null
++++ b/chrome/browser/ui/views/toolbar/vpn_status_button.h
+@@ -0,0 +1,45 @@
++#ifndef CHROME_BROWSER_UI_VIEWS_TOOLBAR_VPN_STATUS_BUTTON_H_
++#define CHROME_BROWSER_UI_VIEWS_TOOLBAR_VPN_STATUS_BUTTON_H_
++
++#include <optional>
++
++#include "base/memory/raw_ptr.h"
++#include "chrome/browser/fork/vpn_status.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_button.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++
++class BrowserWindowInterface;
++
++// Always shows where the browser goes out from. A click opens the page with the
++// settings of the VPN.
++class VpnStatusButton : public ToolbarButton,
++                        public browser_fork::VpnStatus::Observer {
++  METADATA_HEADER(VpnStatusButton, ToolbarButton)
++
++ public:
++  explicit VpnStatusButton(BrowserWindowInterface* browser);
++  VpnStatusButton(const VpnStatusButton&) = delete;
++  VpnStatusButton& operator=(const VpnStatusButton&) = delete;
++  ~VpnStatusButton() override;
++
++ private:
++  // views::View:
++  void OnThemeChanged() override;
++
++  // ToolbarButton:
++  bool ShouldBlendHighlightColor() const override;
++  std::optional<SkColor> GetHighlightTextColor() const override;
++  std::optional<SkColor> GetHighlightBorderColor() const override;
++
++  // browser_fork::VpnStatus::Observer:
++  void OnRouteChanged() override;
++
++  void OnPressed();
++
++  raw_ptr<BrowserWindowInterface> browser_;
++  PrefChangeRegistrar proxy_pref_;
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_TOOLBAR_VPN_STATUS_BUTTON_H_
+diff --git a/chrome/browser/ui/webui/proxy_config_ui.cc b/chrome/browser/ui/webui/proxy_config_ui.cc
+index d522156dcf18f3ccb23fb2bfb29da2b2b2f1405f..7a4fc0815ee824d875fb23fdabb44570269d8460 100644
+--- a/chrome/browser/ui/webui/proxy_config_ui.cc
++++ b/chrome/browser/ui/webui/proxy_config_ui.cc
+@@ -37,6 +37,7 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/fork/personal_search.h"
+ #include "chrome/browser/fork/temporary_site_data_service.h"
++#include "chrome/browser/fork/vpn_status.h"
+ #include "chrome/browser/search_engines/template_url_service_factory.h"
+ #include "chrome/common/pref_names.h"
+ #include "chrome/common/url_constants.h"
+@@ -90,6 +91,8 @@ class ProxyConfigMessageHandler
+   void OnSetCookieMode(const base::ListValue& args);
+   void OnSetRememberedSites(const base::ListValue& args);
+   void OnSetPersonalSearch(const base::ListValue& args);
++  void OnSetVpnSettings(const base::ListValue& args);
++  void OnSetVpnReserve(const base::ListValue& args);
+ 
+   // net::ProxyConfigService::Observer implementation:
+   // Calls ProxyConfigView.onProxyConfigChanged JavaScript function in the
+@@ -258,6 +261,14 @@ void ProxyConfigMessageHandler::RegisterMessages() {
+       "setRememberedSites",
+       base::BindRepeating(&ProxyConfigMessageHandler::OnSetRememberedSites,
+                           base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "setVpnSettings",
++      base::BindRepeating(&ProxyConfigMessageHandler::OnSetVpnSettings,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "setVpnReserve",
++      base::BindRepeating(&ProxyConfigMessageHandler::OnSetVpnReserve,
++                          base::Unretained(this)));
+   web_ui()->RegisterMessageCallback(
+       "setPersonalSearch",
+       base::BindRepeating(&ProxyConfigMessageHandler::OnSetPersonalSearch,
+@@ -303,6 +314,12 @@ void ProxyConfigMessageHandler::SendForkSettings() {
+     }
+   }
+   settings.Set("personalSearch", search);
++  settings.Set("vpnAddress", prefs->GetString(browser_fork::kVpnAddressPref));
++  settings.Set("vpnDirectSites",
++               prefs->GetList(browser_fork::kVpnDirectSitesPref).Clone());
++  settings.Set("vpnExitCity", prefs->GetString(browser_fork::kVpnExitCityPref));
++  settings.Set("vpnReserve", browser_fork::VpnStatus::Get()->route() ==
++                                 browser_fork::VpnStatus::Route::kDirectReserve);
+   web_ui()->CallJavascriptFunctionUnsafe("ForkSettings.loaded",
+                                          std::move(settings));
+ }
+@@ -333,6 +350,30 @@ void ProxyConfigMessageHandler::OnSetRememberedSites(
+   SendForkSettings();
+ }
+ 
++void ProxyConfigMessageHandler::OnSetVpnSettings(const base::ListValue& list) {
++  if (list.size() == 3 && list[0].is_string() && list[1].is_list() &&
++      list[2].is_string()) {
++    PrefService* prefs = profile_->GetPrefs();
++    prefs->SetString(browser_fork::kVpnAddressPref, list[0].GetString());
++    prefs->SetList(browser_fork::kVpnDirectSitesPref,
++                   list[1].GetList().Clone());
++    prefs->SetString(browser_fork::kVpnExitCityPref, list[2].GetString());
++    browser_fork::VpnStatus::Get()->SettingsChanged();
++  }
++  SendForkSettings();
++}
++
++void ProxyConfigMessageHandler::OnSetVpnReserve(const base::ListValue& list) {
++  if (list.size() == 1 && list[0].is_bool()) {
++    if (list[0].GetBool()) {
++      browser_fork::VpnStatus::Get()->StartDirectReserve();
++    } else {
++      browser_fork::VpnStatus::Get()->EndDirectReserve();
++    }
++  }
++  SendForkSettings();
++}
++
+ void ProxyConfigMessageHandler::OnSetPersonalSearch(
+     const base::ListValue& list) {
+   TemplateURLService* service =
+diff --git a/components/proxy_config/pref_proxy_config_tracker_impl.cc b/components/proxy_config/pref_proxy_config_tracker_impl.cc
+index e18223c77ea18ac9ce964a0791c3853b28c8f8cc..6c8b19c675f025e56c18d42208f529feb7c6003f 100644
+--- a/components/proxy_config/pref_proxy_config_tracker_impl.cc
++++ b/components/proxy_config/pref_proxy_config_tracker_impl.cc
+@@ -13,6 +13,7 @@
+ #include "base/location.h"
+ #include "base/logging.h"
+ #include "base/memory/ptr_util.h"
++#include "base/no_destructor.h"
+ #include "base/observer_list.h"
+ #include "base/strings/string_util.h"
+ #include "base/task/single_thread_task_runner.h"
+@@ -451,6 +452,23 @@ base::WeakPtr<ProxyConfigServiceImpl> ProxyConfigServiceImpl::AsWeakPtr() {
+ 
+ //========================= PrefProxyConfigTrackerImpl =========================
+ 
++namespace {
++
++bool g_direct_reserve = false;
++
++base::RepeatingClosureList& DirectReserveCallbacks() {
++  static base::NoDestructor<base::RepeatingClosureList> callbacks;
++  return *callbacks;
++}
++
++}  // namespace
++
++// static
++void PrefProxyConfigTrackerImpl::SetDirectReserve(bool direct) {
++  g_direct_reserve = direct;
++  DirectReserveCallbacks().Notify();
++}
++
+ PrefProxyConfigTrackerImpl::PrefProxyConfigTrackerImpl(
+     PrefService* pref_service,
+     scoped_refptr<base::SingleThreadTaskRunner>
+@@ -465,6 +483,9 @@ PrefProxyConfigTrackerImpl::PrefProxyConfigTrackerImpl(
+   active_config_state_ = pref_config_state_;
+   active_config_ = pref_config_;
+ 
++  direct_reserve_subscription_ = DirectReserveCallbacks().Add(
++      base::BindRepeating(&PrefProxyConfigTrackerImpl::OnProxyPrefChanged,
++                          base::Unretained(this)));
+   proxy_prefs_.Init(pref_service);
+   proxy_prefs_.Add(
+       proxy_config::prefs::kProxy,
+@@ -516,6 +537,7 @@ PrefProxyConfigTrackerImpl::CreateTrackingProxyConfigService(
+ void PrefProxyConfigTrackerImpl::DetachFromPrefService() {
+   DCHECK(thread_checker_.CalledOnValidThread());
+   // Stop notifications.
++  direct_reserve_subscription_ = {};
+   proxy_prefs_.RemoveAll();
+   pref_service_ = nullptr;
+   proxy_config_service_impl_ = nullptr;
+@@ -615,6 +637,10 @@ ProxyPrefs::ConfigState PrefProxyConfigTrackerImpl::ReadPrefConfig(
+     const PrefService* pref_service,
+     net::ProxyConfigWithAnnotation* config,
+     policy::PolicyService* policy_service) {
++  if (g_direct_reserve) {
++    *config = net::ProxyConfigWithAnnotation::CreateDirect();
++    return ProxyPrefs::CONFIG_POLICY;
++  }
+   // Clear the configuration and source.
+   *config = net::ProxyConfigWithAnnotation();
+   const PrefService::Preference* pref =
+diff --git a/components/proxy_config/pref_proxy_config_tracker_impl.h b/components/proxy_config/pref_proxy_config_tracker_impl.h
+index 34ff0ab9d7dd8f597d052aa9446194193eb27065..a32551c5ba941f0bf204257842deb54d44246117 100644
+--- a/components/proxy_config/pref_proxy_config_tracker_impl.h
++++ b/components/proxy_config/pref_proxy_config_tracker_impl.h
+@@ -8,6 +8,7 @@
+ #include <memory>
+ 
+ #include "base/feature_list.h"
++#include "base/callback_list.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/scoped_refptr.h"
+ #include "base/memory/weak_ptr.h"
+@@ -176,6 +177,10 @@ class PROXY_CONFIG_EXPORT PrefProxyConfigTrackerImpl
+   static void RegisterPrefs(PrefRegistrySimple* registry);
+   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
+ 
++  // While it's on, every tracker reports a direct connection, whatever the prefs
++  // say. In memory only: it ends with the browser, even after a crash.
++  static void SetDirectReserve(bool direct);
++
+   // Creates a proxy configuration from proxy-related preferences of
+   // |pref_service|. Configuration is stored in |config|, return value indicates
+   // whether the configuration is valid. |policy_service| is required to check
+@@ -224,6 +229,7 @@ class PROXY_CONFIG_EXPORT PrefProxyConfigTrackerImpl
+   raw_ptr<policy::PolicyService> policy_service_ = nullptr;
+   base::WeakPtr<ProxyConfigServiceImpl> proxy_config_service_impl_;
+   PrefChangeRegistrar proxy_prefs_;
++  base::CallbackListSubscription direct_reserve_subscription_;
+ 
+   // State of |active_config_|.  |active_config_| is only valid if
+   // |active_config_state_| is not ProxyPrefs::CONFIG_UNSET.
