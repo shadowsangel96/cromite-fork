@@ -12,16 +12,20 @@ aggiornamenti di Cromite come tutto il resto.
 - Build Windows a tappe sui runner gratuiti di GitHub, con prova di avvio dopo ogni build.
 - Pagina "Rete e privacy" (`chrome://proxy`): VPN personale, motore personale, cookie temporanei
   con i giri di login e i siti da ricordare. WebGL resta spento come in Cromite. Provato da
-  `tools/build/prova_funzioni.py`, che su Windows gira dopo ogni build. Restano da fare, nelle
-  voci qui sotto: "Ricorda questo sito" nel pannello del sito, assistente all'accesso.
+  `tools/build/prova_funzioni.py`, che su Windows gira dopo ogni build. Resta da fare, nelle
+  voci qui sotto: assistente all'accesso.
 - Mac, primo giro sulla tavola degli schizzi: vetro vero (il `GlassFrame` di Chromium, NSGlassEffectView)
   su schede e barra come un foglio solo, schede a capsula, pulsanti raggruppati in capsule, condividi e
-  menu insieme, profilo solo icona, niente barra dei segnalibri e niente stella. Mancano scudo, uBlock,
-  Claude, i pannelli e le schede "nella barra". Windows resta standard.
+  menu insieme, profilo solo icona, niente barra dei segnalibri e niente stella. Mancano uBlock,
+  Claude, i loro pannelli e le schede "nella barra". Windows resta standard.
+- Pannello del sito: scudo nella barra e pannello come nella tavola, in tema chiaro e scuro, con la
+  strada dei dati, WebGL per sito e "Ricorda questo sito". Scrive solo protezioni misurate sul browser
+  vero. Manca il contatore dei tentativi (numeri per riga, totale, "Mostra tutte e 15 le categorie",
+  distintivo sullo scudo): non esiste ancora in Cromite, arriva con la voce sul fingerprinting. Su Mac
+  le larghezze del testo hanno il rumore ma i font installati si riconoscono ancora: da chiudere lì.
 - VPN: pillola nella barra con le scritte e i colori degli schizzi, siti che escono diretti, riserva
-  in memoria che finisce da sola (chiusura, 24 ore, server di nuovo su). Rispetto agli schizzi
-  mancano ancora la pagina di errore propria, la finestrella di conferma e la barra rossa: per ora
-  sono barre standard sopra la pagina.
+  in memoria che finisce da sola (chiusura, 24 ore, server di nuovo su), pagina di errore propria,
+  finestrella di conferma e barra rossa come nella tavola Stati.
 - Motore: DuckDuckGo Light predefinito finché non si inserisce SearXNG; se SearXNG non risponde
   entro 8 secondi la ricerca passa da sola a DuckDuckGo Light. L'indirizzo di SearXNG è accettato
   anche in http, che la modalità solo HTTPS di Cromite altrimenti blocca.

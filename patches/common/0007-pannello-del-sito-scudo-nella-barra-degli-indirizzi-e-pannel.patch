@@ -1,0 +1,735 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 21:01:06 +0100
+Subject: [PATCH] Pannello del sito: scudo nella barra degli indirizzi e
+ pannello come negli schizzi
+
+Fork-Patch: common/0007-pannello-del-sito-scudo-nella-barra-degli-indirizzi-e-pannel.patch
+
+diff --git a/chrome/browser/browser_resources.grd b/chrome/browser/browser_resources.grd
+index b2752082640147201a31657d45c3a0aefc0d0c4f..c9606b27a8c7ad1836360d9321dc4a813ed885f8 100644
+--- a/chrome/browser/browser_resources.grd
++++ b/chrome/browser/browser_resources.grd
+@@ -199,6 +199,8 @@
+       <!-- Bromite Proxy Configuration UI -->
+       <include name="IDR_PROXY_CONFIG_HTML" file="resources\proxy_config.html" flattenhtml="true" type="BINDATA" compress="gzip" />
+       <include name="IDR_PROXY_CONFIG_JS" file="resources\proxy_config.js" type="BINDATA" compress="gzip" />
++      <include name="IDR_SITE_PANEL_HTML" file="resources\site_panel.html" type="BINDATA" />
++      <include name="IDR_SITE_PANEL_JS" file="resources\site_panel.js" type="BINDATA" />
+       <if expr="not is_android or enable_extensions_core">
+         <!-- Page not available for guest. -->
+         <include name="IDR_PAGE_NOT_AVAILABLE_FOR_GUEST_APP_HTML" file="resources\page_not_available_for_guest\app.html" type="BINDATA" />
+diff --git a/chrome/browser/resources/site_panel.html b/chrome/browser/resources/site_panel.html
+new file mode 100644
+index 0000000000000000000000000000000000000000..83f0409e5ad919bd1e9b79c55be1c9479444f445
+--- /dev/null
++++ b/chrome/browser/resources/site_panel.html
+@@ -0,0 +1,111 @@
++<!doctype html>
++<html lang="it">
++<head>
++<meta charset="utf-8">
++<title>Informazioni sul sito</title>
++<style>
++:root {
++  --text: #1d1d1f; --sub: #5a5a60; --field: rgba(0,0,0,0.07); --sep: rgba(0,0,0,0.12);
++  --panel: #fafafc; --group: rgba(0,0,0,0.04); --accent: #0066d6; --accent-bg: rgba(0,102,214,0.12);
++  --green: #157038; --green-bg: rgba(21,112,56,0.13); --orange: #9a4f00; --orange-bg: rgba(201,105,0,0.15);
++  --red: #c4001a; --red-bg: rgba(196,0,26,0.11); --stripe-a: rgba(196,0,26,0.12); --stripe-b: rgba(196,0,26,0.03);
++  --canvas-bg: #ffffff; --chip-solid: #ffffff;
++}
++@media (prefers-color-scheme: dark) {
++  :root {
++    --text: #f5f5f7; --sub: #b3b3ba; --field: rgba(255,255,255,0.1); --sep: rgba(255,255,255,0.12);
++    --panel: #28282c; --group: rgba(255,255,255,0.05); --accent: #5aa9ff; --accent-bg: rgba(90,169,255,0.16);
++    --green: #4cd27f; --green-bg: rgba(76,210,127,0.15); --orange: #ffad33; --orange-bg: rgba(255,173,51,0.15);
++    --red: #ff6b6b; --red-bg: rgba(255,107,107,0.15); --stripe-a: rgba(255,107,107,0.18); --stripe-b: rgba(255,107,107,0.05);
++    --canvas-bg: #f4f4f6; --chip-solid: #2c2c30;
++  }
++}
++html, body { margin: 0; width: 372px; background: var(--panel); }
++body { font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--text); text-align: left; }
++button { font: inherit; cursor: pointer; }
++#panel { box-sizing: border-box; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
++header { display: flex; align-items: flex-start; gap: 10px; }
++header > div { flex: 1; min-width: 0; }
++#site { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++#secure { margin-top: 2px; font-size: 12px; color: var(--sub); display: flex; align-items: center; gap: 4px; }
++#close { width: 24px; height: 24px; border: 0; border-radius: 12px; background: var(--field); color: var(--sub); display: flex; align-items: center; justify-content: center; padding: 0; }
++#route { width: 100%; padding: 8px 10px; border: 0; border-radius: 10px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; text-align: left; }
++#route span { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: currentColor; }
++#route b { font-weight: inherit; }
++#route.vpn { background: var(--green-bg); color: var(--green); }
++#route.down { background: var(--orange-bg); color: var(--orange); }
++#route.direct { background: #c4001a; color: #ffffff; }
++#route.normal { background: var(--field); color: var(--sub); }
++h2 { margin: 0; font-size: 13px; font-weight: 700; }
++h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--sub); }
++.hint { margin: 4px 0 8px; font-size: 12px; line-height: 1.4; color: var(--sub); }
++.group { border-radius: 12px; background: var(--group); }
++.row { width: 100%; min-height: 30px; padding: 0 10px; box-sizing: border-box; border: 0; background: transparent; color: var(--text); font-size: 13px; display: flex; align-items: center; gap: 8px; text-align: left; }
++.row + .row { border-top: 1px solid var(--sep); }
++.row > span:first-child { flex: 1; min-width: 0; }
++.chip { padding: 2px 8px; border-radius: 9px; font-size: 11px; font-weight: 600; white-space: nowrap; }
++.rand { background: var(--accent-bg); color: var(--accent); }
++.block { background: var(--red-bg); color: var(--red); }
++.uni { background: var(--field); color: var(--text); }
++.value { font-size: 12px; color: var(--sub); }
++.row svg { color: var(--sub); }
++.previews { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
++figure { margin: 0; }
++.preview { height: 64px; border-radius: 8px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--sep); background: var(--canvas-bg); }
++.preview.blocked { background: repeating-linear-gradient(135deg, var(--stripe-a) 0 7px, var(--stripe-b) 7px 14px); display: flex; align-items: center; justify-content: center; }
++.preview.blocked span { padding: 3px 9px; border-radius: 9px; background: var(--chip-solid); color: var(--red); font-size: 11px; font-weight: 700; }
++figcaption { margin-top: 4px; font-size: 11px; color: var(--sub); }
++#webgl { margin-top: 8px; width: 100%; min-height: 28px; padding: 0 10px; border: 0; border-radius: 10px; background: var(--field); color: var(--accent); font-size: 12px; font-weight: 600; }
++#webgl.on { color: var(--red); }
++[hidden] { display: none !important; }
++</style>
++<script src="site_panel.js"></script>
++</head>
++<body>
++<section id="panel" role="dialog" aria-label="Informazioni sul sito">
++  <header>
++    <div>
++      <div id="site"></div>
++      <div id="secure"><svg id="lock" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg><span id="secure-text"></span></div>
++    </div>
++    <button id="close" aria-label="Chiudi"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
++  </header>
++  <button id="route"><span aria-hidden="true"></span><b id="route-text"></b></button>
++  <div>
++    <h2>Fingerprinting</h2>
++    <p class="hint">Le protezioni attive su ogni sito. Quante volte un sito ci prova si vedrà con il contatore, non ancora pronto.</p>
++    <div class="group">
++      <div class="row"><span>Canvas</span><span class="chip rand">Randomizzato</span></div>
++      <div class="row"><span>WebGL</span><span class="chip block" id="webgl-chip"></span></div>
++      <div class="row"><span>Audio</span><span class="chip rand">Randomizzato</span></div>
++      <div class="row"><span>Font</span><span class="chip rand">Randomizzato</span></div>
++      <div class="row"><span>Schermo</span><span class="chip rand">Randomizzato</span></div>
++      <div class="row"><span>Navigator e Client Hints</span><span class="chip uni">Uniformato</span></div>
++    </div>
++  </div>
++  <div>
++    <h3>Come risponde il browser</h3>
++    <div class="previews">
++      <figure>
++        <div class="preview"><svg width="100%" height="64" viewBox="0 0 160 64" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><rect x="96" y="6" width="56" height="18" fill="#ff6600"></rect><text x="6" y="30" font-family="Arial, sans-serif" font-size="11" fill="#006699">Cwm fjordbank glyphs</text><text x="9" y="46" font-family="Arial, sans-serif" font-size="11" fill="rgba(102,204,0,0.75)">vext quiz</text><rect x="23" y="12" width="2" height="2" fill="#d22"></rect><rect x="61" y="51" width="2" height="2" fill="#2a2"></rect><rect x="118" y="38" width="2" height="2" fill="#22d"></rect><rect x="140" y="53" width="2" height="2" fill="#d2d"></rect><rect x="78" y="17" width="2" height="2" fill="#2dd"></rect><rect x="44" y="57" width="2" height="2" fill="#dd2"></rect><rect x="103" y="49" width="2" height="2" fill="#d22"></rect></svg></div>
++        <figcaption>Canvas · con rumore diverso per sito</figcaption>
++      </figure>
++      <figure id="webgl-off">
++        <div class="preview blocked"><span>WebGL bloccato</span></div>
++        <figcaption>WebGL · nessuna immagine</figcaption>
++      </figure>
++      <figure id="webgl-on" hidden>
++        <div class="preview"><svg width="100%" height="64" viewBox="0 0 160 64" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><polygon points="80,6 142,58 18,58" fill="#2f6fd6" opacity="0.85"></polygon><polygon points="80,6 111,32 49,32" fill="#e8a33a" opacity="0.85"></polygon><polygon points="49,32 80,58 18,58" fill="#3fa36b" opacity="0.8"></polygon></svg></div>
++        <figcaption>WebGL · consentito su questo sito</figcaption>
++      </figure>
++    </div>
++    <button id="webgl"></button>
++  </div>
++  <div class="group">
++    <button class="row" id="remember"><span>Ricorda questo sito</span><span class="value" id="remember-value"></span></button>
++    <button class="row" id="cookies"><span>Cookie e dati dei siti</span><span class="value" id="cookies-value"></span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"></path></svg></button>
++    <button class="row" id="permissions"><span>Autorizzazioni</span><span class="value" id="permissions-value"></span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"></path></svg></button>
++  </div>
++</section>
++</body>
++</html>
+diff --git a/chrome/browser/resources/site_panel.js b/chrome/browser/resources/site_panel.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..f88bd12ea050f7ffa92f22e4a876989154161aa7
+--- /dev/null
++++ b/chrome/browser/resources/site_panel.js
+@@ -0,0 +1,62 @@
++window.SitePanel = (function() {
++  'use strict';
++
++  let state = null;
++
++  const $ = (id) => document.getElementById(id);
++
++  function routeText(s) {
++    const place = s.city ? ' (' + s.city + ')' : '';
++    switch (s.route) {
++      case 'vpn':
++        return 'Esci dalla VPN personale' + place;
++      case 'down':
++        return 'Il server VPN non risponde: nessuna pagina esce diretta';
++      case 'direct':
++        return 'Connessione diretta: i siti vedono l\'IP di casa';
++      default:
++        return 'VPN spenta: esci dalla connessione normale';
++    }
++  }
++
++  function loaded(s) {
++    state = s;
++    $('site').textContent = s.site;
++    $('lock').toggleAttribute('hidden', !s.secure);
++    $('secure-text').textContent =
++        s.secure ? 'Connessione sicura' : 'Connessione non sicura';
++    $('route').className = s.route;
++    $('route-text').textContent = routeText(s);
++    $('webgl-chip').className = 'chip ' + (s.webgl ? 'uni' : 'block');
++    $('webgl-chip').textContent = s.webgl ? 'Consentito' : 'Bloccato';
++    $('webgl-on').hidden = !s.webgl;
++    $('webgl-off').hidden = s.webgl;
++    $('webgl').classList.toggle('on', s.webgl);
++    $('webgl').textContent = s.webgl ? 'Blocca di nuovo WebGL su questo sito' :
++                                       'Consenti WebGL su questo sito';
++    $('remember-value').textContent = s.remembered ? 'Sì' : 'No';
++    $('cookies-value').textContent = s.cookies ? s.cookies + ' in uso' : 'Nessuno';
++    $('permissions-value').textContent =
++        s.permissions ? String(s.permissions) : 'Nessuna';
++  }
++
++  document.addEventListener('DOMContentLoaded', () => {
++    $('close').onclick = () => chrome.send('close');
++    $('route').onclick = () => chrome.send('openVpnSettings');
++    $('webgl').onclick = () => chrome.send('setWebgl', [!state.webgl]);
++    $('remember').onclick = () => chrome.send('setRemembered', [!state.remembered]);
++    $('cookies').onclick = () => chrome.send('openPageInfo');
++    $('permissions').onclick = () => chrome.send('openPageInfo');
++    chrome.send('ready');
++  });
++
++  // Il pannello resta in memoria per qualche secondo: riaprendolo la pagina non si
++  // ricarica, e il sito può essere un altro.
++  document.addEventListener('visibilitychange', () => {
++    if (document.visibilityState === 'visible') {
++      chrome.send('ready');
++    }
++  });
++
++  return {loaded};
++})();
+diff --git a/chrome/browser/ui/views/bubble/webui_bubble_manager.h b/chrome/browser/ui/views/bubble/webui_bubble_manager.h
+index 31794e9f9981454dfcf0d2f5826a387255705e9c..232a2f165cad601a0e4cac687e5472e37f6177cb 100644
+--- a/chrome/browser/ui/views/bubble/webui_bubble_manager.h
++++ b/chrome/browser/ui/views/bubble/webui_bubble_manager.h
+@@ -249,6 +249,10 @@ WebUIBubbleManagerImpl<T>::CreateWebUIBubbleDialog(
+         std::move(widget_initialization_callback_));
+   }
+ 
++  if constexpr (requires { T::kBubbleCornerRadius; }) {
++    bubble_view->set_corner_radius(T::kBubbleCornerRadius);
++  }
++
+   auto weak_ptr = bubble_view->GetWeakPtr();
+   views::BubbleDialogDelegateView::CreateBubble(std::move(bubble_view));
+ 
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+index cbb6e3ee1cf24147529fc3b26f58d3f84e0a0365..1378dd01ed47b7d75fe3302fb13c49ebce99fd6d 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -2,6 +2,9 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/ui/views/bubble/webui_bubble_manager.h"
++#include "chrome/browser/ui/webui/site_panel_ui.h"
++#include "chrome/common/webui_url_constants.h"
+ #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+ 
+ #include <algorithm>
+@@ -2126,6 +2129,28 @@ SkColor LocationBarView::GetSecurityChipColor(
+   return GetColorProvider()->GetColor(id);
+ }
+ 
++bool LocationBarView::ShouldUseSitePanel() const {
++  return browser_ && !is_popup_mode_ && !IsEditingOrEmpty() &&
++         GetLocationBarModel()->GetURL().SchemeIsHTTPOrHTTPS();
++}
++
++void LocationBarView::ShowSitePanel() {
++  if (!site_panel_) {
++    site_panel_ = WebUIBubbleManager::Create<SitePanelUI>(
++        browser_.get(), GURL(chrome::kChromeUISitePanelURL),
++        IDS_TOOLTIP_LOCATION_ICON);
++  }
++  // Where the boards put it: 42 dp below the top of the bar, 4 dp to its left.
++  gfx::Rect anchor = GetBoundsInScreen();
++  anchor.set_x(anchor.x() - 4);
++  anchor.set_size(gfx::Size(1, 42));
++  site_panel_->ShowBubble(anchor, views::BubbleBorder::TOP_LEFT);
++}
++
++bool LocationBarView::IsSitePanelShowing() const {
++  return site_panel_ && site_panel_->GetBubbleWidget();
++}
++
+ bool LocationBarView::ShowPageInfoDialog() {
+   WebContents* contents = GetWebContents();
+   if (!contents) {
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.h b/chrome/browser/ui/views/location_bar/location_bar_view.h
+index e5a30ce42aa40c3630b25fe79238612baeb6b401..7e3c7298e7148612d92aae97bb0d9fd8a1b98a6e 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.h
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.h
+@@ -57,6 +57,7 @@ class BrowserWindowInterface;
+ class CommandUpdater;
+ class ContentSettingBubbleModelDelegate;
+ class OmniboxController;
++class WebUIBubbleManager;
+ class OmniboxContextMenu;
+ enum class OmniboxPart;
+ class OmniboxPopupAimPresenter;
+@@ -305,6 +306,9 @@ class LocationBarView
+   void OnLocationIconPressed(const ui::MouseEvent& event) override;
+   void OnLocationIconDragged(const ui::MouseEvent& event) override;
+   bool ShowPageInfoDialog() override;
++  bool ShouldUseSitePanel() const override;
++  void ShowSitePanel() override;
++  bool IsSitePanelShowing() const override;
+   SkColor GetSecurityChipColor(
+       security_state::SecurityLevel security_level) const override;
+   ui::ImageModel GetLocationIcon(
+@@ -517,6 +521,9 @@ class LocationBarView
+   // window, so this may be NULL.
+   const raw_ptr<Browser> browser_;
+ 
++  // The panel of the shield in the address field, created when first opened.
++  std::unique_ptr<WebUIBubbleManager> site_panel_;
++
+   // May be nullptr in tests.
+   const raw_ptr<Profile> profile_;
+ 
+diff --git a/chrome/browser/ui/views/location_bar/location_icon_view.cc b/chrome/browser/ui/views/location_bar/location_icon_view.cc
+index 9b355a43928455709f35ce2cf6711c0628adb8b8..a1b0fda337b1dd4d2545377fb934bd7b795282b2 100644
+--- a/chrome/browser/ui/views/location_bar/location_icon_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_icon_view.cc
+@@ -47,8 +47,8 @@
+ #include "ui/views/style/platform_style.h"
+ #include "ui/views/view_class_properties.h"
+ 
+-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+ #include "components/vector_icons/vector_icons.h"  // nogncheck
++#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+ #include "ui/gfx/vector_icon_types.h"
+ #endif
+ 
+@@ -118,7 +118,15 @@ bool LocationIconView::ShouldShowLabelAfterAnimation() const {
+   return ShouldShowLabel();
+ }
+ 
++bool LocationIconView::ShowsShield() const {
++  return delegate_->ShouldUseSitePanel() && !GetShowText();
++}
++
+ bool LocationIconView::ShowBubble(const ui::Event& event) {
++  if (ShowsShield()) {
++    delegate_->ShowSitePanel();
++    return true;
++  }
+   const bool success = delegate_->ShowPageInfoDialog();
+   if (success) {
+     MaybeAnimateIcon(true);
+@@ -127,8 +135,9 @@ bool LocationIconView::ShowBubble(const ui::Event& event) {
+ }
+ 
+ bool LocationIconView::IsBubbleShowing() const {
+-  return PageInfoBubbleView::GetShownBubbleType() !=
+-         PageInfoBubbleView::BUBBLE_NONE;
++  return delegate_->IsSitePanelShowing() ||
++         PageInfoBubbleView::GetShownBubbleType() !=
++             PageInfoBubbleView::BUBBLE_NONE;
+ }
+ 
+ void LocationIconView::OnGestureEvent(ui::GestureEvent* event) {
+@@ -303,6 +312,10 @@ void LocationIconView::UpdateIcon() {
+   if (icon.IsEmpty()) {
+     return;
+   }
++  if (ShowsShield()) {
++    icon = ui::ImageModel::FromVectorIcon(vector_icons::kShieldIcon,
++                                          kColorOmniboxText, 16);
++  }
+ 
+   // UpdateIcon() calls are for icon updates not related to the page info
+   // animation, so we stop the page info animation if it is playing.
+@@ -344,7 +357,9 @@ void LocationIconView::UpdateBackground() {
+           is_text_dangerous ? kColorOmniboxSecurityChipDangerousBackground
+                             : kColorOmniboxIconBackground);
+ 
+-  SetBackgroundColor(GetColorProvider()->GetColor(id));
++  // With no attempts on the page the shield of the sketches has no chip.
++  SetBackgroundColor(ShowsShield() ? SK_ColorTRANSPARENT
++                                   : GetColorProvider()->GetColor(id));
+ 
+   if (is_text_dangerous) {
+     ConfigureInkDropForRefresh2023(this, kColorOmniboxSecurityChipInkDropHover,
+diff --git a/chrome/browser/ui/views/location_bar/location_icon_view.h b/chrome/browser/ui/views/location_bar/location_icon_view.h
+index 0a3cb10759d553d40c1dc123af3a0d28d3d4159d..acb3609d9c930216abdedaca6f7c415b3e7c435b 100644
+--- a/chrome/browser/ui/views/location_bar/location_icon_view.h
++++ b/chrome/browser/ui/views/location_bar/location_icon_view.h
+@@ -58,6 +58,12 @@ class LocationIconView : public IconLabelBubbleView {
+     // false otherwise.
+     virtual bool ShowPageInfoDialog() = 0;
+ 
++    // The panel of the shield, on the pages of a site. Not in the other users of
++    // this icon, like the picture-in-picture window.
++    virtual bool ShouldUseSitePanel() const { return false; }
++    virtual void ShowSitePanel() {}
++    virtual bool IsSitePanelShowing() const { return false; }
++
+     // Gets the LocationBarModel.
+     virtual const LocationBarModel* GetLocationBarModel() const = 0;
+ 
+@@ -131,6 +137,10 @@ class LocationIconView : public IconLabelBubbleView {
+   void UpdateBorder() override;
+ 
+  private:
++  // The shield instead of the usual icon. Pages with a warning next to the icon
++  // keep it, and open the usual information.
++  bool ShowsShield() const;
++
+   friend class ToolbarViewTest;
+ 
+   // Returns what the minimum size would be if the preferred size were |size|.
+diff --git a/chrome/browser/ui/webui/BUILD.gn b/chrome/browser/ui/webui/BUILD.gn
+index 0148b75f0458fa75d1b7ab5262a14b352e5835bb..32cb2b454fe5ff93cd1e7bd364f22909e765901e 100644
+--- a/chrome/browser/ui/webui/BUILD.gn
++++ b/chrome/browser/ui/webui/BUILD.gn
+@@ -37,6 +37,8 @@ source_set("configs") {
+     "chrome_web_ui_configs.h",
+     "proxy_config_ui.cc",
+     "proxy_config_ui.h",
++    "site_panel_ui.cc",
++    "site_panel_ui.h",
+   ]
+ 
+   configs += [ "//build/config/compiler:wexit_time_destructors" ]
+diff --git a/chrome/browser/ui/webui/chrome_web_ui_configs.cc b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
+index 51f82d1ea037de3d35e9195113db4dcbfef9602e..f8792ca27f68e8083a8ab5430511188c2926b708 100644
+--- a/chrome/browser/ui/webui/chrome_web_ui_configs.cc
++++ b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
+@@ -51,6 +51,7 @@
+ #include "chrome/browser/ui/webui/policy/policy_ui.h"
+ #include "chrome/browser/ui/webui/predictors/predictors_ui.h"
+ #include "chrome/browser/ui/webui/proxy_config_ui.h"
++#include "chrome/browser/ui/webui/site_panel_ui.h"
+ 
+ #if BUILDFLAG(IS_ANDROID)
+ #include "components/user_scripts/browser/ui/user_scripts_ui.h"
+@@ -492,6 +493,7 @@ void RegisterChromeWebUIConfigs() {
+ #endif  //  !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
+ 
+   map.AddWebUIConfig(std::make_unique<ProxyConfigUIConfig>());
++  map.AddWebUIConfig(std::make_unique<SitePanelUIConfig>());
+ 
+ #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   map.AddWebUIConfig(
+diff --git a/chrome/browser/ui/webui/site_panel_ui.cc b/chrome/browser/ui/webui/site_panel_ui.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..125a4845f53e2d75bf59ea974749dcc9471031a7
+--- /dev/null
++++ b/chrome/browser/ui/webui/site_panel_ui.cc
+@@ -0,0 +1,238 @@
++#include "chrome/browser/ui/webui/site_panel_ui.h"
++
++#include <memory>
++#include <string>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/values.h"
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/fork/temporary_site_data_service.h"
++#include "chrome/browser/fork/vpn_status.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ssl/chrome_security_state_util.h"
++#include "chrome/browser/ui/bubble_anchor_util.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/page_info/page_info_dialog.h"
++#include "chrome/browser/ui/singleton_tabs.h"
++#include "chrome/browser/ui/webui/webui_embedding_context.h"
++#include "chrome/grit/browser_resources.h"
++#include "components/browsing_data/content/browsing_data_helper.h"
++#include "components/content_settings/browser/page_specific_content_settings.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/content_settings/core/common/content_settings.h"
++#include "components/prefs/pref_service.h"
++#include "components/security_state/core/security_state.h"
++#include "components/tabs/public/tab_interface.h"
++#include "components/url_formatter/elide_url.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_ui.h"
++#include "content/public/browser/web_ui_data_source.h"
++#include "content/public/browser/web_ui_message_handler.h"
++#include "url/gurl.h"
++
++namespace {
++
++constexpr ContentSettingsType kPermissions[] = {
++    ContentSettingsType::GEOLOCATION, ContentSettingsType::NOTIFICATIONS,
++    ContentSettingsType::MEDIASTREAM_MIC,
++    ContentSettingsType::MEDIASTREAM_CAMERA};
++
++const char* RouteName(browser_fork::VpnStatus::Route route) {
++  switch (route) {
++    case browser_fork::VpnStatus::Route::kNormal:
++      return "normal";
++    case browser_fork::VpnStatus::Route::kVpn:
++      return "vpn";
++    case browser_fork::VpnStatus::Route::kVpnDown:
++      return "down";
++    case browser_fork::VpnStatus::Route::kDirectReserve:
++      return "direct";
++  }
++}
++
++class SitePanelHandler : public content::WebUIMessageHandler {
++ public:
++  SitePanelHandler() = default;
++  SitePanelHandler(const SitePanelHandler&) = delete;
++  SitePanelHandler& operator=(const SitePanelHandler&) = delete;
++  ~SitePanelHandler() override = default;
++
++  // content::WebUIMessageHandler:
++  void RegisterMessages() override {
++    const auto add = [this](const char* name,
++                            void (SitePanelHandler::*method)(
++                                const base::ListValue&)) {
++      web_ui()->RegisterMessageCallback(
++          name, base::BindRepeating(method, base::Unretained(this)));
++    };
++    add("ready", &SitePanelHandler::OnReady);
++    add("close", &SitePanelHandler::OnClose);
++    add("openPageInfo", &SitePanelHandler::OnOpenPageInfo);
++    add("openVpnSettings", &SitePanelHandler::OnOpenVpnSettings);
++    add("setRemembered", &SitePanelHandler::OnSetRemembered);
++    add("setWebgl", &SitePanelHandler::OnSetWebgl);
++  }
++
++ private:
++  BrowserWindowInterface* GetBrowser() {
++    return webui::GetBrowserWindowInterface(web_ui()->GetWebContents());
++  }
++
++  // The tab the panel talks about. The bubble closes when the tab changes.
++  content::WebContents* GetSiteContents() {
++    BrowserWindowInterface* browser = GetBrowser();
++    tabs::TabInterface* tab = browser ? browser->GetActiveTabInterface() : nullptr;
++    return tab ? tab->GetContents() : nullptr;
++  }
++
++  Profile* GetProfile() { return Profile::FromWebUI(web_ui()); }
++
++  std::string SiteOf(const GURL& url) {
++    return browser_fork::TemporarySiteDataService::SiteForUrl(url);
++  }
++
++  bool IsRemembered(const GURL& url) {
++    const std::string site = SiteOf(url);
++    for (const base::Value& entry :
++         GetProfile()->GetPrefs()->GetList(browser_fork::kRememberedSitesPref)) {
++      if (entry.is_string() && SiteOf(GURL(entry.GetString().find("://") ==
++                                                   std::string::npos
++                                               ? "https://" + entry.GetString()
++                                               : entry.GetString())) == site) {
++        return true;
++      }
++    }
++    return false;
++  }
++
++  base::DictValue BuildState(content::WebContents* contents) {
++    const GURL url = contents->GetLastCommittedURL();
++    HostContentSettingsMap* map =
++        HostContentSettingsMapFactory::GetForProfile(GetProfile());
++    int permissions = 0;
++    for (ContentSettingsType type : kPermissions) {
++      if (map->GetContentSetting(url, url, type) == CONTENT_SETTING_ALLOW) {
++        ++permissions;
++      }
++    }
++    int cookies = 0;
++    if (auto* settings = content_settings::PageSpecificContentSettings::GetForFrame(
++            contents->GetPrimaryMainFrame())) {
++      cookies = browsing_data::GetUniqueHostCount(
++          *settings->allowed_browsing_data_model());
++    }
++    base::DictValue state;
++    state.Set("site", url_formatter::FormatUrlForSecurityDisplay(
++                          url, url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS));
++    state.Set("secure", chrome_security_state::GetSecurityLevel(contents) ==
++                            security_state::SECURE);
++    state.Set("route", RouteName(browser_fork::VpnStatus::Get()->route()));
++    state.Set("city",
++              GetProfile()->GetPrefs()->GetString(browser_fork::kVpnExitCityPref));
++    state.Set("cookies", cookies);
++    state.Set("permissions", permissions);
++    state.Set("remembered", IsRemembered(url));
++    state.Set("webgl", map->GetContentSetting(url, url,
++                                              ContentSettingsType::WEBGL) ==
++                           CONTENT_SETTING_ALLOW);
++    return state;
++  }
++
++  void SendState() {
++    if (content::WebContents* contents = GetSiteContents()) {
++      AllowJavascript();
++      web_ui()->CallJavascriptFunctionUnsafe("SitePanel.loaded",
++                                             BuildState(contents));
++    }
++  }
++
++  void OnReady(const base::ListValue& args) {
++    SendState();
++    if (auto embedder =
++            web_ui()->GetController()->GetAs<SitePanelUI>()->embedder()) {
++      embedder->ShowUI();
++    }
++  }
++
++  void Close() {
++    if (auto embedder =
++            web_ui()->GetController()->GetAs<SitePanelUI>()->embedder()) {
++      embedder->CloseUI();
++    }
++  }
++
++  void OnClose(const base::ListValue& args) { Close(); }
++
++  void OnOpenPageInfo(const base::ListValue& args) {
++    content::WebContents* contents = GetSiteContents();
++    Close();
++    if (contents) {
++      ShowPageInfoDialog(contents, base::DoNothing(),
++                         bubble_anchor_util::Anchor::kLocationBar);
++    }
++  }
++
++  void OnOpenVpnSettings(const base::ListValue& args) {
++    BrowserWindowInterface* browser = GetBrowser();
++    Close();
++    if (browser) {
++      ShowSingletonTab(browser, GURL("chrome://proxy"));
++    }
++  }
++
++  void OnSetRemembered(const base::ListValue& args) {
++    content::WebContents* contents = GetSiteContents();
++    if (!contents || args.size() != 1 || !args[0].is_bool()) {
++      return;
++    }
++    const GURL url = contents->GetLastCommittedURL();
++    const std::string site = SiteOf(url);
++    PrefService* prefs = GetProfile()->GetPrefs();
++    base::ListValue sites =
++        prefs->GetList(browser_fork::kRememberedSitesPref).Clone();
++    sites.EraseIf([&](const base::Value& entry) {
++      return entry.is_string() &&
++             SiteOf(GURL(entry.GetString().find("://") == std::string::npos
++                             ? "https://" + entry.GetString()
++                             : entry.GetString())) == site;
++    });
++    if (args[0].GetBool()) {
++      sites.Append(site);
++    }
++    prefs->SetList(browser_fork::kRememberedSitesPref, std::move(sites));
++    SendState();
++  }
++
++  void OnSetWebgl(const base::ListValue& args) {
++    content::WebContents* contents = GetSiteContents();
++    if (!contents || args.size() != 1 || !args[0].is_bool()) {
++      return;
++    }
++    const GURL url = contents->GetLastCommittedURL();
++    HostContentSettingsMapFactory::GetForProfile(GetProfile())
++        ->SetContentSettingDefaultScope(
++            url, url, ContentSettingsType::WEBGL,
++            args[0].GetBool() ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_DEFAULT);
++    contents->GetController().Reload(content::ReloadType::NORMAL,
++                                     /*check_for_repost=*/true);
++    SendState();
++  }
++};
++
++}  // namespace
++
++SitePanelUI::SitePanelUI(content::WebUI* web_ui)
++    : TopChromeWebUIController(web_ui, /*enable_chrome_send=*/true) {
++  web_ui->AddMessageHandler(std::make_unique<SitePanelHandler>());
++  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
++      Profile::FromWebUI(web_ui), chrome::kChromeUISitePanelHost);
++  source->AddResourcePath("site_panel.js", IDR_SITE_PANEL_JS);
++  source->SetDefaultResource(IDR_SITE_PANEL_HTML);
++}
++
++SitePanelUI::~SitePanelUI() = default;
++
++WEB_UI_CONTROLLER_TYPE_IMPL(SitePanelUI)
+diff --git a/chrome/browser/ui/webui/site_panel_ui.h b/chrome/browser/ui/webui/site_panel_ui.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..c6cef9fa9d1786f55d8ac564751854bf52de4dab
+--- /dev/null
++++ b/chrome/browser/ui/webui/site_panel_ui.h
+@@ -0,0 +1,39 @@
++#ifndef CHROME_BROWSER_UI_WEBUI_SITE_PANEL_UI_H_
++#define CHROME_BROWSER_UI_WEBUI_SITE_PANEL_UI_H_
++
++#include <string_view>
++
++#include "chrome/browser/ui/webui/top_chrome/top_chrome_web_ui_controller.h"
++#include "chrome/browser/ui/webui/top_chrome/top_chrome_webui_config.h"
++#include "chrome/common/webui_url_constants.h"
++#include "content/public/common/url_constants.h"
++
++class SitePanelUI;
++
++class SitePanelUIConfig : public DefaultTopChromeWebUIConfig<SitePanelUI> {
++ public:
++  SitePanelUIConfig()
++      : DefaultTopChromeWebUIConfig(content::kChromeUIScheme,
++                                    chrome::kChromeUISitePanelHost) {}
++
++  // TopChromeWebUIConfig:
++  bool ShouldAutoResizeHost() override { return true; }
++};
++
++// The panel of the shield in the address field: what the browser does on the site
++// of the active tab, as in the sketches.
++class SitePanelUI : public TopChromeWebUIController {
++ public:
++  explicit SitePanelUI(content::WebUI* web_ui);
++  SitePanelUI(const SitePanelUI&) = delete;
++  SitePanelUI& operator=(const SitePanelUI&) = delete;
++  ~SitePanelUI() override;
++
++  static constexpr std::string_view GetWebUIName() { return "SitePanel"; }
++  static constexpr int kBubbleCornerRadius = 18;
++
++ private:
++  WEB_UI_CONTROLLER_TYPE_DECL();
++};
++
++#endif  // CHROME_BROWSER_UI_WEBUI_SITE_PANEL_UI_H_
+diff --git a/chrome/common/webui_url_constants.h b/chrome/common/webui_url_constants.h
+index 8d9032402cb99e23445cfef4d9a0f45ffcedf931..01e99b3edbc5dfebba99a2702d2f2280970a82df 100644
+--- a/chrome/common/webui_url_constants.h
++++ b/chrome/common/webui_url_constants.h
+@@ -224,6 +224,8 @@ inline constexpr char kChromeUINewTabHost[] = "newtab";
+ inline constexpr char kChromeUINewTabFooterHost[] = "newtab-footer";
+ inline constexpr char16_t kChromeUIProxyConfigURL16[] = u"chrome://proxy/";
+ inline constexpr char kChromeUIProxyConfigHost[] = "proxy";
++inline constexpr char kChromeUISitePanelHost[] = "site-panel.top-chrome";
++inline constexpr char kChromeUISitePanelURL[] = "chrome://site-panel.top-chrome/";
+ inline constexpr char kChromeUINewTabPageHost[] = "new-tab-page";
+ inline constexpr char kChromeUINewTabPageThirdPartyHost[] =
+     "new-tab-page-third-party";
+diff --git a/tools/metrics/histograms/metadata/page/histograms.xml b/tools/metrics/histograms/metadata/page/histograms.xml
+index 7e8cb88ba8e66244a7552a1f1e1c62a1160b71c5..27abcc926e90d739349cd6481336a4ce932d2ffd 100644
+--- a/tools/metrics/histograms/metadata/page/histograms.xml
++++ b/tools/metrics/histograms/metadata/page/histograms.xml
+@@ -632,6 +632,7 @@ chromium-metrics-reviews@google.com.
+ 
+ <variants name="WebUIName">
+   <variant name=""/>
++  <variant name=".SitePanel"/>
+   <variant name=".BookmarksSidePanel"/>
+   <variant name=".CommentsSidePanel"/>
+   <variant name=".Compose"/>
