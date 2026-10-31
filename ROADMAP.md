@@ -14,6 +14,10 @@ aggiornamenti di Cromite come tutto il resto.
   con i giri di login e i siti da ricordare. WebGL resta spento come in Cromite. Provato da
   `tools/build/prova_funzioni.py`, che su Windows gira dopo ogni build. Restano da fare, nelle
   voci qui sotto: "Ricorda questo sito" nel pannello del sito, assistente all'accesso.
+- Mac, primo giro sulla tavola degli schizzi: vetro vero (il `GlassFrame` di Chromium, NSGlassEffectView)
+  su schede e barra come un foglio solo, schede a capsula, pulsanti raggruppati in capsule, condividi e
+  menu insieme, profilo solo icona, niente barra dei segnalibri e niente stella. Mancano scudo, uBlock,
+  Claude, i pannelli e le schede "nella barra". Windows resta standard.
 - VPN: pillola nella barra con le scritte e i colori degli schizzi, siti che escono diretti, riserva
   in memoria che finisce da sola (chiusura, 24 ore, server di nuovo su). Rispetto agli schizzi
   mancano ancora la pagina di errore propria, la finestrella di conferma e la barra rossa: per ora

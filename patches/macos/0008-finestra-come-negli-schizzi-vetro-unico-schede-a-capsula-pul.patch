@@ -1,0 +1,803 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 17:59:43 +0100
+Subject: [PATCH] mac: finestra come negli schizzi: vetro unico, schede a
+ capsula, pulsanti raggruppati
+
+Fork-Patch: macos/0008-finestra-come-negli-schizzi-vetro-unico-schede-a-capsula-pul.patch
+
+diff --git a/chrome/browser/ui/layout_constants.cc b/chrome/browser/ui/layout_constants.cc
+index a8b7ef68008b132ec786b91ddcb232c16a0c5750..ab33f11c7aa5b96fdcc8f5b49d856fe7902105e8 100644
+--- a/chrome/browser/ui/layout_constants.cc
++++ b/chrome/browser/ui/layout_constants.cc
+@@ -100,12 +100,20 @@ int GetLayoutConstant(LayoutConstant constant) {
+     case LayoutConstant::kTabCloseButtonSize:
+       return touch_ui ? 24 : (features::IsRoundedIconsEnabled() ? 14 : 16);
+     case LayoutConstant::kTabHeight:
++#if BUILDFLAG(IS_MAC)
++      return 35 + GetLayoutConstant(LayoutConstant::kTabstripToolbarOverlap);
++#else
+       return 34 + GetLayoutConstant(LayoutConstant::kTabstripToolbarOverlap);
++#endif
+     case LayoutConstant::kTabStripHeight:
+       return GetLayoutConstant(LayoutConstant::kTabHeight) +
+              GetLayoutConstant(LayoutConstant::kTabStripPadding);
+     case LayoutConstant::kTabStripPadding:
++#if BUILDFLAG(IS_MAC)
++      return 5;
++#else
+       return 6;
++#endif
+     case LayoutConstant::kTabSeparatorHeight:
+       return touch_ui ? 24 : 20;
+     case LayoutConstant::kTabPreTitlePadding:
+@@ -119,7 +127,11 @@ int GetLayoutConstant(LayoutConstant constant) {
+     case LayoutConstant::kTabstripToolbarOverlap:
+       return 1;
+     case LayoutConstant::kToolbarButtonHeight:
++#if BUILDFLAG(IS_MAC)
++      return touch_ui ? 48 : 32;
++#else
+       return touch_ui ? 48 : 34;
++#endif
+     case LayoutConstant::kToolbarButtonIconSize:
+       return touch_ui ? kDefaultTouchableIconSize
+                       : kDefaultIconSizeChromeRefresh;
+@@ -208,7 +220,11 @@ gfx::Insets GetLayoutInsets(LayoutInset inset) {
+     }
+ 
+     case TOOLBAR_BUTTON:
++#if BUILDFLAG(IS_MAC)
++      return gfx::Insets(touch_ui ? 12 : 6);
++#else
+       return gfx::Insets(touch_ui ? 12 : 7);
++#endif
+ 
+     case BROWSER_APP_MENU_CHIP_PADDING:
+       if (touch_ui) {
+@@ -231,7 +247,11 @@ gfx::Insets GetLayoutInsets(LayoutInset inset) {
+       }
+ 
+     case TOOLBAR_INTERIOR_MARGIN:
++#if BUILDFLAG(IS_MAC)
++      return touch_ui ? gfx::Insets::VH(4, 0) : gfx::Insets::VH(6, 12);
++#else
+       return touch_ui ? gfx::Insets::VH(4, 0) : gfx::Insets::VH(6, 6);
++#endif
+ 
+     case WEBUI_TAB_STRIP_TOOLBAR_INTERIOR_MARGIN:
+       return gfx::Insets::VH(4, 0);
+diff --git a/chrome/browser/ui/tabs/tab_strip_prefs.cc b/chrome/browser/ui/tabs/tab_strip_prefs.cc
+index 24873dd76bd280dd9e4acf1ac48966ff70aea9df..383ff63249f418e900bf7a54acc4e960e5134cbd 100644
+--- a/chrome/browser/ui/tabs/tab_strip_prefs.cc
++++ b/chrome/browser/ui/tabs/tab_strip_prefs.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "build/build_config.h"
+ #include "chrome/browser/ui/tabs/tab_strip_prefs.h"
+ 
+ #include "chrome/browser/profiles/profile.h"
+@@ -21,7 +22,11 @@
+ namespace tabs {
+ 
+ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
++#if BUILDFLAG(IS_MAC)
++  registry->RegisterBooleanPref(prefs::kTabSearchPinnedToTabstrip, false);
++#else
+   registry->RegisterBooleanPref(prefs::kTabSearchPinnedToTabstrip, true);
++#endif
+   registry->RegisterBooleanPref(prefs::kOrganizerPanelPinnedToTabstrip, true);
+   registry->RegisterBooleanPref(
+       prefs::kEverythingMenuPinnedToTabstrip,
+diff --git a/chrome/browser/ui/tabs/tab_style.cc b/chrome/browser/ui/tabs/tab_style.cc
+index e30f48ea46907ab4e530d1acb222bbfc75e15493..401ef276b9d400ee9c417931c49800f699e3c0a6 100644
+--- a/chrome/browser/ui/tabs/tab_style.cc
++++ b/chrome/browser/ui/tabs/tab_style.cc
+@@ -25,7 +25,11 @@ constexpr int kSeparatorHeight = 16;
+ 
+ 
+ // The standard tab width is 232 DIP, excluding separators and overlap.
++#if BUILDFLAG(IS_MAC)
++constexpr int kTabWidth = 210;
++#else
+ constexpr int kTabWidth = 232;
++#endif
+ 
+ // Used in glass frame in cases where we want the tab background colors to
+ // have some transparency, to show the frame underneath.
+@@ -99,7 +103,11 @@ int TabStyle::GetMinimumInactiveWidth() const {
+ }
+ 
+ int TabStyle::GetTopCornerRadius() const {
++#if BUILDFLAG(IS_MAC)
++  return 9;
++#else
+   return 10;
++#endif
+ }
+ 
+ int TabStyle::GetBottomCornerRadius() const {
+@@ -269,7 +277,12 @@ SkColor TabStyle::GetTabBackgroundColor(
+ 
+   switch (state) {
+     case TabStyle::TabSelectionState::kActive:
++#if BUILDFLAG(IS_MAC)
++      // A veil on the glass, stronger on a light frame.
++      return SkColorSetA(SK_ColorWHITE, color_utils::IsDark(color) ? 41 : 224);
++#else
+       return color;
++#endif
+     case TabStyle::TabSelectionState::kSelected: {
+       if (hovered) {
+         return color;
+diff --git a/chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.cc b/chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.cc
+index 4d0ba90b387b0b3e9ff94da82a66e7d2930e2ccb..215833d93310ec18d7bf917599358cdbd0a82bb6 100644
+--- a/chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.cc
++++ b/chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.cc
+@@ -316,5 +316,10 @@ TemplateURLService* ChromeLocationBarModelDelegate::GetTemplateURLService() {
+ // static
+ void ChromeLocationBarModelDelegate::RegisterProfilePrefs(
+     user_prefs::PrefRegistrySyncable* registry) {
++#if BUILDFLAG(IS_MAC)
++  // viaggi.example/roma-tre-giorni, as in the sketches.
++  registry->RegisterBooleanPref(omnibox::kPreventUrlElisionsInOmnibox, false);
++#else
+   registry->RegisterBooleanPref(omnibox::kPreventUrlElisionsInOmnibox, true);
++#endif
+ }
+diff --git a/chrome/browser/ui/views/bookmarks/bookmark_page_action_controller.cc b/chrome/browser/ui/views/bookmarks/bookmark_page_action_controller.cc
+index ffe4536ee19f1a42bb9f424e113f86a219b60531..d32a86dfaeee05c0e47a2235a2e063d36d098f31 100644
+--- a/chrome/browser/ui/views/bookmarks/bookmark_page_action_controller.cc
++++ b/chrome/browser/ui/views/bookmarks/bookmark_page_action_controller.cc
+@@ -130,9 +130,14 @@ void BookmarkPageActionController::UpdatePageActionVisibility() {
+ }
+ 
+ bool BookmarkPageActionController::ShouldShowPageAction() const {
++#if BUILDFLAG(IS_MAC)
++  // No star in the address field on the Mac: Cmd+D and the menu still work.
++  return false;
++#else
+   const auto& url = tab().GetContents()->GetLastCommittedURL();
+   return browser_defaults::bookmarks_enabled &&
+          edit_bookmarks_enabled_.GetValue() && url.is_valid() && !IsNTPUrl(url);
++#endif
+ }
+ 
+ void BookmarkPageActionController::SetStarred(bool starred) {
+diff --git a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
+index fd63fdec82640fdb42de8388dfd691900f706674..e249d046f1df0a9de0f0175d54c49dac0597c4ec 100644
+--- a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
++++ b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
+@@ -66,6 +66,7 @@
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/mojom/window_show_state.mojom.h"
+ #include "ui/base/ui_base_features.h"
++#include "ui/gfx/color_utils.h"
+ #include "ui/native_theme/native_theme.h"
+ #import "ui/views/cocoa/native_widget_mac_ns_window_host.h"
+ #include "ui/views/interaction/element_tracker_views.h"
+@@ -1079,4 +1080,14 @@ - (NSTouchBar*)makeTouchBar {
+ 
+   tint_view_.layer.backgroundColor =
+       [NSColor colorWithSRGBRed:r green:g blue:b alpha:a].CGColor;
++
++  // The neutral glass of the sketches, whatever the color of the theme.
++  // It follows the theme of the browser, which can differ from the system's.
++  const bool is_dark = color_utils::IsDark(theme_color);
++  tint_view_.layer.backgroundColor =
++      [NSColor colorWithSRGBRed:(is_dark ? 38 : 246) / 255.0
++                          green:(is_dark ? 38 : 246) / 255.0
++                           blue:(is_dark ? 42 : 248) / 255.0
++                          alpha:is_dark ? 0.58 : 0.6]
++          .CGColor;
+ }
+diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+index 75f02715c7af13fa992eb95586cfbd860286bef6..51091d5ee0d5d1c14719508f5cef043ffd512576 100644
+--- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+@@ -1323,7 +1323,12 @@ void BrowserViewTabbedLayoutImpl::ConfigureTopContainerBackground(
+   CHECK(layout_data_);
+   // The top container always draws an opaque background in tabbed browser mode
+   // to avoid cracking between visual elements.
++#if BUILDFLAG(IS_MAC)
++  // Except that on the Mac tabs and toolbar are one sheet of glass.
++  background->SetVisible(!in_glass_mode());
++#else
+   background->SetVisible(true);
++#endif
+ 
+   // In immersive mode and ChromeOS touch UI mode, the top Chrome UI is
+   // parented to the `top_container()` and the frame header is not visible.
+@@ -1586,6 +1591,11 @@ void BrowserViewTabbedLayoutImpl::DoPostLayoutVisualAdjustments(
+   CHECK(toolbar_background)
+       << "Expected toolbar to have a CustomCornersBackground.";
+ 
++#if BUILDFLAG(IS_MAC)
++  toolbar_background->SetPrimaryColor(CustomCorners::ColorChoiceWithAlpha(
++      CustomCorners::ToolbarTheme(), in_glass_mode() ? 0.f : 1.f));
++#endif
++
+   // Set toolbar corners.
+   CustomCornersBackground::Corners toolbar_corners;
+   switch (layout_data_->tab_strip_type) {
+@@ -1593,7 +1603,11 @@ void BrowserViewTabbedLayoutImpl::DoPostLayoutVisualAdjustments(
+       const gfx::Rect toolbar_bounds = views().toolbar->GetBoundsInScreen();
+       const gfx::Rect tabstrip_bounds =
+           views().horizontal_tab_strip_region_view->GetBoundsInScreen();
+-      if (toolbar_bounds.y() <= tabstrip_bounds.bottom()) {
++      bool curved_toolbar = toolbar_bounds.y() <= tabstrip_bounds.bottom();
++#if BUILDFLAG(IS_MAC)
++      curved_toolbar = curved_toolbar && !in_glass_mode();
++#endif
++      if (curved_toolbar) {
+         // Trailing curve is always shown for normal horizontal tabstrip when
+         // the two are vertically adjacent.
+         toolbar_corners[CornerOrientation::kTopTrailing].type =
+@@ -1691,6 +1705,12 @@ void BrowserViewTabbedLayoutImpl::DoPostLayoutVisualAdjustments(
+     // Do the main area cutouts. These adjustments need to be made regardless of
+     // whether the current window is in glass mode.
+     if (features::IsGlassFrameEnabled()) {
++#if BUILDFLAG(IS_MAC)
++      // With a side panel open this background must not cover the glass.
++      if (in_glass_mode()) {
++        main_background_cutout_views.push_back(views().top_container);
++      }
++#endif
+       main_background->SetCutoutFrom(main_background_cutout_views);
+       main_background->SetCornerColor(frame_color);
+     }
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+index 335b2902fd43016d45fa176e4aeec65ec87dcb64..cbb6e3ee1cf24147529fc3b26f58d3f84e0a0365 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -139,6 +139,7 @@
+ #include "ui/compositor/layer.h"
+ #include "ui/compositor/paint_recorder.h"
+ #include "ui/events/event.h"
++#include "ui/gfx/color_utils.h"
+ #include "ui/gfx/animation/slide_animation.h"
+ #include "ui/gfx/canvas.h"
+ #include "ui/gfx/geometry/skia_conversions.h"
+@@ -1358,6 +1359,23 @@ void LocationBarView::RefreshBackground() {
+     border_color = color_provider->GetColor(kColorLocationBarBorderOnMismatch);
+   }
+ 
++  bool glass = false;
++#if BUILDFLAG(IS_MAC)
++  // At rest the field is a veil on the glass; while typing it stays solid, like
++  // the list of results under it.
++  glass = features::IsGlassFrameEnabled() && !is_popup_mode_ &&
++          !is_caret_visible && !input_in_progress && !high_contrast;
++  if (glass) {
++    const bool dark =
++        color_utils::IsDark(color_provider->GetColor(kColorToolbar));
++    background_color_ = SkColorSetA(
++        SK_ColorWHITE,
++        (dark ? 0x14 : 0x80) + static_cast<int>(opacity * 0x14));
++    border_color = dark ? SkColorSetA(SK_ColorWHITE, 0x1F)
++                        : SkColorSetA(SK_ColorBLACK, 0x1A);
++  }
++#endif
++
+   if (is_popup_mode_) {
+     SetBackground(views::CreateSolidBackground(background_color_));
+   } else {
+@@ -1369,7 +1387,8 @@ void LocationBarView::RefreshBackground() {
+ 
+   // Keep the views::Textfield in sync. It needs an opaque background to
+   // correctly enable subpixel AA.
+-  omnibox_view_->SetBackgroundColor(background_color_);
++  omnibox_view_->SetBackgroundColor(glass ? SK_ColorTRANSPARENT
++                                          : background_color_);
+ 
+   // The divider between indicators and request chips should have the same color
+   // as the omnibox.
+diff --git a/chrome/browser/ui/views/profiles/avatar_toolbar_button.cc b/chrome/browser/ui/views/profiles/avatar_toolbar_button.cc
+index f0e3352f9023855a54b04a130d04f78335ec395c..e246e325c4b1633c38f2a1f6497993a25d4b0d0d 100644
+--- a/chrome/browser/ui/views/profiles/avatar_toolbar_button.cc
++++ b/chrome/browser/ui/views/profiles/avatar_toolbar_button.cc
+@@ -253,7 +253,12 @@ void AvatarToolbarButton::UpdateText() {
+   const auto* const color_provider = GetColorProvider();
+   CHECK(color_provider);
+ 
++#if BUILDFLAG(IS_MAC)
++  // Only the round icon, never a text next to it.
++  SetHighlight(std::u16string(), std::nullopt);
++#else
+   AnimateTextChange(state_provider, color_provider);
++#endif
+ 
+   SetTooltipText(state_provider->GetAvatarTooltipText());
+   UpdateAccessibilityLabel();
+@@ -563,5 +568,11 @@ bool AvatarToolbarButton::
+ }
+ #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+ 
++#if BUILDFLAG(IS_MAC)
++int AvatarToolbarButton::GetRoundedCornerRadius() const {
++  return 16;
++}
++#endif
++
+ BEGIN_METADATA(AvatarToolbarButton)
+ END_METADATA
+diff --git a/chrome/browser/ui/views/profiles/avatar_toolbar_button.h b/chrome/browser/ui/views/profiles/avatar_toolbar_button.h
+index d54084a7cdb5dd44f1c4ffb83cb382a1e63a5cc2..42e972a2b45ea7d3343e538a2924dd27f8f9a171 100644
+--- a/chrome/browser/ui/views/profiles/avatar_toolbar_button.h
++++ b/chrome/browser/ui/views/profiles/avatar_toolbar_button.h
+@@ -5,6 +5,7 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_PROFILES_AVATAR_TOOLBAR_BUTTON_H_
+ #define CHROME_BROWSER_UI_VIEWS_PROFILES_AVATAR_TOOLBAR_BUTTON_H_
+ 
++#include "build/build_config.h"
+ #include "base/callback_list.h"
+ #include "base/functional/callback.h"
+ #include "base/gtest_prod_util.h"
+@@ -91,6 +92,11 @@ class AvatarToolbarButton : public ToolbarButton,
+   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
+ 
+  private:
++#if BUILDFLAG(IS_MAC)
++  // ToolbarButton:
++  int GetRoundedCornerRadius() const override;
++#endif
++
+   // Used by tests to access the private state_manager_ for verification.
+   friend class ::AvatarToolbarButtonTestAccessor;
+   FRIEND_TEST_ALL_PREFIXES(AvatarToolbarButtonTest,
+diff --git a/chrome/browser/ui/views/tabs/horizontal_tab_style_views.cc b/chrome/browser/ui/views/tabs/horizontal_tab_style_views.cc
+index a42dfa7514e70ef4953a3b8d47d074bf8de35cf6..b4bad8e49aa309e9f0b1d265aace87695668ed83 100644
+--- a/chrome/browser/ui/views/tabs/horizontal_tab_style_views.cc
++++ b/chrome/browser/ui/views/tabs/horizontal_tab_style_views.cc
+@@ -36,6 +36,8 @@
+ #include "ui/gfx/geometry/insets.h"
+ #include "ui/gfx/geometry/skia_conversions.h"
+ #include "ui/gfx/scoped_canvas.h"
++#include "ui/gfx/shadow_value.h"
++#include "ui/gfx/skia_paint_util.h"
+ #include "ui/views/widget/widget.h"
+ 
+ HorizontalTabStyleViews::HorizontalTabStyleViews(
+@@ -83,8 +85,13 @@ SkPath HorizontalTabStyleViews::GetPath(TabStyle::PathType path_type,
+                                   scale;
+ 
+   // Selected, hover, and inactive tab fills are a detached squarcle tab.
+-  if (path_type == TabStyle::PathType::kHighlight ||
+-      path_type == TabStyle::PathType::kHitTest) {
++  bool detached_tab = path_type == TabStyle::PathType::kHighlight ||
++                      path_type == TabStyle::PathType::kHitTest;
++#if BUILDFLAG(IS_MAC)
++  // On the glass frame the active tab floats too, without the curved feet.
++  detached_tab = detached_tab || delegate_->IsGlassFrame();
++#endif
++  if (detached_tab) {
+     float top_left_corner_radius = content_corner_radius;
+     float top_right_corner_radius = content_corner_radius;
+     float bottom_left_corner_radius = content_corner_radius;
+@@ -521,6 +528,11 @@ TabStyle::SeparatorOpacities HorizontalTabStyleViews::GetSeparatorOpacities(
+ 
+ float HorizontalTabStyleViews::GetSeparatorOpacity(bool for_layout,
+                                                    bool leading) const {
++#if BUILDFLAG(IS_MAC)
++  if (delegate_->IsGlassFrame()) {
++    return 0.0f;
++  }
++#endif
+   // Do not show separators if the tab strip is in a decluttered state.
+   if (features::IsTabStripDeclutterEnabled() &&
+       delegate_->GetTabCount() >=
+@@ -712,6 +724,24 @@ void HorizontalTabStyleViews::PaintTabBackground(
+     std::optional<int> fill_id) const {
+   std::optional<SkColor> group_color = delegate_->GetGroupColor();
+ 
++#if BUILDFLAG(IS_MAC)
++  if (delegate_->IsGlassFrame() && delegate_->IsActive()) {
++    // The soft shadow under the floating tab. Clipped out of the tab itself,
++    // whose fill is translucent.
++    gfx::ScopedCanvas scoped_canvas(canvas);
++    const float scale = canvas->UndoDeviceScaleFactor();
++    const SkPath path = GetPath(TabStyle::PathType::kHighlight, scale, {});
++    canvas->sk_canvas()->clipPath(path, SkClipOp::kDifference,
++                                  /*do_anti_alias=*/true);
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setLooper(gfx::CreateShadowDrawLooper(
++        {gfx::ShadowValue(gfx::Vector2d(0, std::round(scale)), 3 * scale,
++                          SkColorSetA(SK_ColorBLACK, 0x20))}));
++    canvas->DrawPath(path, flags);
++  }
++#endif
++
+   PaintTabBackgroundFill(canvas, hovered, fill_id);
+ 
+   const auto* widget = delegate_->GetView()->GetWidget();
+@@ -765,6 +795,10 @@ void HorizontalTabStyleViews::PaintTabBackgroundFill(
+                                              browser_view, image);
+   }
+ 
++#if BUILDFLAG(IS_MAC)
++  // The translucent fill of the active tab would add up with itself.
++  hovered = hovered && !(delegate_->IsGlassFrame() && delegate_->IsActive());
++#endif
+   if (hovered) {
+     PaintBackgroundHover(canvas, scale);
+   }
+diff --git a/chrome/browser/ui/views/toolbar/BUILD.gn b/chrome/browser/ui/views/toolbar/BUILD.gn
+index afb71bd510a34f4a30f894175f923de79decd4d0..b209ab8240a6cb7f03f167180e7e00a6c209a928 100644
+--- a/chrome/browser/ui/views/toolbar/BUILD.gn
++++ b/chrome/browser/ui/views/toolbar/BUILD.gn
+@@ -164,6 +164,12 @@ source_set("impl") {
+     "webui_toolbar_extensions_container_wrapper.cc",
+     "webui_toolbar_web_view.cc",
+   ]
++  if (is_mac) {
++    sources += [
++      "share_page_mac.h",
++      "share_page_mac.mm",
++    ]
++  }
+ 
+   deps = [
+     ":toolbar",
+diff --git a/chrome/browser/ui/views/toolbar/browser_app_menu_button.cc b/chrome/browser/ui/views/toolbar/browser_app_menu_button.cc
+index 8dac79b31476a1187c3cf80690ebb1f4ab248a6f..26fb7b6d3d13ddf34968cc93e63fbdc49c75ae48 100644
+--- a/chrome/browser/ui/views/toolbar/browser_app_menu_button.cc
++++ b/chrome/browser/ui/views/toolbar/browser_app_menu_button.cc
+@@ -35,6 +35,7 @@
+ #include "ui/gfx/color_utils.h"
+ #include "ui/gfx/image/canvas_image_source.h"
+ #include "ui/gfx/paint_vector_icon.h"
++#include "ui/views/vector_icons.h"
+ #include "ui/views/animation/animation_delegate_views.h"
+ #include "ui/views/animation/ink_drop.h"
+ #include "ui/views/animation/ink_drop_highlight.h"
+@@ -151,12 +152,16 @@ void BrowserAppMenuButton::UpdateThemeBasedState() {
+ }
+ 
+ void BrowserAppMenuButton::UpdateIcon() {
++#if BUILDFLAG(IS_MAC)
++  const gfx::VectorIcon& icon = views::kMoreHorizIcon;
++#else
+   const gfx::VectorIcon& icon =
+       ui::TouchUiController::Get()->touch_ui()
+           ? features::IsRoundedIconsEnabled() ? kMoreVertIcon
+                                               : kBrowserToolsTouchOldIcon
+       : features::IsRoundedIconsEnabled() ? kMoreVertIcon
+                                           : kBrowserToolsChromeRefreshOldIcon;
++#endif
+   const int icon_size = GetIconSize();
+ 
+   for (auto state : kButtonStates) {
+diff --git a/chrome/browser/ui/views/toolbar/share_page_mac.h b/chrome/browser/ui/views/toolbar/share_page_mac.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..aef20da857ba5483d3950d96e3754b9984c2911c
+--- /dev/null
++++ b/chrome/browser/ui/views/toolbar/share_page_mac.h
+@@ -0,0 +1,13 @@
++#ifndef CHROME_BROWSER_UI_VIEWS_TOOLBAR_SHARE_PAGE_MAC_H_
++#define CHROME_BROWSER_UI_VIEWS_TOOLBAR_SHARE_PAGE_MAC_H_
++
++class GURL;
++
++namespace views {
++class View;
++}  // namespace views
++
++// Opens the system share menu for `url`, under `anchor`.
++void ShowMacSharePicker(views::View* anchor, const GURL& url);
++
++#endif  // CHROME_BROWSER_UI_VIEWS_TOOLBAR_SHARE_PAGE_MAC_H_
+diff --git a/chrome/browser/ui/views/toolbar/share_page_mac.mm b/chrome/browser/ui/views/toolbar/share_page_mac.mm
+new file mode 100644
+index 0000000000000000000000000000000000000000..f1093c76a52a8c475701b7ee4167b7188af3cf8c
+--- /dev/null
++++ b/chrome/browser/ui/views/toolbar/share_page_mac.mm
+@@ -0,0 +1,26 @@
++#include "chrome/browser/ui/views/toolbar/share_page_mac.h"
++
++#import <AppKit/AppKit.h>
++
++#import "net/base/apple/url_conversions.h"
++#include "ui/gfx/geometry/rect.h"
++#include "ui/views/view.h"
++#include "ui/views/widget/widget.h"
++#include "url/gurl.h"
++
++void ShowMacSharePicker(views::View* anchor, const GURL& url) {
++  if (!url.is_valid() || !anchor->GetWidget()) {
++    return;
++  }
++  NSView* view = anchor->GetWidget()->GetNativeView().GetNativeNSView();
++  const gfx::Rect rect = anchor->ConvertRectToWidget(anchor->GetLocalBounds());
++  // The picker has to stay alive while it's showing.
++  static NSSharingServicePicker* picker;
++  picker = [[NSSharingServicePicker alloc]
++      initWithItems:@[ net::NSURLWithGURL(url) ]];
++  [picker showRelativeToRect:NSMakeRect(rect.x(),
++                                        view.bounds.size.height - rect.bottom(),
++                                        rect.width(), rect.height())
++                      ofView:view
++               preferredEdge:NSRectEdgeMinY];
++}
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_button.cc b/chrome/browser/ui/views/toolbar/toolbar_button.cc
+index d4c4f01c14c21b5ca05b84e300b1e3c430355f56..70a278206f316f4d4485cfa63df97f3b9be6c857 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_button.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_button.cc
+@@ -165,6 +165,12 @@ void ToolbarButton::ClearHighlight() {
+ }
+ 
+ int ToolbarButton::GetRoundedCornerRadius() const {
++#if BUILDFLAG(IS_MAC)
++  // The hover of a button inside a capsule. Labelled pills stay round.
++  if (GetText().empty()) {
++    return 8;
++  }
++#endif
+   return ChromeLayoutProvider::Get()->GetCornerRadiusMetric(
+       views::Emphasis::kMaximum, GetTargetSize());
+ }
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index f0855b6e25a8524e764f488e1cee16359fc7e8c0..8750890fe635d65c44f809f2571aea6cf6770505 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -96,6 +96,20 @@
+ #include "chrome/browser/ui/views/toolbar/app_menu_control.h"
+ #include "chrome/browser/ui/views/toolbar/avatar_toolbar_button_interface.h"
+ #include "chrome/browser/ui/views/toolbar/vpn_status_button.h"
++#if BUILDFLAG(IS_MAC)
++#include <cmath>
++#include <initializer_list>
++
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/views/toolbar/share_page_mac.h"
++#include "components/omnibox/browser/vector_icons.h"
++#include "third_party/skia/include/core/SkRRect.h"
++#include "ui/gfx/color_utils.h"
++#include "ui/gfx/geometry/skia_conversions.h"
++#include "ui/gfx/scoped_canvas.h"
++#include "ui/gfx/shadow_value.h"
++#include "ui/gfx/skia_paint_util.h"
++#endif
+ #include "chrome/browser/ui/views/toolbar/back_forward_button.h"
+ #include "chrome/browser/ui/views/toolbar/browser_app_menu_button.h"
+ #include "chrome/browser/ui/views/toolbar/chrome_labs/chrome_labs_coordinator.h"
+@@ -247,12 +261,51 @@ bool IsPositionInWindowCaptionForView(const views::View* view,
+ }
+ 
+ void SetRefreshMargins(views::View* button, bool expanded) {
++#if !BUILDFLAG(IS_MAC)  // On the Mac the capsules decide the margins.
+   button->SetProperty(
+       views::kMarginsKey,
+       gfx::Insets::VH(0, expanded ? kBrowserAppMenuRefreshExpandedMargin
+                                   : kBrowserAppMenuRefreshCollapsedMargin));
++#endif
+ }
+ 
++#if BUILDFLAG(IS_MAC)
++// The capsule of the sketches around a group of buttons: a veil on the glass, a
++// thin edge and a soft shadow.
++void PaintCapsule(gfx::Canvas* canvas, const gfx::Rect& rect, bool dark) {
++  gfx::ScopedCanvas scoped_canvas(canvas);
++  const float scale = canvas->UndoDeviceScaleFactor();
++  gfx::RectF bounds(rect);
++  bounds.Scale(scale);
++  const float radius = bounds.height() / 2;
++  const SkRRect capsule =
++      SkRRect::MakeRectXY(gfx::RectFToSkRect(bounds), radius, radius);
++  {
++    gfx::ScopedCanvas shadow_canvas(canvas);
++    canvas->sk_canvas()->clipRRect(capsule, SkClipOp::kDifference,
++                                   /*do_anti_alias=*/true);
++    cc::PaintFlags shadow;
++    shadow.setAntiAlias(true);
++    shadow.setLooper(gfx::CreateShadowDrawLooper(
++        {gfx::ShadowValue(gfx::Vector2d(0, std::round(scale)), 3 * scale,
++                          SkColorSetA(SK_ColorBLACK, dark ? 0x66 : 0x1F))}));
++    canvas->sk_canvas()->drawRRect(capsule, shadow);
++  }
++  cc::PaintFlags fill;
++  fill.setAntiAlias(true);
++  fill.setColor(SkColorSetA(SK_ColorWHITE, dark ? 0x1A : 0x99));
++  canvas->sk_canvas()->drawRRect(capsule, fill);
++
++  cc::PaintFlags edge;
++  edge.setAntiAlias(true);
++  edge.setStyle(cc::PaintFlags::kStroke_Style);
++  edge.setStrokeWidth(scale / 2);
++  edge.setColor(dark ? SkColorSetA(SK_ColorWHITE, 0x1F)
++                     : SkColorSetA(SK_ColorBLACK, 0x1A));
++  canvas->sk_canvas()->drawRRect(capsule, edge);
++}
++#endif  // BUILDFLAG(IS_MAC)
++
+ }  // namespace
+ 
+ ////////////////////////////////////////////////////////////////////////////////
+@@ -396,7 +449,9 @@ void ToolbarView::Init() {
+       !features::IsWebUIExtensionsContainerEnabled()) {
+     extensions_container = std::make_unique<ExtensionsToolbarDesktop>(browser_);
+ 
++#if !BUILDFLAG(IS_MAC)
+     toolbar_divider = std::make_unique<ToolbarDivider>();
++#endif
+   }
+ 
+   std::unique_ptr<MediaToolbarButtonView> media_button;
+@@ -595,6 +650,14 @@ void ToolbarView::Init() {
+ 
+   // WebUI app menu button handles these internally, so no need to set these
+   // properties here, and the control is added as part of the WebUI toolbar.
++#if BUILDFLAG(IS_MAC)
++  auto share_button = std::make_unique<ToolbarButton>(base::BindRepeating(
++      &ToolbarView::ShareCurrentPage, base::Unretained(this)));
++  share_button->SetVectorIcon(omnibox::kShareMacChromeRefreshOldIcon);
++  share_button->SetTooltipText(l10n_util::GetStringUTF16(IDS_SHARE_MAC));
++  share_button_ = AddChildView(std::move(share_button));
++#endif
++
+   if (!features::IsWebUIAppMenuButtonEnabled()) {
+     auto app_menu_button = std::make_unique<BrowserAppMenuButton>(this);
+     app_menu_button->SetFlipCanvasOnPaintForRTLUI(true);
+@@ -1487,6 +1550,37 @@ bool ToolbarView::AcceleratorPressed(const ui::Accelerator& accelerator) {
+   return AccessiblePaneView::AcceleratorPressed(accelerator);
+ }
+ 
++#if BUILDFLAG(IS_MAC)
++void ToolbarView::OnPaintBackground(gfx::Canvas* canvas) {
++  views::AccessiblePaneView::OnPaintBackground(canvas);
++  if (display_mode_ != DisplayMode::kNormal) {
++    return;
++  }
++  const bool dark = color_utils::IsDark(GetColorProvider()->GetColor(kColorToolbar));
++  const auto capsule = [&](std::initializer_list<views::View*> group) {
++    gfx::Rect rect;
++    for (views::View* view : group) {
++      if (view && view->GetVisible()) {
++        rect.Union(view->GetMirroredBounds());
++      }
++    }
++    if (!rect.IsEmpty()) {
++      PaintCapsule(canvas, rect, dark);
++    }
++  };
++  capsule({back_.get(), forward_.get()});
++  capsule({reload_.get()});
++  capsule({avatar_.get()});
++  capsule({share_button_.get(), app_menu_button_.get()});
++}
++
++void ToolbarView::ShareCurrentPage() {
++  if (content::WebContents* contents = GetWebContents()) {
++    ShowMacSharePicker(share_button_, contents->GetLastCommittedURL());
++  }
++}
++#endif  // BUILDFLAG(IS_MAC)
++
+ void ToolbarView::ChildPreferredSizeChanged(views::View* child) {
+   InvalidateLayout();
+   if (size() != GetPreferredSize()) {
+@@ -1544,6 +1638,23 @@ void ToolbarView::InitLayout() {
+       .SetCollapseMargins(true)
+       .SetDefault(views::kMarginsKey, gfx::Insets::VH(0, default_margin));
+ 
++#if BUILDFLAG(IS_MAC)
++  // Inside a capsule the buttons touch; between capsules there are 6 points.
++  for (views::View* view : std::initializer_list<views::View*>{
++           back_.get(), forward_.get(), share_button_.get(),
++           app_menu_button_.get()}) {
++    if (view) {
++      view->SetProperty(views::kMarginsKey, gfx::Insets());
++    }
++  }
++  for (views::View* view :
++       std::initializer_list<views::View*>{reload_.get(), avatar_.get()}) {
++    if (view) {
++      view->SetProperty(views::kMarginsKey, gfx::Insets::VH(0, 6));
++    }
++  }
++#endif
++
+   // If the Views location bar is in use, set its properties here.
+   if (location_bar_view_) {
+     location_bar_view_->SetProperty(views::kFlexBehaviorKey,
+@@ -1722,11 +1833,20 @@ void ToolbarView::LayoutCommon() {
+   if (features::IsWebUIBackForwardButtonEnabled()) {
+     toolbar_webview_->SetIsMaximizedOrFullscreen(is_maximized_or_fullscreen);
+   } else {
++#if BUILDFLAG(IS_MAC)
++    // The capsule follows the bounds of the button.
++    back_->SetLeadingMargin(0);
++#else
+     const int margin = is_maximized_or_fullscreen ? interior_margin.left() : 0;
+     back_->SetLeadingMargin(margin);
++#endif
+   }
+ 
++#if BUILDFLAG(IS_MAC)
++  GetAppMenuControl()->SetIsMaximizedOrFullscreen(false);
++#else
+   GetAppMenuControl()->SetIsMaximizedOrFullscreen(is_maximized_or_fullscreen);
++#endif
+ 
+   if (toolbar_divider_ && extensions_container_) {
+     views::ManualLayoutUtil(layout_manager_)
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.h b/chrome/browser/ui/views/toolbar/toolbar_view.h
+index 2b6016a598f546e9d207007ac6fd684c8e2be44c..0f139d51d89dcfc36e8399f94cbc055b677b8fd3 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.h
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.h
+@@ -9,6 +9,7 @@
+ #include <optional>
+ #include <vector>
+ 
++#include "build/build_config.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/scoped_observation.h"
+@@ -233,6 +234,9 @@ class ToolbarView : public views::AccessiblePaneView,
+   gfx::Size GetMinimumSize() const override;
+   void Layout(PassKey) override;
+   void OnThemeChanged() override;
++#if BUILDFLAG(IS_MAC)
++  void OnPaintBackground(gfx::Canvas* canvas) override;
++#endif
+   bool AcceleratorPressed(const ui::Accelerator& acc) override;
+   void ChildPreferredSizeChanged(views::View* child) override;
+   void ChildVisibilityChanged(View* child) override;
+@@ -371,6 +375,10 @@ class ToolbarView : public views::AccessiblePaneView,
+   // Controls. Most of these can be null, e.g. in popup windows. Only
+   // |location_bar_| is guaranteed to exist. These pointers are owned by the
+   // view hierarchy.
++#if BUILDFLAG(IS_MAC)
++  void ShareCurrentPage();
++  raw_ptr<ToolbarButton> share_button_ = nullptr;
++#endif
+   raw_ptr<ToolbarButton> back_ = nullptr;
+   raw_ptr<ToolbarButton> forward_ = nullptr;
+   raw_ptr<ReloadButton> reload_ = nullptr;
+diff --git a/components/bookmarks/browser/bookmark_utils.cc b/components/bookmarks/browser/bookmark_utils.cc
+index e5ce2251b5bdcdd3e5c0dfbcbbef28eb1ec6262d..0c983d7a2b2f6ba3f61704e02d4f3584574961a1 100644
+--- a/components/bookmarks/browser/bookmark_utils.cc
++++ b/components/bookmarks/browser/bookmark_utils.cc
+@@ -451,6 +451,16 @@ bool DoesBookmarkContainWords(const std::u16string& title,
+ }
+ 
+ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
++#if BUILDFLAG(IS_MAC)
++  // The window of the sketches has no bookmarks bar.
++  registry->RegisterBooleanPref(
++      prefs::kShowBookmarkBar, false,
++      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
++  registry->RegisterIntegerPref(
++      prefs::kBookmarkBarVisibilityState,
++      static_cast<int>(BookmarkBarVisibilityState::kOnlyShowOnNtp),
++      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
++#else
+   registry->RegisterBooleanPref(
+       prefs::kShowBookmarkBar, true,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+@@ -458,6 +468,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+       prefs::kBookmarkBarVisibilityState,
+       static_cast<int>(BookmarkBarVisibilityState::kAlwaysShow),
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
++#endif
+   registry->RegisterBooleanPref(prefs::kEditBookmarksEnabled, true);
+   registry->RegisterBooleanPref(
+       prefs::kShowAppsShortcutInBookmarkBar,
+diff --git a/ui/base/ui_base_features.cc b/ui/base/ui_base_features.cc
+index 8d8343beb584603b6b911a85ddbd5aefac2a5c10..4d896d3020bbf49e573fd14140936c14c3f09084 100644
+--- a/ui/base/ui_base_features.cc
++++ b/ui/base/ui_base_features.cc
+@@ -522,7 +522,11 @@ BASE_FEATURE_PARAM(int,
+ 
+ BASE_FEATURE(kDesktopGlowUp, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
++#if BUILDFLAG(IS_MAC)
++BASE_FEATURE(kGlassFrame, base::FEATURE_ENABLED_BY_DEFAULT);
++#else
+ BASE_FEATURE(kGlassFrame, base::FEATURE_DISABLED_BY_DEFAULT);
++#endif
+ BASE_FEATURE_PARAM(double, kGlassTintOpacityForLightMode, &kGlassFrame, -1.0);
+ BASE_FEATURE_PARAM(double, kGlassTintOpacityForDarkMode, &kGlassFrame, -1.0);
+ BASE_FEATURE_PARAM(double, kGlassExpandOnHoverOpacity, &kGlassFrame, 0.95);
