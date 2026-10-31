@@ -73,6 +73,9 @@ ctx.load_cert_chain(f"{TMP}/c.pem", f"{TMP}/k.pem")
 srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
 P = srv.server_address[1]
 threading.Thread(target=srv.serve_forever, daemon=True).start()
+plain = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+HP = plain.server_address[1]
+threading.Thread(target=plain.serve_forever, daemon=True).start()
 
 
 def pump(a, b):
@@ -381,7 +384,8 @@ def engines():
 
 print("--- SearXNG", flush=True)
 before = engines()
-print("     motore di partenza:", [e["n"] for e in before if e.get("d")], flush=True)
+check("senza SearXNG il predefinito è DuckDuckGo Light", [e["n"] for e in before if e.get("d")] == ["DuckDuckGo Light"],
+      [e["n"] for e in before if e.get("d")])
 t = proxy_page(b)
 t.eval("document.getElementById('fork-search-url').value='https://cerca.prova:8080/';document.getElementById('fork-search-on').click();1")
 time.sleep(2)
@@ -398,12 +402,62 @@ b.close_tab(t)
 now = engines()
 d = [e for e in now if e.get("d")]
 check("tolto SearXNG c'è un altro motore predefinito", bool(d) and d[0]["k"] != "searxng" and not any(e["k"] == "searxng" for e in now), d)
-print("     motore dopo:", [e["n"] for e in d], flush=True)
 t = proxy_page(b)
 t.eval("document.getElementById('fork-search-url').value='https://cerca.prova:8080/';document.getElementById('fork-search-on').click();1")
 time.sleep(1.5)
 t.eval(f"document.getElementById('fork-vpn-address').value='127.0.0.1:{PX}';document.getElementById('fork-vpn-on').click();1")
 time.sleep(1.5)
+b.close_tab(t)
+
+print("--- ripiego se SearXNG non risponde", flush=True)
+
+
+def set_search(address):
+    t = proxy_page(b)
+    t.eval(f"document.getElementById('fork-search-url').value={json.dumps(address)};"
+           "document.getElementById('fork-search-on').click();1")
+    time.sleep(1.5)
+    b.close_tab(t)
+
+
+closed = socket.socket()
+closed.bind(("127.0.0.1", 0))
+CLOSED = closed.getsockname()[1]
+closed.close()
+hang = socket.socket()
+hang.bind(("127.0.0.1", 0))
+hang.listen(8)
+HANG = hang.getsockname()[1]
+DDG = "https://duckduckgo.com/lite/"
+# *.ts.net resta fuori dal proxy, che qui è il nostro: DuckDuckGo arriva al server locale
+set_search(f"https://cerca.ts.net:{CLOSED}")
+t = b.open("about:blank")
+proxy_log.clear()
+nav(t, f"https://cerca.ts.net:{CLOSED}/search?q=prova+uno", DDG)
+href = t.eval("location.href")
+check("SearXNG spento: la ricerca passa a DuckDuckGo Light", str(href).startswith(DDG) and "prova" in str(href) and "uno" in str(href), href)
+check("il ripiego passa anch'esso dalla VPN", any("duckduckgo.com" in l for l in proxy_log), proxy_log[:3])
+set_search(f"https://cerca.ts.net:{HANG}")
+start = time.time()
+nav(t, f"https://cerca.ts.net:{HANG}/search?q=prova+due", DDG)
+took = time.time() - start
+check("SearXNG che non risponde: dopo 8 secondi passa a DuckDuckGo Light", str(t.eval("location.href")).startswith(DDG) and 7 < took < 20, f"{took:.0f} s")
+set_search(f"https://cerca.ts.net:{P}")
+nav(t, f"https://cerca.ts.net:{P}/search?q=prova+tre")
+time.sleep(9)
+check("SearXNG acceso: la ricerca resta lì", str(t.eval("location.href")).startswith(f"https://cerca.ts.net:{P}/search"), t.eval("location.href"))
+# la modalità solo HTTPS non deve bloccare un server di casa in http, e solo quello
+set_search(f"http://cerca.ts.net:{HP}")
+nav(t, f"http://cerca.ts.net:{HP}/search?q=prova+quattro")
+check("SearXNG in http: la ricerca non viene bloccata", str(t.eval("location.href")).startswith(f"http://cerca.ts.net:{HP}/search"), t.eval("location.href"))
+t.send("Page.navigate", url=f"http://altro-http.ts.net:{HP}/")
+time.sleep(4)
+check("un altro sito in http resta bloccato", str(t.eval("location.href")).startswith("chrome-error"), t.eval("location.href"))
+hang.close()
+set_search("https://cerca.prova:8080/")
+t.send("Page.navigate", url=f"http://cerca.ts.net:{HP}/")
+time.sleep(4)
+check("cambiato motore, il vecchio indirizzo in http torna bloccato", str(t.eval("location.href")).startswith("chrome-error"), t.eval("location.href"))
 b.close_tab(t)
 
 print("--- riavvio (dopo un'uscita forzata)", flush=True)

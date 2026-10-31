@@ -1,0 +1,365 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 15:25:14 +0100
+Subject: [PATCH] Motore: DuckDuckGo Light predefinito e ripiego quando SearXNG
+ non risponde
+
+Fork-Patch: common/0004-motore-duckduckgo-light-predefinito-e-ripiego-quando-searxng.patch
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 3650174022d0fa2dd739dfe347333c26e2e3cdd6..054701a6e73a1340e1ea921e262b757c387a534b 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -839,6 +839,9 @@ source_set("core") {
+   sources = [
+     "about_flags.cc",
+     "adblock/adblock_chrome_content_browser_client.cc",
++    "fork/personal_search.h",
++    "fork/personal_search_tab_helper.cc",
++    "fork/personal_search_tab_helper.h",
+     "fork/temporary_site_data_service.cc",
+     "fork/temporary_site_data_service.h",
+     "fork/temporary_site_data_service_factory.cc",
+diff --git a/chrome/browser/fork/personal_search.h b/chrome/browser/fork/personal_search.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..ad08b23f0f8906a07e6658253ad75d8d9edef3d2
+--- /dev/null
++++ b/chrome/browser/fork/personal_search.h
+@@ -0,0 +1,13 @@
++#ifndef CHROME_BROWSER_FORK_PERSONAL_SEARCH_H_
++#define CHROME_BROWSER_FORK_PERSONAL_SEARCH_H_
++
++namespace browser_fork {
++
++// The engine on the user's own server, and where a search goes when it doesn't
++// answer.
++inline constexpr char16_t kPersonalSearchKeyword[] = u"searxng";
++inline constexpr char16_t kSearchFallbackKeyword[] = u"duckduckgo.com/lite";
++
++}  // namespace browser_fork
++
++#endif  // CHROME_BROWSER_FORK_PERSONAL_SEARCH_H_
+diff --git a/chrome/browser/fork/personal_search_tab_helper.cc b/chrome/browser/fork/personal_search_tab_helper.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..7b3516d11ac09791913fb5f5b27661ac496d81ac
+--- /dev/null
++++ b/chrome/browser/fork/personal_search_tab_helper.cc
+@@ -0,0 +1,132 @@
++#include "chrome/browser/fork/personal_search_tab_helper.h"
++
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/task/sequenced_task_runner.h"
++#include "base/time/time.h"
++#include "chrome/browser/fork/personal_search.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/search_engines/template_url_service_factory.h"
++#include "components/search_engines/template_url.h"
++#include "components/search_engines/template_url_service.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/navigation_handle.h"
++#include "content/public/browser/web_contents.h"
++#include "net/base/net_errors.h"
++#include "ui/base/page_transition_types.h"
++#include "url/gurl.h"
++
++namespace browser_fork {
++
++namespace {
++
++// Longer than the 3 seconds SearXNG gives the engines it asks.
++constexpr base::TimeDelta kAnswerTimeout = base::Seconds(8);
++
++// The server can't be reached or isn't working. Not a page blocked by the
++// browser, and not a VPN that is down: the other engine can't be reached either
++// then, and the error page is the one that tells why.
++bool ServerDidNotAnswer(net::Error error) {
++  switch (error) {
++    case net::ERR_ADDRESS_UNREACHABLE:
++    case net::ERR_CONNECTION_CLOSED:
++    case net::ERR_CONNECTION_FAILED:
++    case net::ERR_CONNECTION_REFUSED:
++    case net::ERR_CONNECTION_RESET:
++    case net::ERR_CONNECTION_TIMED_OUT:
++    case net::ERR_EMPTY_RESPONSE:
++    case net::ERR_HTTP_RESPONSE_CODE_FAILURE:
++    case net::ERR_INTERNET_DISCONNECTED:
++    case net::ERR_NAME_NOT_RESOLVED:
++    case net::ERR_NETWORK_CHANGED:
++    case net::ERR_TIMED_OUT:
++      return true;
++    default:
++      return false;
++  }
++}
++
++TemplateURLService* SearchService(content::WebContents* web_contents) {
++  TemplateURLService* service = TemplateURLServiceFactory::GetForProfile(
++      Profile::FromBrowserContext(web_contents->GetBrowserContext()));
++  return service && service->loaded() ? service : nullptr;
++}
++
++}  // namespace
++
++PersonalSearchTabHelper::PersonalSearchTabHelper(
++    content::WebContents* web_contents)
++    : content::WebContentsObserver(web_contents),
++      content::WebContentsUserData<PersonalSearchTabHelper>(*web_contents) {}
++
++PersonalSearchTabHelper::~PersonalSearchTabHelper() = default;
++
++void PersonalSearchTabHelper::DidStartNavigation(
++    content::NavigationHandle* handle) {
++  if (!handle->IsInPrimaryMainFrame() || handle->IsSameDocument()) {
++    return;
++  }
++  navigation_id_ = 0;
++  terms_.clear();
++  timeout_.Stop();
++
++  TemplateURLService* service = SearchService(web_contents());
++  const TemplateURL* personal =
++      service ? service->GetTemplateURLForKeyword(kPersonalSearchKeyword)
++              : nullptr;
++  std::u16string terms;
++  if (!personal ||
++      !personal->ExtractSearchTermsFromURL(
++          handle->GetURL(), service->search_terms_data(), &terms) ||
++      terms.empty()) {
++    return;
++  }
++  navigation_id_ = handle->GetNavigationId();
++  terms_ = std::move(terms);
++  timeout_.Start(FROM_HERE, kAnswerTimeout,
++                 base::BindOnce(&PersonalSearchTabHelper::SearchWithFallback,
++                                weak_factory_.GetWeakPtr(),
++                                /*replace_current_entry=*/false));
++}
++
++void PersonalSearchTabHelper::DidFinishNavigation(
++    content::NavigationHandle* handle) {
++  if (!navigation_id_ || handle->GetNavigationId() != navigation_id_) {
++    return;
++  }
++  navigation_id_ = 0;
++  timeout_.Stop();
++  if (!ServerDidNotAnswer(handle->GetNetErrorCode())) {
++    terms_.clear();
++    return;
++  }
++  // Not from inside the callback of a navigation.
++  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(&PersonalSearchTabHelper::SearchWithFallback,
++                                weak_factory_.GetWeakPtr(),
++                                /*replace_current_entry=*/handle->HasCommitted()));
++}
++
++void PersonalSearchTabHelper::SearchWithFallback(bool replace_current_entry) {
++  navigation_id_ = 0;
++  const std::u16string terms = std::exchange(terms_, std::u16string());
++  TemplateURLService* service = SearchService(web_contents());
++  const TemplateURL* fallback =
++      service ? service->GetTemplateURLForKeyword(kSearchFallbackKeyword)
++              : nullptr;
++  if (!fallback || terms.empty()) {
++    return;
++  }
++  content::NavigationController::LoadURLParams params(
++      GURL(fallback->url_ref().ReplaceSearchTerms(
++          TemplateURLRef::SearchTermsArgs(terms),
++          service->search_terms_data())));
++  params.transition_type = ui::PAGE_TRANSITION_GENERATED;
++  params.should_replace_current_entry = replace_current_entry;
++  web_contents()->GetController().LoadURLWithParams(params);
++}
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(PersonalSearchTabHelper);
++
++}  // namespace browser_fork
+diff --git a/chrome/browser/fork/personal_search_tab_helper.h b/chrome/browser/fork/personal_search_tab_helper.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..c0340d180910cb15bbb4cab0e07a89004522caa6
+--- /dev/null
++++ b/chrome/browser/fork/personal_search_tab_helper.h
+@@ -0,0 +1,45 @@
++#ifndef CHROME_BROWSER_FORK_PERSONAL_SEARCH_TAB_HELPER_H_
++#define CHROME_BROWSER_FORK_PERSONAL_SEARCH_TAB_HELPER_H_
++
++#include <cstdint>
++#include <string>
++
++#include "base/memory/weak_ptr.h"
++#include "base/timer/timer.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "content/public/browser/web_contents_user_data.h"
++
++namespace browser_fork {
++
++// When the personal search engine doesn't answer, repeats the search on the
++// fallback engine: away from home the server may be out of reach.
++class PersonalSearchTabHelper
++    : public content::WebContentsObserver,
++      public content::WebContentsUserData<PersonalSearchTabHelper> {
++ public:
++  ~PersonalSearchTabHelper() override;
++
++ private:
++  friend class content::WebContentsUserData<PersonalSearchTabHelper>;
++
++  explicit PersonalSearchTabHelper(content::WebContents* web_contents);
++
++  // content::WebContentsObserver:
++  void DidStartNavigation(content::NavigationHandle* handle) override;
++  void DidFinishNavigation(content::NavigationHandle* handle) override;
++
++  void SearchWithFallback(bool replace_current_entry);
++
++  // The search waiting for an answer; 0 when there is none.
++  int64_t navigation_id_ = 0;
++  std::u16string terms_;
++  base::OneShotTimer timeout_;
++
++  base::WeakPtrFactory<PersonalSearchTabHelper> weak_factory_{this};
++
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++}  // namespace browser_fork
++
++#endif  // CHROME_BROWSER_FORK_PERSONAL_SEARCH_TAB_HELPER_H_
+diff --git a/chrome/browser/resources/proxy_config.html b/chrome/browser/resources/proxy_config.html
+index b12953bcd380599126ae414e57b8efcc82431aa0..57b220eb3e833c469c963d5f9236cf59c2f82f7f 100644
+--- a/chrome/browser/resources/proxy_config.html
++++ b/chrome/browser/resources/proxy_config.html
+@@ -30,7 +30,8 @@
+       <p id="fork-vpn-status"></p>
+ 
+       <h2>Motore di ricerca personale</h2>
+-      <p>Le ricerche dalla barra degli indirizzi vanno al tuo SearXNG.</p>
++      <p>Le ricerche dalla barra degli indirizzi vanno al tuo SearXNG. Se non risponde entro qualche
++        secondo, quella ricerca passa da sola a DuckDuckGo Light.</p>
+       <p><label>Indirizzo di SearXNG
+         <input id="fork-search-url" size="30" placeholder="http://indirizzo:porta"></label>
+         <button class="fork-inline" id="fork-search-on">Usa</button>
+diff --git a/chrome/browser/ui/tab_helpers.cc b/chrome/browser/ui/tab_helpers.cc
+index 47a43b9f25174a0f701eae8c997525b2c3674ce0..b03831a5d4176941d31c7b13bb0752b92d963060 100644
+--- a/chrome/browser/ui/tab_helpers.cc
++++ b/chrome/browser/ui/tab_helpers.cc
+@@ -34,6 +34,7 @@
+ #include "chrome/browser/contextual_tasks/aim_user_agent_tab_helper.h"
+ #include "chrome/browser/external_protocol/external_protocol_observer.h"
+ #include "chrome/browser/favicon/favicon_utils.h"
++#include "chrome/browser/fork/personal_search_tab_helper.h"
+ #include "chrome/browser/fork/temporary_site_data_tab_helper.h"
+ #include "chrome/browser/file_system_access/file_system_access_features.h"
+ #include "chrome/browser/file_system_access/file_system_access_permission_request_manager.h"
+@@ -410,6 +411,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents,
+   }
+   ChainedBackNavigationTracker::CreateForWebContents(web_contents);
+   chrome_browser_net::NetErrorTabHelper::CreateForWebContents(web_contents);
++  browser_fork::PersonalSearchTabHelper::CreateForWebContents(web_contents);
+   if (!profile->IsOffTheRecord()) {
+     browser_fork::TemporarySiteDataTabHelper::CreateForWebContents(web_contents);
+   }
+diff --git a/chrome/browser/ui/webui/proxy_config_ui.cc b/chrome/browser/ui/webui/proxy_config_ui.cc
+index c0b0e4388e5fb6b913fb7db8fa7529dcd6b7ea4d..d522156dcf18f3ccb23fb2bfb29da2b2b2f1405f 100644
+--- a/chrome/browser/ui/webui/proxy_config_ui.cc
++++ b/chrome/browser/ui/webui/proxy_config_ui.cc
+@@ -35,8 +35,10 @@
+ #include "chrome/browser/policy/profile_policy_connector.h"
+ #include "chrome/browser/platform_util.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/fork/personal_search.h"
+ #include "chrome/browser/fork/temporary_site_data_service.h"
+ #include "chrome/browser/search_engines/template_url_service_factory.h"
++#include "chrome/common/pref_names.h"
+ #include "chrome/common/url_constants.h"
+ #include "components/search_engines/template_url.h"
+ #include "components/search_engines/template_url_data.h"
+@@ -54,6 +56,7 @@
+ #include "content/public/browser/web_ui_message_handler.h"
+ 
+ #include "url/gurl.h"
++#include "url/url_constants.h"
+ 
+ using content::BrowserThread;
+ using content::WebContents;
+@@ -263,10 +266,23 @@ void ProxyConfigMessageHandler::RegisterMessages() {
+ 
+ namespace {
+ 
+-constexpr char16_t kPersonalSearchKeyword[] = u"searxng";
+-constexpr char16_t kSearchFallbackKeyword[] = u"duckduckgo.com/lite";
+ constexpr char kPersonalSearchPath[] = "/search?q={searchTerms}";
+ 
++// HTTPS-only mode would block the engine: a server at home usually has plain
++// http, on an address no certificate can cover.
++void AllowHttpForPersonalSearch(PrefService* prefs,
++                                const std::string& old_host,
++                                const GURL& url) {
++  base::ListValue hosts = prefs->GetList(prefs::kHttpAllowlist).Clone();
++  if (!old_host.empty()) {
++    hosts.EraseValue(base::Value(old_host));
++  }
++  if (url.is_valid() && url.SchemeIs(url::kHttpScheme)) {
++    hosts.Append(std::string(url.host()));
++  }
++  prefs->SetList(prefs::kHttpAllowlist, std::move(hosts));
++}
++
+ }  // namespace
+ 
+ void ProxyConfigMessageHandler::SendForkSettings() {
+@@ -280,7 +296,7 @@ void ProxyConfigMessageHandler::SendForkSettings() {
+       TemplateURLServiceFactory::GetForProfile(profile_);
+   if (service && service->loaded()) {
+     if (const TemplateURL* url =
+-            service->GetTemplateURLForKeyword(kPersonalSearchKeyword)) {
++            service->GetTemplateURLForKeyword(browser_fork::kPersonalSearchKeyword)) {
+       search = url->url();
+       base::ReplaceFirstSubstringAfterOffset(&search, 0, kPersonalSearchPath,
+                                              "");
+@@ -330,11 +346,18 @@ void ProxyConfigMessageHandler::OnSetPersonalSearch(
+   base::TrimString(list[0].GetString(), " \t/", &base_url);
+   const GURL url(base_url);
+ 
++  std::string old_host;
++  if (const TemplateURL* old =
++          service->GetTemplateURLForKeyword(browser_fork::kPersonalSearchKeyword)) {
++    old_host = GURL(old->url()).host();
++  }
++  AllowHttpForPersonalSearch(profile_->GetPrefs(), old_host, url);
++
+   TemplateURL* fallback =
+-      service->GetTemplateURLForKeyword(kSearchFallbackKeyword);
++      service->GetTemplateURLForKeyword(browser_fork::kSearchFallbackKeyword);
+   // The default engine can't be removed: step away from it first.
+   if (TemplateURL* old =
+-          service->GetTemplateURLForKeyword(kPersonalSearchKeyword);
++          service->GetTemplateURLForKeyword(browser_fork::kPersonalSearchKeyword);
+       old && fallback) {
+     if (service->GetDefaultSearchProvider() == old) {
+       service->SetUserSelectedDefaultSearchProvider(fallback);
+@@ -344,7 +367,7 @@ void ProxyConfigMessageHandler::OnSetPersonalSearch(
+   if (url.is_valid() && url.SchemeIsHTTPOrHTTPS()) {
+     TemplateURLData data;
+     data.SetShortName(u"SearXNG personale");
+-    data.SetKeyword(kPersonalSearchKeyword);
++    data.SetKeyword(browser_fork::kPersonalSearchKeyword);
+     data.SetURL(base_url + kPersonalSearchPath);
+     data.suggestions_url = base_url + "/autocompleter?q={searchTerms}";
+     data.safe_for_autoreplace = false;
+diff --git a/components/search_engines/template_url_prepopulate_data.cc b/components/search_engines/template_url_prepopulate_data.cc
+index 6e9eb43a1c7e1942a171b0619bd411afdb955aa7..041116ea54ba4453bbfd274c04e7b049dbc2c18d 100644
+--- a/components/search_engines/template_url_prepopulate_data.cc
++++ b/components/search_engines/template_url_prepopulate_data.cc
+@@ -325,7 +325,7 @@ std::unique_ptr<TemplateURLData> GetPrepopulatedFallbackSearch(
+     const std::vector<raw_ptr<const PrepopulatedEngine>>&
+         regional_prepopulated_engines) {
+   return FindPrepopulatedEngineInternal(prefs, regional_prepopulated_engines,
+-                                        google.id,
++                                        duckduckgo_light.id,
+                                         /*use_first_as_fallback=*/true);
+ }
+ 

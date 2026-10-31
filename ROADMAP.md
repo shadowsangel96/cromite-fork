@@ -13,8 +13,11 @@ aggiornamenti di Cromite come tutto il resto.
 - Pagina "Rete e privacy" (`chrome://proxy`): VPN personale, motore personale, cookie temporanei
   con i giri di login e i siti da ricordare. WebGL resta spento come in Cromite. Provato da
   `tools/build/prova_funzioni.py`, che su Windows gira dopo ogni build. Restano da fare, nelle
-  voci qui sotto: indicatore e riserva della VPN, ripiego su DuckDuckGo Light, "Ricorda questo
-  sito" nel pannello del sito, assistente all'accesso.
+  voci qui sotto: indicatore e riserva della VPN, "Ricorda questo sito" nel pannello del sito,
+  assistente all'accesso.
+- Motore: DuckDuckGo Light predefinito finché non si inserisce SearXNG; se SearXNG non risponde
+  entro 8 secondi la ricerca passa da sola a DuckDuckGo Light. L'indirizzo di SearXNG è accettato
+  anche in http, che la modalità solo HTTPS di Cromite altrimenti blocca.
 
 ## 1. Prima build Windows installabile, poi build veloci
 
