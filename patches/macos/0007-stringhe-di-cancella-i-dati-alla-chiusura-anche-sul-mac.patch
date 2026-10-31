@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 11:40:08 +0100
+Subject: [PATCH] mac: stringhe di "cancella i dati alla chiusura" anche sul
+ Mac
+
+Add-setting-to-clear-data-on-exit di Cromite mostra la voce nelle impostazioni su
+tutti i sistemi, ma ne definisce le stringhe solo per Windows e Linux. Sul Mac il
+segnaposto $i18n{clearBrowsingDataAtClose} restava senza valore, il CHECK di
+ReplaceTemplateExpressions uccideva il renderer e chrome://settings non si apriva.
+
+Fork-Patch: macos/0007-stringhe-di-cancella-i-dati-alla-chiusura-anche-sul-mac.patch
+
+diff --git a/chrome/app/settings_strings.grdp b/chrome/app/settings_strings.grdp
+index fa76986f98edac6b946a05775de1f128dc1ae355..605570598f0bf9c8c964fda6de0acb6dffd3f17c 100644
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -171,7 +171,7 @@
+         Swipe between pages
+       </message>
+     </if>
+-   <if expr="is_win or is_linux">
++   <if expr="is_win or is_linux or is_macosx">
+      <message name="IDS_SETTINGS_CLEAR_BROWSING_DATA_AT_CLOSE" desc="The title of the tab showing the at close clear browsing data options.">
+        Clear browsing data when closing Cromite
+      </message>
+diff --git a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+index 4c52e09b533703a93cc245322a090076f8d0bb82..36338c3a26eb125db387453e5566239700050dad 100644
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -2587,7 +2587,7 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source,
+       {"clearedData", IDS_SETTINGS_CLEARED_DATA},
+       {"clearBrowsingData", IDS_SETTINGS_CLEAR_BROWSING_DATA},
+       {"clearBrowsingDataDescription", IDS_SETTINGS_CLEAR_DATA_DESCRIPTION},
+-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
++#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
+       {"clearBrowsingDataAtClose", IDS_SETTINGS_CLEAR_BROWSING_DATA_AT_CLOSE},
+       {"clearBrowsingDataAtCloseDescription", IDS_SETTINGS_CLEAR_DATA_AT_CLOSE_DESCRIPTION},
+ #endif

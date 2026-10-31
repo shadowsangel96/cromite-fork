@@ -112,6 +112,14 @@ def main():
         subprocess.run(["icacls", str(exe.parent), "/grant", *APP_PACKAGES, "/T", "/Q"], check=True)
     failed = round_(browser, "permessi", page, url, out / "pagina.png")
 
+    # la pagina delle impostazioni: se manca una stringa $i18n{...} il renderer va in crash e il
+    # DOM non arriva. Sul Mac è successo: non lo vede nessun'altra prova.
+    res = browser.run("settings", "--allow-chrome-scheme-url", "--dump-dom", "chrome://settings")
+    if "<settings-ui" not in res.stdout:
+        failed.append(f"chrome://settings non si apre (codice {res.returncode})")
+    else:
+        print("chrome://settings si apre")
+
     # solo informativo: nome e versione che il browser mostra di sé
     res = browser.run("version", "--allow-chrome-scheme-url", "--dump-dom", "chrome://version")
     lines = [line.strip() for line in res.stdout.splitlines() if version in line]
