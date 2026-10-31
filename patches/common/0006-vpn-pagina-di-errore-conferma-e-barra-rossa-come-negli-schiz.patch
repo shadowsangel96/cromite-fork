@@ -378,16 +378,16 @@ index 05b6acba0f0fbbe2117bbe78fe66251791f1609c..fdfb07907fbb3bfb7842440399fa50d9
    RunNetworkDiagnosticsHelper(url.DeprecatedGetOriginAsURL().spec());
  }
 diff --git a/components/neterror/resources/neterror.css b/components/neterror/resources/neterror.css
-index dbdbeac156b5043c34fde9bddf19a0d0b60a1891..bae37b61436fc3b747057f8c322b7012841eac0d 100644
+index dbdbeac156b5043c34fde9bddf19a0d0b60a1891..e7277c82392724bb89c2e9997e41f9835c2fd549 100644
 --- a/components/neterror/resources/neterror.css
 +++ b/components/neterror/resources/neterror.css
-@@ -263,6 +263,51 @@ html[subframe] body {
+@@ -263,6 +263,52 @@ html[subframe] body {
    }
  }
  
 +/* The page for a VPN that doesn't answer, as in the sketches: the two buttons
 +   together under the text, the shield in place of the sad page. */
-+.icon-vpn {
++.icon.icon-vpn {
 +  content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%239a4f00' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M8 1.8 3 3.6v4.1c0 3 2.1 5.4 5 6.5 2.9-1.1 5-3.5 5-6.5V3.6z'/%3E%3Cpath d='M8 5.5v3'/%3E%3Cpath d='M8 10.6v.1'/%3E%3C/svg%3E");
 +}
 +
@@ -397,6 +397,7 @@ index dbdbeac156b5043c34fde9bddf19a0d0b60a1891..bae37b61436fc3b747057f8c322b7012
 +  gap: 12px;
 +  justify-content: flex-start;
 +  margin-top: 24px;
++  padding: 0;
 +  position: static;
 +}
 +
@@ -420,7 +421,7 @@ index dbdbeac156b5043c34fde9bddf19a0d0b60a1891..bae37b61436fc3b747057f8c322b7012
 +}
 +
 +@media (prefers-color-scheme: dark) {
-+  .icon-vpn {
++  .icon.icon-vpn {
 +    content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23ffad33' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M8 1.8 3 3.6v4.1c0 3 2.1 5.4 5 6.5 2.9-1.1 5-3.5 5-6.5V3.6z'/%3E%3Cpath d='M8 5.5v3'/%3E%3Cpath d='M8 10.6v.1'/%3E%3C/svg%3E");
 +    filter: none;
 +  }
