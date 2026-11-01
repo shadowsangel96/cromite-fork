@@ -1,0 +1,96 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 11:19:38 +0100
+Subject: [PATCH] Claude: il pannello si apre anche quando l'estensione non fa
+ in tempo
+
+Fork-Patch: common/0010-claude-il-pannello-si-apre-anche-quando-l-estensione-non-fa.patch
+
+diff --git a/chrome/browser/ui/views/side_panel/claude_side_panel.cc b/chrome/browser/ui/views/side_panel/claude_side_panel.cc
+index 4260a3ce14a8861363136bc10f1c46ba25fa7890..3c6309cbcc9a4e1bf001ee91fabe76726d2abaa6 100644
+--- a/chrome/browser/ui/views/side_panel/claude_side_panel.cc
++++ b/chrome/browser/ui/views/side_panel/claude_side_panel.cc
+@@ -4,9 +4,16 @@
+ #include <utility>
+ 
+ #include "base/functional/bind.h"
++#include "base/location.h"
++#include "base/memory/weak_ptr.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/task/single_thread_task_runner.h"
++#include "base/time/time.h"
+ #include "base/values.h"
+ #include "cc/paint/paint_flags.h"
++#include "chrome/browser/extensions/api/side_panel/side_panel_service.h"
+ #include "chrome/browser/extensions/extension_action_runner.h"
++#include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/browser/fork/claude_extension.h"
+ #include "chrome/browser/fork/temporary_site_data_service.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -20,6 +27,7 @@
+ #include "chrome/browser/ui/side_panel/side_panel_entry_key.h"
+ #include "chrome/browser/ui/side_panel/side_panel_registry.h"
+ #include "chrome/browser/ui/side_panel/side_panel_ui.h"
++#include "chrome/common/extensions/api/side_panel.h"
+ #include "components/input/native_web_keyboard_event.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/prefs/scoped_user_pref_update.h"
+@@ -83,17 +91,53 @@ const extensions::Extension* GetClaudeExtension(Profile* profile) {
+ }
+ 
+ // "Questa pagina": the extension opens its own panel as if its icon was clicked.
++// Opens the panel of the active tab as soon as its page is set.
++void OpenPageViewWhenSet(base::WeakPtr<BrowserWindowInterface> browser,
++                         int attempts_left) {
++  if (!browser) {
++    return;
++  }
++  SidePanelUI* side_panel = browser->GetFeatures().side_panel_ui();
++  if (side_panel->IsSidePanelEntryShowing(ChatsKey()) ||
++      side_panel->IsSidePanelEntryShowing(PageKey())) {
++    return;
++  }
++  tabs::TabInterface* tab = browser->GetActiveTabInterface();
++  if (tab && SidePanelRegistry::From(tab)->GetEntryForKey(PageKey())) {
++    side_panel->Show(PageKey());
++    return;
++  }
++  if (attempts_left > 0) {
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++        FROM_HERE,
++        base::BindOnce(&OpenPageViewWhenSet, browser, attempts_left - 1),
++        base::Milliseconds(200));
++  }
++}
++
++// The extension opens its panel on a click only if its service worker answers
++// while the click still counts as a user gesture, and it may not. So the browser
++// sets the same page the extension would and opens it itself; the action still
++// runs for the rest of what the extension does on a click, like its tab group.
+ bool ShowPageView(BrowserWindowInterface* browser) {
+   const extensions::Extension* extension =
+       GetClaudeExtension(browser->GetProfile());
+   tabs::TabInterface* tab = browser->GetActiveTabInterface();
+-  auto* runner = tab ? extensions::ExtensionActionRunner::GetForWebContents(
+-                           tab->GetContents())
+-                     : nullptr;
+-  if (!extension || !runner) {
++  auto* service = extensions::SidePanelService::Get(browser->GetProfile());
++  if (!extension || !tab || !service) {
+     return false;
+   }
+-  runner->RunAction(extension, /*grant_tab_permissions=*/true);
++  const int tab_id = extensions::ExtensionTabUtil::GetTabId(tab->GetContents());
++  extensions::api::side_panel::PanelOptions options;
++  options.tab_id = tab_id;
++  options.path = "sidepanel.html?tabId=" + base::NumberToString(tab_id);
++  options.enabled = true;
++  service->SetOptions(*extension, std::move(options));
++  if (auto* runner = extensions::ExtensionActionRunner::GetForWebContents(
++          tab->GetContents())) {
++    runner->RunAction(extension, /*grant_tab_permissions=*/true);
++  }
++  OpenPageViewWhenSet(browser->GetWeakPtr(), /*attempts_left=*/50);
+   return true;
+ }
+ 
