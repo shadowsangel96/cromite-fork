@@ -16,8 +16,16 @@ aggiornamenti di Cromite come tutto il resto.
   voci qui sotto: assistente all'accesso.
 - Mac, primo giro sulla tavola degli schizzi: vetro vero (il `GlassFrame` di Chromium, NSGlassEffectView)
   su schede e barra come un foglio solo, schede a capsula, pulsanti raggruppati in capsule, condividi e
-  menu insieme, profilo solo icona, niente barra dei segnalibri e niente stella. Mancano Claude, il
-  suo pannello e le schede "nella barra". Windows resta standard.
+  menu insieme, profilo solo icona, niente barra dei segnalibri e niente stella. Mancano le schede
+  "nella barra". Windows resta standard.
+- Claude nella barra: pulsante e pannello laterale come nella tavola, con "Questa pagina" (Claude in
+  Chrome, che il browser installa dal Chrome Web Store) e "Le tue chat" (claude.ai). Pulsante del
+  profilo con l'omino e pannello "Accedi con Claude". Nella pagina `chrome://proxy` c'è l'elenco
+  "Claude non entra in questi siti": vale per le schede nuove e dopo un riavvio, mentre una scheda già
+  aperta su quel sito va chiusa, perché il suo processo tiene l'elenco vecchio (causa da chiarire).
+  Mancano le funzioni a consumo (puntatore magico, cerchia e cerca)
+  e quello che dipende dalla sync; il pulsante del profilo diventerà arancione da collegato dopo il
+  primo accesso vero, che deve dire come riconoscerlo.
 - uBlock Origin integrato: la release ufficiale, verificata con lo sha256 e indicata in
   `overlay/chrome/browser/resources/ublock/fork-ublock.json`, gira come componente interno. Non sta tra
   le estensioni. Pulsante con il contatore nella barra e pannello "Blocco contenuti" come nella tavola,

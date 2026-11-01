@@ -1,0 +1,1608 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 00:11:31 +0100
+Subject: [PATCH] Claude nella barra: pulsante, pannello laterale e Claude in
+ Chrome
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Il pulsante apre il pannello laterale nativo con le due viste della tavola:
+"Questa pagina" è il pannello di Claude in Chrome, "Le tue chat" è claude.ai.
+L'estensione si installa dal Chrome Web Store e non compare tra quelle della
+barra. Nella pagina Rete e privacy l'elenco dei siti dove Claude non entra.
+
+Fork-Patch: common/0009-claude-nella-barra-pulsante-pannello-laterale-e-claude-in-ch.patch
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index f3c09bb22f4c13010ec0bce4a1fde682bd18286c..553ae7ae8c9fc1e5551d6070dd410b1d9ac87aef 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -849,6 +849,7 @@ source_set("core") {
+     "fork/temporary_site_data_tab_helper.cc",
+     "fork/temporary_site_data_tab_helper.h",
+     "fork/vpn_status.cc",
++    "fork/claude_extension.h",
+     "fork/ublock_extension.h",
+     "fork/vpn_status.h",
+     "fork/vpn_tab_helper.cc",
+diff --git a/chrome/browser/browser_resources.grd b/chrome/browser/browser_resources.grd
+index c9606b27a8c7ad1836360d9321dc4a813ed885f8..e19029ccca7d2a30b15898c78578f03cb9a29551 100644
+--- a/chrome/browser/browser_resources.grd
++++ b/chrome/browser/browser_resources.grd
+@@ -199,6 +199,8 @@
+       <!-- Bromite Proxy Configuration UI -->
+       <include name="IDR_PROXY_CONFIG_HTML" file="resources\proxy_config.html" flattenhtml="true" type="BINDATA" compress="gzip" />
+       <include name="IDR_PROXY_CONFIG_JS" file="resources\proxy_config.js" type="BINDATA" compress="gzip" />
++      <include name="IDR_PROFILO_PANEL_HTML" file="resources\profilo_panel.html" type="BINDATA" />
++      <include name="IDR_PROFILO_PANEL_JS" file="resources\profilo_panel.js" type="BINDATA" />
+       <include name="IDR_SITE_PANEL_HTML" file="resources\site_panel.html" type="BINDATA" />
+       <include name="IDR_SITE_PANEL_JS" file="resources\site_panel.js" type="BINDATA" />
+       <if expr="not is_android or enable_extensions_core">
+diff --git a/chrome/browser/extensions/extension_management.cc b/chrome/browser/extensions/extension_management.cc
+index e728a1893b00e05f582e0c0cdc7aa496631cc7de..c8138291f66ea31f996992cfbd4ad7480c91b138 100644
+--- a/chrome/browser/extensions/extension_management.cc
++++ b/chrome/browser/extensions/extension_management.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/fork/claude_extension.h"
+ #include "chrome/browser/extensions/extension_management.h"
+ 
+ #include <algorithm>
+@@ -108,6 +109,8 @@ ExtensionManagement::ExtensionManagement(Profile* profile)
+   pref_change_registrar_.Init(pref_service_);
+   base::RepeatingClosure pref_change_callback = base::BindRepeating(
+       &ExtensionManagement::OnExtensionPrefChanged, base::Unretained(this));
++  pref_change_registrar_.Add(browser_fork::kClaudeBlockedSitesPref,
++                             pref_change_callback);
+   pref_change_registrar_.Add(pref_names::kInstallAllowList,
+                              pref_change_callback);
+   pref_change_registrar_.Add(pref_names::kInstallDenyList,
+@@ -690,6 +693,24 @@ void ExtensionManagement::Refresh() {
+ 
+   UpdateForcedExtensions(forced_list_pref);
+ 
++  // Claude in Chrome comes with the browser, from the Chrome Web Store, and
++  // stays out of the sites the user listed.
++  internal::IndividualSettings* claude =
++      AccessById(browser_fork::kClaudeExtensionId);
++  claude->installation_mode = ManagedInstallationMode::kForced;
++  claude->update_url = extension_urls::GetWebstoreUpdateUrl().spec();
++  if (pref_service_->FindPreference(browser_fork::kClaudeBlockedSitesPref)) {
++    for (const base::Value& site :
++         pref_service_->GetList(browser_fork::kClaudeBlockedSitesPref)) {
++      URLPattern pattern(Extension::kValidHostPermissionSchemes);
++      if (site.is_string() &&
++          pattern.Parse("*://*." + site.GetString() + "/*") ==
++              URLPattern::ParseResult::kSuccess) {
++        claude->policy_blocked_hosts.AddPattern(pattern);
++      }
++    }
++  }
++
+   if (install_sources_pref) {
+     global_settings_->install_sources = URLPatternSet();
+     for (const auto& entry : *install_sources_pref) {
+diff --git a/chrome/browser/extensions/updater/extension_updater.cc b/chrome/browser/extensions/updater/extension_updater.cc
+index bb375d92a2c9d2ae4cc52e3d9f79412e8cbe9452..4306a704ea687d45f136f071fa438cc0be9bad13 100644
+--- a/chrome/browser/extensions/updater/extension_updater.cc
++++ b/chrome/browser/extensions/updater/extension_updater.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/fork/claude_extension.h"
+ #include "chrome/browser/extensions/updater/extension_updater.h"
+ 
+ #include <stdint.h>
+@@ -446,8 +447,13 @@ void ExtensionUpdater::CheckNow(CheckParams params) {
+   if (!params.user_initiated &&
+       !base::FeatureList::IsEnabled(
+             extensions_features::kEnableExtensionAutoupdate)) {
+-    LOG(INFO) << "Extensions autoupdate is disabled.";
+-    return;
++    // Claude in Chrome is installed and kept up to date by the browser, the
++    // other extensions follow the switch.
++    if (!params.ids.empty()) {
++      LOG(INFO) << "Extensions autoupdate is disabled.";
++      return;
++    }
++    params.ids = {browser_fork::kClaudeExtensionId};
+   }
+   std::unique_ptr<ScopedProfileKeepAlive> keep_alive =
+       ScopedProfileKeepAlive::TryAcquire(
+diff --git a/chrome/browser/fork/claude_extension.h b/chrome/browser/fork/claude_extension.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..83681130b50001321dae8d916a78865b8b5e5c8d
+--- /dev/null
++++ b/chrome/browser/fork/claude_extension.h
+@@ -0,0 +1,15 @@
++#ifndef CHROME_BROWSER_FORK_CLAUDE_EXTENSION_H_
++#define CHROME_BROWSER_FORK_CLAUDE_EXTENSION_H_
++
++namespace browser_fork {
++
++// Claude in Chrome, Anthropic's extension: the browser installs it from the
++// Chrome Web Store and opens it from its own Claude button.
++inline constexpr char kClaudeExtensionId[] = "fcoeoabgfenejglbffodgkkbkcdhcgfn";
++
++// Sites where the extension can't read or act, one host per entry.
++inline constexpr char kClaudeBlockedSitesPref[] = "fork.claude_blocked_sites";
++
++}  // namespace browser_fork
++
++#endif  // CHROME_BROWSER_FORK_CLAUDE_EXTENSION_H_
+diff --git a/chrome/browser/fork/temporary_site_data_service.cc b/chrome/browser/fork/temporary_site_data_service.cc
+index d18e84c1de133a6e922d0b88e71b3f31735e0eed..27f58efbf7fb63dc1afa33562118e5731d06576c 100644
+--- a/chrome/browser/fork/temporary_site_data_service.cc
++++ b/chrome/browser/fork/temporary_site_data_service.cc
+@@ -1,5 +1,7 @@
+ #include "chrome/browser/fork/temporary_site_data_service.h"
+ 
++#include "chrome/browser/fork/claude_extension.h"
++
+ #include <utility>
+ 
+ #include "base/functional/bind.h"
+@@ -44,6 +46,7 @@ void TemporarySiteDataService::RegisterProfilePrefs(
+   registry->RegisterIntegerPref(kCookieModePref,
+                                 static_cast<int>(CookieMode::kTemporary));
+   registry->RegisterListPref(kRememberedSitesPref);
++  registry->RegisterListPref(kClaudeBlockedSitesPref);
+ }
+ 
+ // static
+diff --git a/chrome/browser/resources/profilo_panel.html b/chrome/browser/resources/profilo_panel.html
+new file mode 100644
+index 0000000000000000000000000000000000000000..979b6b051ae6b603717165f31c874b41dcf7dd5d
+--- /dev/null
++++ b/chrome/browser/resources/profilo_panel.html
+@@ -0,0 +1,59 @@
++<!doctype html>
++<html lang="it">
++<head>
++<meta charset="utf-8">
++<title>Profilo</title>
++<style>
++:root {
++  --text: #1d1d1f; --sub: #5a5a60; --field: rgba(0,0,0,0.07); --panel: #fafafc;
++  --clay: #d97757; --clay-fill: #a9502f; --on-clay: #ffffff; --accent: #0066d6;
++}
++@media (prefers-color-scheme: dark) {
++  :root {
++    --text: #f5f5f7; --sub: #b3b3ba; --field: rgba(255,255,255,0.1); --panel: #28282c;
++    --clay: #e0886b; --clay-fill: #e0886b; --on-clay: #2b130b; --accent: #5aa9ff;
++  }
++}
++html, body { margin: 0; width: 340px; background: var(--panel); }
++body { font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--text); text-align: left; }
++button { font: inherit; cursor: pointer; }
++#panel { box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
++#out { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 6px 4px 0; }
++#avatar { width: 56px; height: 56px; border-radius: 50%; background: var(--field); color: var(--sub); display: flex; align-items: center; justify-content: center; }
++#out-title { font-size: 15px; font-weight: 700; }
++p { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--sub); }
++#login { width: 100%; min-height: 38px; border: 0; border-radius: 19px; background: var(--clay-fill); color: var(--on-clay); font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; }
++#in { display: flex; align-items: center; gap: 12px; }
++#in > svg { color: var(--clay); flex-shrink: 0; }
++#in-title { font-size: 15px; font-weight: 700; }
++#in-sub { margin-top: 2px; font-size: 12px; color: var(--sub); }
++#actions { display: flex; gap: 8px; }
++#actions button { flex: 1; min-height: 32px; padding: 0 10px; border: 0; border-radius: 10px; background: var(--field); color: var(--text); font-size: 12.5px; font-weight: 600; }
++#others { border: 0; padding: 0; background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; align-self: center; }
++[hidden] { display: none !important; }
++</style>
++<script src="profilo_panel.js"></script>
++</head>
++<body>
++<section id="panel" role="dialog" aria-label="Profilo">
++  <div id="out">
++    <span id="avatar" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="5.5" r="2.8"></circle><path d="M2.8 14c.6-2.7 2.7-4.3 5.2-4.3s4.6 1.6 5.2 4.3"></path></svg></span>
++    <div id="out-title">Non hai ancora fatto l'accesso</div>
++    <p>Un solo accesso con il tuo account Claude per Claude in Chrome e le tue chat.</p>
++    <button id="login"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M8 1.6v12.8M1.6 8h12.8M3.5 3.5l9 9M12.5 3.5l-9 9"></path></svg>Accedi con Claude</button>
++  </div>
++  <div id="in" hidden>
++    <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M8 1.6v12.8M1.6 8h12.8M3.5 3.5l9 9M12.5 3.5l-9 9"></path></svg>
++    <div>
++      <div id="in-title">Account Claude</div>
++      <div id="in-sub">Accesso fatto su claude.ai</div>
++    </div>
++  </div>
++  <div id="actions" hidden>
++    <button id="chats">Le tue chat</button>
++    <button id="logout">Esci</button>
++  </div>
++  <button id="others">Altri profili e ospite</button>
++</section>
++</body>
++</html>
+diff --git a/chrome/browser/resources/profilo_panel.js b/chrome/browser/resources/profilo_panel.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..6e35df5ac307559403d546247f7c5e8d75e0b883
+--- /dev/null
++++ b/chrome/browser/resources/profilo_panel.js
+@@ -0,0 +1,29 @@
++window.ProfiloPanel = (function() {
++  'use strict';
++
++  const $ = (id) => document.getElementById(id);
++
++  function loaded(signedIn) {
++    $('out').hidden = signedIn;
++    $('in').hidden = !signedIn;
++    $('actions').hidden = !signedIn;
++  }
++
++  document.addEventListener('DOMContentLoaded', () => {
++    $('login').onclick = () => chrome.send('openChats');
++    $('chats').onclick = () => chrome.send('openChats');
++    $('logout').onclick = () => chrome.send('logout');
++    $('others').onclick = () => chrome.send('otherProfiles');
++    chrome.send('ready');
++  });
++
++  // Il pannello resta in memoria per qualche secondo: riaprendolo la pagina non si
++  // ricarica, e nel frattempo l'accesso può essere cambiato.
++  document.addEventListener('visibilitychange', () => {
++    if (document.visibilityState === 'visible') {
++      chrome.send('ready');
++    }
++  });
++
++  return {loaded};
++})();
+diff --git a/chrome/browser/resources/proxy_config.html b/chrome/browser/resources/proxy_config.html
+index 7760a25f828d8c8b90dd20a0c8a5c0c3d7a99786..cb9b183ac5aeaf750eb6a34a8a57043159a8ec34 100644
+--- a/chrome/browser/resources/proxy_config.html
++++ b/chrome/browser/resources/proxy_config.html
+@@ -59,6 +59,11 @@
+       <textarea id="fork-remembered" rows="8" cols="40"></textarea>
+       <p><button class="fork-inline" id="fork-remembered-save">Salva l'elenco</button></p>
+       <p id="fork-remembered-status"></p>
++      <h3>Claude non entra in questi siti</h3>
++      <p>Uno per riga, per esempio banche e sanità. Claude in Chrome non può leggerli né usarli.</p>
++      <textarea id="fork-claude-blocked" rows="6" cols="40"></textarea>
++      <p><button class="fork-inline" id="fork-claude-blocked-save">Salva l'elenco</button></p>
++      <p id="fork-claude-blocked-status"></p>
+       <hr>
+     </div>
+     <!--
+diff --git a/chrome/browser/resources/proxy_config.js b/chrome/browser/resources/proxy_config.js
+index 9a43ebe1896556cb3b687464e8f78d5203df1414..f11264374dfdadc54721590c621c72904b5ee873 100644
+--- a/chrome/browser/resources/proxy_config.js
++++ b/chrome/browser/resources/proxy_config.js
+@@ -383,6 +383,14 @@ window.ForkSettings = (function() {
+       setStatus('fork-remembered-status', 'Elenco salvato: ' + sites.length + ' siti.');
+     };
+ 
++    $('fork-claude-blocked-save').onclick = function() {
++      const sites = $('fork-claude-blocked').value.split('\n')
++          .map(function(line) { return line.trim(); })
++          .filter(function(line) { return line.length > 0; });
++      chrome.send('setClaudeBlockedSites', [sites]);
++      setStatus('fork-claude-blocked-status', 'Elenco salvato: ' + sites.length + ' siti. Vale per le schede nuove: chiudi quelle già aperte su questi siti.');
++    };
++
+     const view = window.ProxyConfigView.getInstance();
+     const original = view.onProxyConfigChanged;
+     view.onProxyConfigChanged = function(state) {
+@@ -402,6 +410,7 @@ window.ForkSettings = (function() {
+         radio.checked = Number(radio.value) === settings.cookieMode;
+       });
+       $('fork-remembered').value = settings.rememberedSites.join('\n');
++      $('fork-claude-blocked').value = settings.claudeBlockedSites.join('\n');
+       $('fork-search-url').value = settings.personalSearch;
+       reserve = settings.vpnReserve;
+       if (settings.vpnAddress && !$('fork-vpn-address').value) {
+diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
+index 09509ddd6a5c91c9aafe15a71d095ac79c7d2113..0ed139dc3edc3d0b0baf1b195b5f85000e183a96 100644
+--- a/chrome/browser/ui/browser_actions.cc
++++ b/chrome/browser/ui/browser_actions.cc
+@@ -390,6 +390,16 @@ void BrowserActions::InitializeSidePanelActions() {
+                           : kBookmarksSidePanelRefreshOldIcon,
+                       kActionSidePanelShowBookmarks, bwi, true)
+           .Build());
++  if (!profile->IsOffTheRecord()) {
++    std::unique_ptr<actions::ActionItem> claude =
++        SidePanelAction(SidePanelEntryId::kFeed, IDS_READ_LATER_TITLE,
++                        IDS_READ_LATER_TITLE, kListAltIcon,
++                        kActionSidePanelShowFeed, bwi, false)
++            .Build();
++    claude->SetText(u"Claude");
++    claude->SetTooltipText(u"Claude");
++    root_action_item_->AddChild(std::move(claude));
++  }
+   root_action_item_->AddChild(
+       SidePanelAction(SidePanelEntryId::kReadingList, IDS_READ_LATER_TITLE,
+                       IDS_READ_LATER_TITLE,
+diff --git a/chrome/browser/ui/toolbar/toolbar_actions_model.cc b/chrome/browser/ui/toolbar/toolbar_actions_model.cc
+index 1304ebd165cd19ee9461baa114da3009577f2785..16575d6e1a6c439bf354d9c0c52a62ed917edbde 100644
+--- a/chrome/browser/ui/toolbar/toolbar_actions_model.cc
++++ b/chrome/browser/ui/toolbar/toolbar_actions_model.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/fork/claude_extension.h"
+ #include "chrome/browser/fork/ublock_extension.h"
+ #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
+ 
+@@ -343,8 +344,9 @@ void ToolbarActionsModel::OnReady() {
+ 
+ bool ToolbarActionsModel::ShouldAddExtension(
+     const extensions::Extension* extension) {
+-  // uBlock Origin has its own button in the location bar.
+-  if (extension->id() == browser_fork::kUBlockExtensionId) {
++  // uBlock Origin and Claude in Chrome have their own buttons.
++  if (extension->id() == browser_fork::kUBlockExtensionId ||
++      extension->id() == browser_fork::kClaudeExtensionId) {
+     return false;
+   }
+ 
+diff --git a/chrome/browser/ui/views/profiles/BUILD.gn b/chrome/browser/ui/views/profiles/BUILD.gn
+index 72a0e6a5f7f15991cbdf8c9196d670bdf1044213..0abbae56995c4d535bcd716a37185b267bff4a56 100644
+--- a/chrome/browser/ui/views/profiles/BUILD.gn
++++ b/chrome/browser/ui/views/profiles/BUILD.gn
+@@ -60,6 +60,7 @@ if (toolkit_views) {
+   source_set("avatar_toolbar_button") {
+     public = [
+       "avatar_toolbar_button.h",
++      "profilo_panel_controller.h",
+       "avatar_toolbar_button_state_manager.h",
+     ]
+ 
+@@ -88,6 +89,7 @@ if (toolkit_views) {
+   source_set("avatar_toolbar_button_impl") {
+     sources = [
+       "avatar_toolbar_button.cc",
++      "profilo_panel_controller.cc",
+       "avatar_toolbar_button_state_manager.cc",
+     ]
+ 
+diff --git a/chrome/browser/ui/views/profiles/avatar_toolbar_button.cc b/chrome/browser/ui/views/profiles/avatar_toolbar_button.cc
+index e246e325c4b1633c38f2a1f6497993a25d4b0d0d..e350dfef4cebdb703b5f9429dac07fcd019a0b76 100644
+--- a/chrome/browser/ui/views/profiles/avatar_toolbar_button.cc
++++ b/chrome/browser/ui/views/profiles/avatar_toolbar_button.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/views/profiles/avatar_toolbar_button.h"
+ 
++#include "chrome/browser/ui/views/profiles/profilo_panel_controller.h"
++
+ #include "base/check.h"
+ #include "base/check_is_test.h"
+ #include "base/feature_list.h"
+@@ -11,6 +13,8 @@
+ #include "base/functional/callback_helpers.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/time/time.h"
++#include "build/build_config.h"
++#include "cc/paint/paint_flags.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/profiles/profile_avatar_icon_util.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+@@ -25,11 +29,14 @@
+ #include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
+ #include "components/user_education/common/user_education_class_properties.h"
+ #include "third_party/skia/include/core/SkColor.h"
++#include "third_party/skia/include/core/SkPathBuilder.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/base/models/image_model_utils.h"
+ #include "ui/color/color_provider.h"
+ #include "ui/color/color_provider_key.h"
+ #include "ui/compositor/layer.h"
++#include "ui/gfx/canvas.h"
++#include "ui/gfx/image/canvas_image_source.h"
+ #include "ui/gfx/image/image.h"
+ #include "ui/gfx/scoped_animation_duration_scale_mode.h"
+ #include "ui/gfx/text_constants.h"
+@@ -44,6 +51,44 @@
+ 
+ namespace {
+ 
++#if BUILDFLAG(IS_MAC)
++constexpr int kPersonIconSize = 17;
++#else
++constexpr int kPersonIconSize = 18;
++#endif
++
++// The person of the boards: a head and shoulders, without a circle around.
++class PersonIconSource : public gfx::CanvasImageSource {
++ public:
++  PersonIconSource(int size, SkColor color)
++      : gfx::CanvasImageSource(gfx::Size(size, size)),
++        size_(size),
++        color_(color) {}
++
++  void Draw(gfx::Canvas* canvas) override {
++    const float unit = size_ / 16.f;
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setColor(color_);
++    flags.setStyle(cc::PaintFlags::kStroke_Style);
++    flags.setStrokeCap(cc::PaintFlags::kRound_Cap);
++    flags.setStrokeWidth(1.4f * unit);
++    canvas->DrawCircle(gfx::PointF(8 * unit, 5.5f * unit), 2.8f * unit, flags);
++    SkPathBuilder shoulders;
++    shoulders.moveTo(2.8f * unit, 14 * unit);
++    shoulders.cubicTo(3.4f * unit, 11.3f * unit, 5.5f * unit, 9.7f * unit,
++                      8 * unit, 9.7f * unit);
++    shoulders.cubicTo(10.5f * unit, 9.7f * unit, 12.6f * unit, 11.3f * unit,
++                      13.2f * unit, 14 * unit);
++    canvas->DrawPath(shoulders.detach(), flags);
++  }
++
++ private:
++  const int size_;
++  const SkColor color_;
++};
++
++
+ constexpr int kChromeRefreshImageLabelPadding = 6;
+ 
+ // Value used to enlarge the AvatarIcon to accommodate for DIP scaling.
+@@ -58,6 +103,11 @@ AvatarToolbarButton::AvatarToolbarButton(BrowserWindowInterface* browser)
+       state_manager_(*this, browser),
+       slide_animation_(this) {
+   state_manager_.InitializeStates();
++  // Incognito and guest windows have no Claude: they keep Chromium's menu.
++  if (!browser->GetProfile()->IsOffTheRecord() &&
++      !browser->GetProfile()->IsGuestSession()) {
++    profilo_panel_ = std::make_unique<ProfiloPanelController>(browser);
++  }
+ #if BUILDFLAG(IS_CHROMEOS)
+   // On CrOS this button should only show as badging for Incognito, Guest and
+   // captivie portal signin. It's only enabled for non captive portal Incognito
+@@ -115,6 +165,12 @@ void AvatarToolbarButton::UpdateIcon() {
+   auto [icon, icon_type] = state_provider->GetAvatarIcon(
+       icon_size, GetForegroundColor(ButtonState::STATE_NORMAL),
+       *color_provider);
++  // Finché il profilo non ha una foto sua, l'omino delle tavole.
++  if (profilo_panel_ && icon_type == AvatarIconType::kPlaceholder) {
++    icon = ui::ImageModel::FromImageSkia(
++        gfx::CanvasImageSource::MakeImageSkia<PersonIconSource>(
++            kPersonIconSize, GetForegroundColor(ButtonState::STATE_NORMAL)));
++  }
+ 
+   SetImageModel(ButtonState::STATE_NORMAL, icon);
+   SetImageModel(ButtonState::STATE_DISABLED,
+@@ -462,9 +518,17 @@ void AvatarToolbarButton::OnThemeChanged() {
+ }
+ 
+ void AvatarToolbarButton::ButtonPressed(bool is_source_accelerator) {
++  if (profilo_panel_) {
++    profilo_panel_->Toggle(this);
++    return;
++  }
+   state_manager_.HandleButtonPressed(is_source_accelerator);
+ }
+ 
++void AvatarToolbarButton::ShowChromiumProfileMenu() {
++  state_manager_.HandleButtonPressed(/*is_source_accelerator=*/false);
++}
++
+ void AvatarToolbarButton::AfterPropertyChange(const void* key,
+                                               int64_t old_value) {
+   if (key == user_education::kHasInProductHelpPromoKey) {
+diff --git a/chrome/browser/ui/views/profiles/avatar_toolbar_button.h b/chrome/browser/ui/views/profiles/avatar_toolbar_button.h
+index 42e972a2b45ea7d3343e538a2924dd27f8f9a171..2ff4437cdc6baf250355739a403bc8db73bf0cbd 100644
+--- a/chrome/browser/ui/views/profiles/avatar_toolbar_button.h
++++ b/chrome/browser/ui/views/profiles/avatar_toolbar_button.h
+@@ -5,6 +5,8 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_PROFILES_AVATAR_TOOLBAR_BUTTON_H_
+ #define CHROME_BROWSER_UI_VIEWS_PROFILES_AVATAR_TOOLBAR_BUTTON_H_
+ 
++#include <memory>
++
+ #include "build/build_config.h"
+ #include "base/callback_list.h"
+ #include "base/functional/callback.h"
+@@ -29,6 +31,8 @@ class AvatarToolbarButtonTestAccessor;
+ // It's data (text, icon, etc...) content are computed through the
+ // `AvatarToolbarButtonStateManager`, when relying on Chrome and Profile changes
+ // in order to adapt the expected content shown in the button.
++class ProfiloPanelController;
++
+ class AvatarToolbarButton : public ToolbarButton,
+                             public AvatarToolbarButtonInterface {
+   METADATA_HEADER(AvatarToolbarButton, ToolbarButton)
+@@ -53,6 +57,9 @@ class AvatarToolbarButton : public ToolbarButton,
+   bool HasFocus() const override;
+   views::DialogDelegate* GetDialogDelegate() override;
+   void ButtonPressed(bool is_source_accelerator) override;
++
++  // Chromium's own menu, behind "Altri profili e ospite" in the panel.
++  void ShowChromiumProfileMenu();
+   [[nodiscard]] base::ScopedClosureRunner SetExplicitButtonState(
+       const std::u16string& text,
+       std::optional<std::u16string> accessibility_label,
+@@ -92,6 +99,8 @@ class AvatarToolbarButton : public ToolbarButton,
+   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
+ 
+  private:
++  std::unique_ptr<ProfiloPanelController> profilo_panel_;
++
+ #if BUILDFLAG(IS_MAC)
+   // ToolbarButton:
+   int GetRoundedCornerRadius() const override;
+diff --git a/chrome/browser/ui/views/profiles/profilo_panel_controller.cc b/chrome/browser/ui/views/profiles/profilo_panel_controller.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..bbcb2b2d46a399dc8822718b7ecd192e73f8c1ee
+--- /dev/null
++++ b/chrome/browser/ui/views/profiles/profilo_panel_controller.cc
+@@ -0,0 +1,43 @@
++#include "chrome/browser/ui/views/profiles/profilo_panel_controller.h"
++
++#include "chrome/browser/ui/views/bubble/webui_bubble_manager.h"
++#include "chrome/browser/ui/webui/profilo_panel_ui.h"
++#include "chrome/common/webui_url_constants.h"
++#include "chrome/grit/generated_resources.h"
++#include "ui/views/bubble/bubble_border.h"
++#include "ui/views/view.h"
++#include "url/gurl.h"
++
++ProfiloPanelController::ProfiloPanelController(BrowserWindowInterface* browser)
++    : browser_(browser) {}
++
++ProfiloPanelController::~ProfiloPanelController() = default;
++
++void ProfiloPanelController::Toggle(views::View* anchor) {
++  // The click that lands here has already closed the open panel.
++  if (base::TimeTicks::Now() - closed_at_ < base::Milliseconds(400)) {
++    return;
++  }
++  if (!manager_) {
++    manager_ = WebUIBubbleManager::Create<ProfiloPanelUI>(
++        browser_.get(), GURL(chrome::kChromeUIProfiloPanelURL),
++        IDS_TOOLTIP_LOCATION_ICON);
++  }
++  if (manager_->GetBubbleWidget()) {
++    manager_->CloseBubble();
++    return;
++  }
++  // Where the boards put it: 40 dp below the top of the button, 70 dp past its
++  // right edge, over the buttons that follow.
++  const gfx::Rect button = anchor->GetBoundsInScreen();
++  manager_->ShowBubble(gfx::Rect(button.right() + 69, button.y(), 1, 40),
++                       views::BubbleBorder::TOP_RIGHT);
++  if (views::Widget* widget = manager_->GetBubbleWidget()) {
++    observation_.Observe(widget);
++  }
++}
++
++void ProfiloPanelController::OnWidgetDestroying(views::Widget* widget) {
++  observation_.Reset();
++  closed_at_ = base::TimeTicks::Now();
++}
+diff --git a/chrome/browser/ui/views/profiles/profilo_panel_controller.h b/chrome/browser/ui/views/profiles/profilo_panel_controller.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..cfbc179cd0f783d8c9d19c75a6cfc1f5084fd487
+--- /dev/null
++++ b/chrome/browser/ui/views/profiles/profilo_panel_controller.h
+@@ -0,0 +1,40 @@
++#ifndef CHROME_BROWSER_UI_VIEWS_PROFILES_PROFILO_PANEL_CONTROLLER_H_
++#define CHROME_BROWSER_UI_VIEWS_PROFILES_PROFILO_PANEL_CONTROLLER_H_
++
++#include <memory>
++
++#include "base/memory/raw_ptr.h"
++#include "base/scoped_observation.h"
++#include "base/time/time.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/widget/widget_observer.h"
++
++class BrowserWindowInterface;
++class WebUIBubbleManager;
++
++namespace views {
++class View;
++}
++
++// Opens and closes the panel of the profile button.
++class ProfiloPanelController : public views::WidgetObserver {
++ public:
++  explicit ProfiloPanelController(BrowserWindowInterface* browser);
++  ProfiloPanelController(const ProfiloPanelController&) = delete;
++  ProfiloPanelController& operator=(const ProfiloPanelController&) = delete;
++  ~ProfiloPanelController() override;
++
++  void Toggle(views::View* anchor);
++
++ private:
++  // views::WidgetObserver:
++  void OnWidgetDestroying(views::Widget* widget) override;
++
++  raw_ptr<BrowserWindowInterface> browser_;
++  std::unique_ptr<WebUIBubbleManager> manager_;
++  base::TimeTicks closed_at_;
++  base::ScopedObservation<views::Widget, views::WidgetObserver> observation_{
++      this};
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_PROFILES_PROFILO_PANEL_CONTROLLER_H_
+diff --git a/chrome/browser/ui/views/side_panel/BUILD.gn b/chrome/browser/ui/views/side_panel/BUILD.gn
+index f090138eb7424fc68ade28275a69912ae31b0335..704cbf3ed70ff9baf8afc8a6149ab3744fd994bd 100644
+--- a/chrome/browser/ui/views/side_panel/BUILD.gn
++++ b/chrome/browser/ui/views/side_panel/BUILD.gn
+@@ -10,6 +10,8 @@ import("//extensions/buildflags/buildflags.gni")
+ source_set("side_panel") {
+   sources = [
+     "bookmarks/bookmarks_side_panel_coordinator.cc",
++    "claude_side_panel.cc",
++    "claude_side_panel.h",
+     "bookmarks/bookmarks_side_panel_coordinator.h",
+     "comments/comments_side_panel_coordinator.cc",
+     "comments/comments_side_panel_coordinator.h",
+diff --git a/chrome/browser/ui/views/side_panel/claude_side_panel.cc b/chrome/browser/ui/views/side_panel/claude_side_panel.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..4260a3ce14a8861363136bc10f1c46ba25fa7890
+--- /dev/null
++++ b/chrome/browser/ui/views/side_panel/claude_side_panel.cc
+@@ -0,0 +1,399 @@
++#include "chrome/browser/ui/views/side_panel/claude_side_panel.h"
++
++#include <string>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/values.h"
++#include "cc/paint/paint_flags.h"
++#include "chrome/browser/extensions/extension_action_runner.h"
++#include "chrome/browser/fork/claude_extension.h"
++#include "chrome/browser/fork/temporary_site_data_service.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/navigator/browser_navigator.h"
++#include "chrome/browser/ui/navigator/browser_navigator_params.h"
++#include "chrome/browser/ui/side_panel/side_panel_entry.h"
++#include "chrome/browser/ui/side_panel/side_panel_entry_id.h"
++#include "chrome/browser/ui/side_panel/side_panel_entry_key.h"
++#include "chrome/browser/ui/side_panel/side_panel_registry.h"
++#include "chrome/browser/ui/side_panel/side_panel_ui.h"
++#include "components/input/native_web_keyboard_event.h"
++#include "components/prefs/pref_service.h"
++#include "components/prefs/scoped_user_pref_update.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_delegate.h"
++#include "extensions/browser/extension_registry.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/color/color_provider.h"
++#include "ui/gfx/canvas.h"
++#include "ui/gfx/color_utils.h"
++#include "ui/gfx/font_list.h"
++#include "ui/gfx/image/canvas_image_source.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/background.h"
++#include "ui/views/controls/button/button.h"
++#include "ui/views/controls/image_view.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
++#include "ui/views/controls/webview/webview.h"
++#include "ui/views/layout/box_layout_view.h"
++#include "ui/views/view_class_properties.h"
++
++namespace browser_fork {
++
++namespace {
++
++constexpr char kClaudeChatsUrl[] = "https://claude.ai/";
++constexpr char kClaudeSite[] = "claude.ai";
++
++// The chats have no id of their own: nothing else uses this one on the desktop.
++SidePanelEntryKey ChatsKey() {
++  return SidePanelEntryKey(SidePanelEntryId::kFeed);
++}
++
++SidePanelEntryKey PageKey() {
++  return SidePanelEntryKey(SidePanelEntryId::kExtension, kClaudeExtensionId);
++}
++
++bool IsDark(const views::View* view) {
++  return color_utils::IsDark(view->GetColorProvider()->GetColor(kColorToolbar));
++}
++
++// Without this the login would not survive the temporary cookies.
++void RememberClaudeSite(Profile* profile) {
++  ScopedListPrefUpdate update(profile->GetPrefs(), kRememberedSitesPref);
++  for (const base::Value& entry : *update) {
++    if (entry.is_string() && entry.GetString() == kClaudeSite) {
++      return;
++    }
++  }
++  update->Append(kClaudeSite);
++}
++
++const extensions::Extension* GetClaudeExtension(Profile* profile) {
++  return extensions::ExtensionRegistry::Get(profile)
++      ->enabled_extensions()
++      .GetByID(kClaudeExtensionId);
++}
++
++// "Questa pagina": the extension opens its own panel as if its icon was clicked.
++bool ShowPageView(BrowserWindowInterface* browser) {
++  const extensions::Extension* extension =
++      GetClaudeExtension(browser->GetProfile());
++  tabs::TabInterface* tab = browser->GetActiveTabInterface();
++  auto* runner = tab ? extensions::ExtensionActionRunner::GetForWebContents(
++                           tab->GetContents())
++                     : nullptr;
++  if (!extension || !runner) {
++    return false;
++  }
++  runner->RunAction(extension, /*grant_tab_permissions=*/true);
++  return true;
++}
++
++void ShowChatsView(BrowserWindowInterface* browser) {
++  browser->GetFeatures().side_panel_ui()->Show(ChatsKey());
++}
++
++class AsteriskSource : public gfx::CanvasImageSource {
++ public:
++  AsteriskSource(int size, SkColor color)
++      : gfx::CanvasImageSource(gfx::Size(size, size)),
++        size_(size),
++        color_(color) {}
++
++  void Draw(gfx::Canvas* canvas) override {
++    const float unit = size_ / 16.f;
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setColor(color_);
++    flags.setStyle(cc::PaintFlags::kStroke_Style);
++    flags.setStrokeCap(cc::PaintFlags::kRound_Cap);
++    flags.setStrokeWidth(1.9f * unit);
++    const auto line = [&](float x1, float y1, float x2, float y2) {
++      canvas->sk_canvas()->drawLine(x1 * unit, y1 * unit, x2 * unit, y2 * unit,
++                                    flags);
++    };
++    line(8, 1.6, 8, 14.4);
++    line(1.6, 8, 14.4, 8);
++    line(3.5, 3.5, 12.5, 12.5);
++    line(12.5, 3.5, 3.5, 12.5);
++  }
++
++ private:
++  const int size_;
++  const SkColor color_;
++};
++
++// One half of the switch between the two views.
++class SegmentButton : public views::Button {
++  METADATA_HEADER(SegmentButton, views::Button)
++
++ public:
++  SegmentButton(const std::u16string& text,
++                bool selected,
++                PressedCallback callback)
++      : views::Button(std::move(callback)), text_(text), selected_(selected) {
++    GetViewAccessibility().SetName(text_);
++  }
++
++  gfx::Size CalculatePreferredSize(
++      const views::SizeBounds& available_size) const override {
++    return gfx::Size(100, 30);
++  }
++
++  void PaintButtonContents(gfx::Canvas* canvas) override {
++    const bool dark = IsDark(this);
++    if (selected_) {
++      cc::PaintFlags flags;
++      flags.setAntiAlias(true);
++      flags.setColor(dark ? SkColorSetA(SK_ColorWHITE, 41) : SK_ColorWHITE);
++      canvas->DrawRoundRect(GetLocalBounds(), 9, flags);
++    }
++    gfx::FontList font = gfx::FontList().DeriveWithSizeDelta(
++        13 - gfx::FontList().GetFontSize());
++    if (selected_) {
++      font = font.DeriveWithWeight(gfx::Font::Weight::SEMIBOLD);
++    }
++    canvas->DrawStringRectWithFlags(
++        text_, font, dark ? SkColorSetRGB(245, 245, 247) : SkColorSetRGB(29, 29, 31),
++        GetLocalBounds(), gfx::Canvas::TEXT_ALIGN_CENTER);
++  }
++
++ private:
++  const std::u16string text_;
++  const bool selected_;
++};
++
++BEGIN_METADATA(SegmentButton)
++END_METADATA
++
++class CloseButton : public views::Button {
++  METADATA_HEADER(CloseButton, views::Button)
++
++ public:
++  explicit CloseButton(PressedCallback callback)
++      : views::Button(std::move(callback)) {
++    GetViewAccessibility().SetName(u"Chiudi Claude");
++  }
++
++  gfx::Size CalculatePreferredSize(
++      const views::SizeBounds& available_size) const override {
++    return gfx::Size(24, 24);
++  }
++
++  void PaintButtonContents(gfx::Canvas* canvas) override {
++    const bool dark = IsDark(this);
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setColor(dark ? SkColorSetA(SK_ColorWHITE, 26)
++                        : SkColorSetA(SK_ColorBLACK, 18));
++    canvas->DrawRoundRect(GetLocalBounds(), 12, flags);
++    flags.setColor(dark ? SkColorSetRGB(179, 179, 186) : SkColorSetRGB(90, 90, 96));
++    flags.setStyle(cc::PaintFlags::kStroke_Style);
++    flags.setStrokeCap(cc::PaintFlags::kRound_Cap);
++    flags.setStrokeWidth(1.3f);
++    canvas->sk_canvas()->drawLine(8.5f, 8.5f, 15.5f, 15.5f, flags);
++    canvas->sk_canvas()->drawLine(15.5f, 8.5f, 8.5f, 15.5f, flags);
++  }
++};
++
++BEGIN_METADATA(CloseButton)
++END_METADATA
++
++// The top of the panel in the boards: name, close, and the switch of the views.
++class ClaudePanelHeader : public views::BoxLayoutView {
++  METADATA_HEADER(ClaudePanelHeader, views::BoxLayoutView)
++
++ public:
++  ClaudePanelHeader(BrowserWindowInterface* browser, bool page_selected)
++      : browser_(browser) {
++    SetOrientation(views::BoxLayout::Orientation::kVertical);
++    SetInsideBorderInsets(gfx::Insets::TLBR(14, 14, 10, 14));
++    SetBetweenChildSpacing(10);
++    SetCrossAxisAlignment(views::BoxLayout::CrossAxisAlignment::kStretch);
++
++    auto* top = AddChildView(std::make_unique<views::BoxLayoutView>());
++    top->SetCrossAxisAlignment(views::BoxLayout::CrossAxisAlignment::kCenter);
++    top->SetBetweenChildSpacing(8);
++    icon_ = top->AddChildView(std::make_unique<views::ImageView>());
++    title_ = top->AddChildView(std::make_unique<views::Label>(u"Claude"));
++    title_->SetFontList(
++        gfx::FontList()
++            .DeriveWithSizeDelta(16 - gfx::FontList().GetFontSize())
++            .DeriveWithWeight(gfx::Font::Weight::BOLD));
++    title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
++    top->SetFlexForView(title_, 1);
++    top->AddChildView(std::make_unique<CloseButton>(base::BindRepeating(
++        [](BrowserWindowInterface* browser) {
++          browser->GetFeatures().side_panel_ui()->Close();
++        },
++        browser_)));
++
++    segments_ = AddChildView(std::make_unique<views::BoxLayoutView>());
++    segments_->SetInsideBorderInsets(gfx::Insets(3));
++    segments_->SetFlexForView(
++        segments_->AddChildView(std::make_unique<SegmentButton>(
++            u"Questa pagina", page_selected,
++            base::BindRepeating(base::IgnoreResult(&ShowPageView), browser_))),
++        1);
++    segments_->SetFlexForView(
++        segments_->AddChildView(std::make_unique<SegmentButton>(
++            u"Le tue chat", !page_selected,
++            base::BindRepeating(&ShowChatsView, browser_))),
++        1);
++  }
++
++  // Like the stock header, it draws on top of the border of the panel.
++  void Layout(PassKey) override {
++    LayoutSuperclass<views::BoxLayoutView>(this);
++    const gfx::Rect contents = parent()->GetContentsBounds();
++    const int height = GetPreferredSize().height();
++    SetBoundsRect(
++        gfx::Rect(contents.x(), contents.y() - height, contents.width(), height));
++  }
++
++  void OnThemeChanged() override {
++    views::BoxLayoutView::OnThemeChanged();
++    const bool dark = IsDark(this);
++    icon_->SetImage(ui::ImageModel::FromImageSkia(
++        CreateClaudeIcon(22, GetClaudeColor(dark))));
++    title_->SetEnabledColor(dark ? SkColorSetRGB(245, 245, 247)
++                                 : SkColorSetRGB(29, 29, 31));
++    segments_->SetBackground(views::CreateRoundedRectBackground(
++        dark ? SkColorSetA(SK_ColorWHITE, 26) : SkColorSetA(SK_ColorBLACK, 18),
++        12));
++  }
++
++ private:
++  raw_ptr<BrowserWindowInterface> browser_;
++  raw_ptr<views::ImageView> icon_ = nullptr;
++  raw_ptr<views::Label> title_ = nullptr;
++  raw_ptr<views::BoxLayoutView> segments_ = nullptr;
++};
++
++BEGIN_METADATA(ClaudePanelHeader)
++END_METADATA
++
++// claude.ai, with what a page outside the tab strip needs: its links and popups
++// go to the tabs, the keyboard shortcuts to the window.
++class ClaudeChatsView : public views::WebView {
++  METADATA_HEADER(ClaudeChatsView, views::WebView)
++
++ public:
++  explicit ClaudeChatsView(BrowserWindowInterface* browser)
++      : views::WebView(browser->GetProfile()), browser_(browser) {
++    GetWebContents()->SetDelegate(this);
++    LoadInitialURL(GURL(kClaudeChatsUrl));
++  }
++
++  ~ClaudeChatsView() override { GetWebContents()->SetDelegate(nullptr); }
++
++  // content::WebContentsDelegate:
++  content::WebContents* OpenURLFromTab(
++      content::WebContents* source,
++      const content::OpenURLParams& params,
++      base::OnceCallback<void(content::NavigationHandle&)>
++          navigation_handle_callback) override {
++    if (params.disposition == WindowOpenDisposition::CURRENT_TAB) {
++      source->GetController().LoadURLWithParams(
++          content::NavigationController::LoadURLParams(params));
++      return source;
++    }
++    NavigateParams nav(browser_, params.url, params.transition);
++    nav.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
++    nav.referrer = params.referrer;
++    nav.user_gesture = params.user_gesture;
++    Navigate(&nav);
++    return nav.navigated_or_inserted_contents;
++  }
++
++  content::WebContents* AddNewContents(
++      content::WebContents* source,
++      std::unique_ptr<content::WebContents> new_contents,
++      const GURL& target_url,
++      WindowOpenDisposition disposition,
++      const blink::mojom::WindowFeatures& window_features,
++      bool user_gesture,
++      bool* was_blocked) override {
++    NavigateParams nav(browser_, std::move(new_contents));
++    nav.source_contents = source;
++    nav.url = target_url;
++    nav.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
++    nav.user_gesture = user_gesture;
++    Navigate(&nav);
++    return nullptr;
++  }
++
++  bool HandleKeyboardEvent(content::WebContents* source,
++                           const input::NativeWebKeyboardEvent& event) override {
++    return keyboard_handler_.HandleKeyboardEvent(event, GetFocusManager());
++  }
++
++ private:
++  raw_ptr<BrowserWindowInterface> browser_;
++  views::UnhandledKeyboardEventHandler keyboard_handler_;
++};
++
++BEGIN_METADATA(ClaudeChatsView)
++END_METADATA
++
++std::unique_ptr<views::View> CreateChatsView(BrowserWindowInterface* browser,
++                                             SidePanelEntryScope& scope) {
++  return std::make_unique<ClaudeChatsView>(browser);
++}
++
++}  // namespace
++
++gfx::ImageSkia CreateClaudeIcon(int size, SkColor color) {
++  return gfx::CanvasImageSource::MakeImageSkia<AsteriskSource>(size, color);
++}
++
++SkColor GetClaudeColor(bool dark) {
++  return dark ? SkColorSetRGB(0xe0, 0x88, 0x6b) : SkColorSetRGB(0xd9, 0x77, 0x57);
++}
++
++void ShowClaudeChats(BrowserWindowInterface* browser) {
++  RememberClaudeSite(browser->GetProfile());
++  ShowChatsView(browser);
++}
++
++void ToggleClaudePanel(BrowserWindowInterface* browser) {
++  SidePanelUI* side_panel = browser->GetFeatures().side_panel_ui();
++  if (side_panel->IsSidePanelEntryShowing(ChatsKey()) ||
++      side_panel->IsSidePanelEntryShowing(PageKey())) {
++    side_panel->Close();
++    return;
++  }
++  RememberClaudeSite(browser->GetProfile());
++  if (!ShowPageView(browser)) {
++    ShowChatsView(browser);
++  }
++}
++
++void RegisterClaudeChatsEntry(BrowserWindowInterface* browser,
++                              SidePanelRegistry* window_registry) {
++  auto entry = std::make_unique<SidePanelEntry>(
++      ChatsKey(), base::BindRepeating(&CreateChatsView, browser),
++      /*default_content_width_callback=*/base::BindRepeating([] { return 360; }));
++  entry->set_should_show_ephemerally_in_toolbar(false);
++  window_registry->Register(std::move(entry));
++}
++
++bool IsClaudeEntry(const SidePanelEntryKey& key) {
++  return key == ChatsKey() || key == PageKey();
++}
++
++std::unique_ptr<views::View> CreateClaudePanelHeader(
++    BrowserWindowInterface* browser,
++    const SidePanelEntryKey& key) {
++  return std::make_unique<ClaudePanelHeader>(browser, key == PageKey());
++}
++
++}  // namespace browser_fork
+diff --git a/chrome/browser/ui/views/side_panel/claude_side_panel.h b/chrome/browser/ui/views/side_panel/claude_side_panel.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..7416618d585eb713a86a9ca0b69693f757fd2cdb
+--- /dev/null
++++ b/chrome/browser/ui/views/side_panel/claude_side_panel.h
+@@ -0,0 +1,41 @@
++#ifndef CHROME_BROWSER_UI_VIEWS_SIDE_PANEL_CLAUDE_SIDE_PANEL_H_
++#define CHROME_BROWSER_UI_VIEWS_SIDE_PANEL_CLAUDE_SIDE_PANEL_H_
++
++#include <memory>
++
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/gfx/image/image_skia.h"
++
++class BrowserWindowInterface;
++class SidePanelEntryKey;
++class SidePanelRegistry;
++
++namespace views {
++class View;
++}
++
++namespace browser_fork {
++
++// The Claude asterisk of the boards.
++gfx::ImageSkia CreateClaudeIcon(int size, SkColor color);
++SkColor GetClaudeColor(bool dark);
++
++// The button in the toolbar: opens the panel, or closes it if it is open.
++void ToggleClaudePanel(BrowserWindowInterface* browser);
++
++// Opens "Le tue chat", where the login happens.
++void ShowClaudeChats(BrowserWindowInterface* browser);
++
++// "Le tue chat": claude.ai in the side panel.
++void RegisterClaudeChatsEntry(BrowserWindowInterface* browser,
++                              SidePanelRegistry* window_registry);
++
++// True for the two views of the panel, which share the header of the boards.
++bool IsClaudeEntry(const SidePanelEntryKey& key);
++std::unique_ptr<views::View> CreateClaudePanelHeader(
++    BrowserWindowInterface* browser,
++    const SidePanelEntryKey& key);
++
++}  // namespace browser_fork
++
++#endif  // CHROME_BROWSER_UI_VIEWS_SIDE_PANEL_CLAUDE_SIDE_PANEL_H_
+diff --git a/chrome/browser/ui/views/side_panel/side_panel_coordinator.cc b/chrome/browser/ui/views/side_panel/side_panel_coordinator.cc
+index 23d3c51c786881c3a0bdf158fc14f13c215c65f5..1c32691379c7f40f8457f93e30325ca51a4bd940 100644
+--- a/chrome/browser/ui/views/side_panel/side_panel_coordinator.cc
++++ b/chrome/browser/ui/views/side_panel/side_panel_coordinator.cc
+@@ -29,6 +29,7 @@
+ #include "chrome/browser/ui/user_education/browser_user_education_interface.h"
+ #include "chrome/browser/ui/views/interaction/browser_elements_views.h"
+ #include "chrome/browser/ui/views/side_panel/side_panel.h"
++#include "chrome/browser/ui/views/side_panel/claude_side_panel.h"
+ #include "chrome/browser/ui/views/side_panel/side_panel_header.h"
+ #include "chrome/browser/ui/views/side_panel/side_panel_header_controller.h"
+ #include "chrome/browser/ui/views/side_panel/side_panel_helper.h"
+@@ -274,7 +275,10 @@ void SidePanelCoordinator::PopulateSidePanel(
+ 
+   side_panel->UpdateHorizontalAlignment(entry->key().id());
+ 
+-  if (entry->should_show_header()) {
++  if (browser_fork::IsClaudeEntry(entry->key())) {
++    side_panel->AddHeaderView(
++        browser_fork::CreateClaudePanelHeader(&*browser_, entry->key()));
++  } else if (entry->should_show_header()) {
+     side_panel->AddHeaderView(std::make_unique<SidePanelHeader>(
+         std::make_unique<SidePanelHeaderController>(
+             &*browser_, side_panel_toolbar_pinning_controller_.get(), entry)));
+diff --git a/chrome/browser/ui/views/side_panel/side_panel_helper.cc b/chrome/browser/ui/views/side_panel/side_panel_helper.cc
+index 414f120c64b5143b2dd9ee85d09be4012622715d..d9e8cb9f610274158964905a7f8f846fafbd11db 100644
+--- a/chrome/browser/ui/views/side_panel/side_panel_helper.cc
++++ b/chrome/browser/ui/views/side_panel/side_panel_helper.cc
+@@ -12,6 +12,7 @@
+ #include "chrome/browser/ui/side_panel/side_panel_registry.h"
+ #include "chrome/browser/ui/side_panel/side_panel_ui.h"
+ #include "chrome/browser/ui/ui_features.h"
++#include "chrome/browser/ui/views/side_panel/claude_side_panel.h"
+ #include "chrome/browser/ui/views/side_panel/bookmarks/bookmarks_side_panel_coordinator.h"
+ #include "chrome/browser/ui/views/side_panel/comments/comments_side_panel_coordinator.h"
+ #include "chrome/browser/ui/views/side_panel/history/history_side_panel_coordinator.h"
+@@ -35,6 +36,11 @@ void SidePanelHelper::PopulateGlobalEntries(
+   BookmarksSidePanelCoordinator::From(browser)->CreateAndRegisterEntry(
+       window_registry);
+ 
++  // Add the chats of Claude.
++  if (!browser->GetProfile()->IsOffTheRecord()) {
++    browser_fork::RegisterClaudeChatsEntry(browser, window_registry);
++  }
++
+   if (webui_browser::IsWebUIBrowserEnabled()) {
+     // TODO(webium): Consider supporting additional side panels beyond reading
+     // list and bookmarks.
+diff --git a/chrome/browser/ui/views/side_panel/side_panel_toolbar_pinning_controller.cc b/chrome/browser/ui/views/side_panel/side_panel_toolbar_pinning_controller.cc
+index 71d5d2e245ef9450e2d1c71367fb4db60dbe7d27..121dfa080ba4387d6e2be823985d3f0b780f0ade 100644
+--- a/chrome/browser/ui/views/side_panel/side_panel_toolbar_pinning_controller.cc
++++ b/chrome/browser/ui/views/side_panel/side_panel_toolbar_pinning_controller.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/ui/views/side_panel/claude_side_panel.h"
+ #include "chrome/browser/ui/views/side_panel/side_panel_toolbar_pinning_controller.h"
+ 
+ #include "base/check_deref.h"
+@@ -169,6 +170,11 @@ bool SidePanelToolbarPinningController::ShouldShowActiveInToolbar(
+ void SidePanelToolbarPinningController::UpdateActiveState(
+     SidePanelEntryKey key,
+     bool show_active_in_toolbar) {
++  // The Claude button stands for its panel: no other button appears.
++  if (browser_fork::IsClaudeEntry(key)) {
++    return;
++  }
++
+   auto* const toolbar_container =
+       ToolbarButtonProvider::From(&*browser_)->GetPinnedToolbarActions();
+   CHECK(toolbar_container);
+diff --git a/chrome/browser/ui/views/toolbar/BUILD.gn b/chrome/browser/ui/views/toolbar/BUILD.gn
+index b209ab8240a6cb7f03f167180e7e00a6c209a928..03f051d4c76c37470fe5df2de4657ecd5e4ab473 100644
+--- a/chrome/browser/ui/views/toolbar/BUILD.gn
++++ b/chrome/browser/ui/views/toolbar/BUILD.gn
+@@ -150,7 +150,9 @@ source_set("impl") {
+     "toolbar_icon_container_view.cc",
+     "toolbar_ink_drop_util.cc",
+     "toolbar_view.cc",
++    "claude_button.cc",
+     "vpn_status_button.cc",
++    "claude_button.h",
+     "vpn_status_button.h",
+     "webui_app_menu_control.cc",
+     "webui_avatar_toolbar_button.cc",
+diff --git a/chrome/browser/ui/views/toolbar/claude_button.cc b/chrome/browser/ui/views/toolbar/claude_button.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..0e1508b74aeb96e4a7b5200720275f1987a599ff
+--- /dev/null
++++ b/chrome/browser/ui/views/toolbar/claude_button.cc
+@@ -0,0 +1,39 @@
++#include "chrome/browser/ui/views/toolbar/claude_button.h"
++
++#include "base/functional/bind.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/views/side_panel/claude_side_panel.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/image_model.h"
++#include "ui/color/color_provider.h"
++#include "ui/gfx/color_utils.h"
++#include "ui/gfx/font.h"
++#include "ui/gfx/font_list.h"
++#include "ui/views/accessibility/view_accessibility.h"
++
++ClaudeButton::ClaudeButton(BrowserWindowInterface* browser)
++    : ToolbarButton(base::BindRepeating(&browser_fork::ToggleClaudePanel,
++                                        browser)) {
++  SetText(u"Claude");
++  label()->SetFontList(
++      label()->font_list().DeriveWithWeight(gfx::Font::Weight::SEMIBOLD));
++  SetImageLabelSpacing(6);
++  SetHorizontalAlignment(gfx::ALIGN_LEFT);
++  GetViewAccessibility().SetName(u"Claude");
++}
++
++ClaudeButton::~ClaudeButton() = default;
++
++void ClaudeButton::UpdateIcon() {
++  if (!GetColorProvider()) {
++    return;
++  }
++  const bool dark =
++      color_utils::IsDark(GetColorProvider()->GetColor(kColorToolbar));
++  SetImageModel(views::Button::STATE_NORMAL,
++                ui::ImageModel::FromImageSkia(browser_fork::CreateClaudeIcon(
++                    15, browser_fork::GetClaudeColor(dark))));
++}
++
++BEGIN_METADATA(ClaudeButton)
++END_METADATA
+diff --git a/chrome/browser/ui/views/toolbar/claude_button.h b/chrome/browser/ui/views/toolbar/claude_button.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..a8ff29b0867e0b096a39bb714c736d6c6614e177
+--- /dev/null
++++ b/chrome/browser/ui/views/toolbar/claude_button.h
+@@ -0,0 +1,23 @@
++#ifndef CHROME_BROWSER_UI_VIEWS_TOOLBAR_CLAUDE_BUTTON_H_
++#define CHROME_BROWSER_UI_VIEWS_TOOLBAR_CLAUDE_BUTTON_H_
++
++#include "chrome/browser/ui/views/toolbar/toolbar_button.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++
++class BrowserWindowInterface;
++
++// The Claude button of the boards, between the address and the VPN pill.
++class ClaudeButton : public ToolbarButton {
++  METADATA_HEADER(ClaudeButton, ToolbarButton)
++
++ public:
++  explicit ClaudeButton(BrowserWindowInterface* browser);
++  ClaudeButton(const ClaudeButton&) = delete;
++  ClaudeButton& operator=(const ClaudeButton&) = delete;
++  ~ClaudeButton() override;
++
++  // ToolbarButton:
++  void UpdateIcon() override;
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_TOOLBAR_CLAUDE_BUTTON_H_
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index 8750890fe635d65c44f809f2571aea6cf6770505..fdae18e099e4e41be0475e40a9080e466f59cc58 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -95,6 +95,7 @@
+ #include "chrome/browser/ui/views/toolbar/app_menu.h"
+ #include "chrome/browser/ui/views/toolbar/app_menu_control.h"
+ #include "chrome/browser/ui/views/toolbar/avatar_toolbar_button_interface.h"
++#include "chrome/browser/ui/views/toolbar/claude_button.h"
+ #include "chrome/browser/ui/views/toolbar/vpn_status_button.h"
+ #if BUILDFLAG(IS_MAC)
+ #include <cmath>
+@@ -522,6 +523,9 @@ void ToolbarView::Init() {
+     location_bar_ = toolbar_webview_->GetLocationBar();
+   }
+ 
++  if (!browser_->GetProfile()->IsOffTheRecord()) {
++    claude_button_ = AddChildView(std::make_unique<ClaudeButton>(browser_));
++  }
+   AddChildView(std::make_unique<VpnStatusButton>(browser_));
+ 
+   bool is_glic_left_of_profile =
+@@ -1570,6 +1574,7 @@ void ToolbarView::OnPaintBackground(gfx::Canvas* canvas) {
+   };
+   capsule({back_.get(), forward_.get()});
+   capsule({reload_.get()});
++  capsule({claude_button_.get()});
+   capsule({avatar_.get()});
+   capsule({share_button_.get(), app_menu_button_.get()});
+ }
+@@ -1648,7 +1653,8 @@ void ToolbarView::InitLayout() {
+     }
+   }
+   for (views::View* view :
+-       std::initializer_list<views::View*>{reload_.get(), avatar_.get()}) {
++       std::initializer_list<views::View*>{reload_.get(), claude_button_.get(),
++                                           avatar_.get()}) {
+     if (view) {
+       view->SetProperty(views::kMarginsKey, gfx::Insets::VH(0, 6));
+     }
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.h b/chrome/browser/ui/views/toolbar/toolbar_view.h
+index 0f139d51d89dcfc36e8399f94cbc055b677b8fd3..08a30ebfb2e060d0b66d8445dc9f3a4ec67ebd21 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.h
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.h
+@@ -46,6 +46,7 @@
+ #include "chromeos/ash/experiences/arc/mojom/intent_helper.mojom-forward.h"  // nogncheck https://crbug.com/784179
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+ 
++class ClaudeButton;
+ class ActorTaskListBubble;
+ class AvatarToolbarButton;
+ class AvatarToolbarButtonInterface;
+@@ -378,6 +379,7 @@ class ToolbarView : public views::AccessiblePaneView,
+ #if BUILDFLAG(IS_MAC)
+   void ShareCurrentPage();
+   raw_ptr<ToolbarButton> share_button_ = nullptr;
++  raw_ptr<ClaudeButton> claude_button_ = nullptr;
+ #endif
+   raw_ptr<ToolbarButton> back_ = nullptr;
+   raw_ptr<ToolbarButton> forward_ = nullptr;
+diff --git a/chrome/browser/ui/webui/BUILD.gn b/chrome/browser/ui/webui/BUILD.gn
+index 32cb2b454fe5ff93cd1e7bd364f22909e765901e..904caf0b28b078db04915b7e6b8569f7ed14f228 100644
+--- a/chrome/browser/ui/webui/BUILD.gn
++++ b/chrome/browser/ui/webui/BUILD.gn
+@@ -37,6 +37,8 @@ source_set("configs") {
+     "chrome_web_ui_configs.h",
+     "proxy_config_ui.cc",
+     "proxy_config_ui.h",
++    "profilo_panel_ui.cc",
++    "profilo_panel_ui.h",
+     "site_panel_ui.cc",
+     "site_panel_ui.h",
+   ]
+diff --git a/chrome/browser/ui/webui/chrome_web_ui_configs.cc b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
+index f8792ca27f68e8083a8ab5430511188c2926b708..099ae5aecc8e60f4ab8f9c768097dd02c4589062 100644
+--- a/chrome/browser/ui/webui/chrome_web_ui_configs.cc
++++ b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
+@@ -51,6 +51,7 @@
+ #include "chrome/browser/ui/webui/policy/policy_ui.h"
+ #include "chrome/browser/ui/webui/predictors/predictors_ui.h"
+ #include "chrome/browser/ui/webui/proxy_config_ui.h"
++#include "chrome/browser/ui/webui/profilo_panel_ui.h"
+ #include "chrome/browser/ui/webui/site_panel_ui.h"
+ 
+ #if BUILDFLAG(IS_ANDROID)
+@@ -493,6 +494,7 @@ void RegisterChromeWebUIConfigs() {
+ #endif  //  !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
+ 
+   map.AddWebUIConfig(std::make_unique<ProxyConfigUIConfig>());
++  map.AddWebUIConfig(std::make_unique<ProfiloPanelUIConfig>());
+   map.AddWebUIConfig(std::make_unique<SitePanelUIConfig>());
+ 
+ #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+diff --git a/chrome/browser/ui/webui/profilo_panel_ui.cc b/chrome/browser/ui/webui/profilo_panel_ui.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..6a16b600b6e192468c2ff2a26b690addc8205d53
+--- /dev/null
++++ b/chrome/browser/ui/webui/profilo_panel_ui.cc
+@@ -0,0 +1,133 @@
++#include "chrome/browser/ui/webui/profilo_panel_ui.h"
++
++#include <memory>
++
++#include "base/functional/bind.h"
++#include "base/memory/weak_ptr.h"
++#include "base/strings/string_util.h"
++#include "base/values.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/singleton_tabs.h"
++#include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
++#include "chrome/browser/ui/views/profiles/avatar_toolbar_button.h"
++#include "chrome/browser/ui/views/side_panel/claude_side_panel.h"
++#include "chrome/browser/ui/webui/webui_embedding_context.h"
++#include "chrome/grit/browser_resources.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_ui.h"
++#include "content/public/browser/web_ui_data_source.h"
++#include "content/public/browser/web_ui_message_handler.h"
++#include "net/cookies/canonical_cookie.h"
++#include "services/network/public/mojom/cookie_manager.mojom.h"
++#include "url/gurl.h"
++
++namespace {
++
++class ProfiloPanelHandler : public content::WebUIMessageHandler {
++ public:
++  ProfiloPanelHandler() = default;
++  ProfiloPanelHandler(const ProfiloPanelHandler&) = delete;
++  ProfiloPanelHandler& operator=(const ProfiloPanelHandler&) = delete;
++  ~ProfiloPanelHandler() override = default;
++
++  // content::WebUIMessageHandler:
++  void RegisterMessages() override {
++    const auto add = [this](const char* name,
++                            void (ProfiloPanelHandler::*method)(
++                                const base::ListValue&)) {
++      web_ui()->RegisterMessageCallback(
++          name, base::BindRepeating(method, base::Unretained(this)));
++    };
++    add("ready", &ProfiloPanelHandler::OnReady);
++    add("close", &ProfiloPanelHandler::OnClose);
++    add("openChats", &ProfiloPanelHandler::OnOpenChats);
++    add("logout", &ProfiloPanelHandler::OnLogout);
++    add("otherProfiles", &ProfiloPanelHandler::OnOtherProfiles);
++  }
++
++ private:
++  BrowserWindowInterface* GetBrowser() {
++    return webui::GetBrowserWindowInterface(web_ui()->GetWebContents());
++  }
++
++  void Close() {
++    if (auto embedder =
++            web_ui()->GetController()->GetAs<ProfiloPanelUI>()->embedder()) {
++      embedder->CloseUI();
++    }
++  }
++
++  // Looks only at the local cookie of claude.ai: nothing goes out.
++  void OnReady(const base::ListValue& args) {
++    AllowJavascript();
++    Profile::FromWebUI(web_ui())
++        ->GetDefaultStoragePartition()
++        ->GetCookieManagerForBrowserProcess()
++        ->GetAllCookies(base::BindOnce(&ProfiloPanelHandler::OnCookies,
++                                       weak_factory_.GetWeakPtr()));
++  }
++
++  void OnCookies(const net::CookieList& cookies) {
++    bool signed_in = false;
++    for (const net::CanonicalCookie& cookie : cookies) {
++      if (cookie.Name() == "sessionKey" &&
++          base::EndsWith(cookie.Domain(), "claude.ai")) {
++        signed_in = true;
++        break;
++      }
++    }
++    web_ui()->CallJavascriptFunctionUnsafe("ProfiloPanel.loaded",
++                                           base::Value(signed_in));
++    if (auto embedder =
++            web_ui()->GetController()->GetAs<ProfiloPanelUI>()->embedder()) {
++      embedder->ShowUI();
++    }
++  }
++
++  void OnClose(const base::ListValue& args) { Close(); }
++
++  void OnOpenChats(const base::ListValue& args) {
++    BrowserWindowInterface* browser = GetBrowser();
++    Close();
++    if (browser) {
++      browser_fork::ShowClaudeChats(browser);
++    }
++  }
++
++  void OnLogout(const base::ListValue& args) {
++    BrowserWindowInterface* browser = GetBrowser();
++    Close();
++    if (browser) {
++      ShowSingletonTab(browser, GURL("https://claude.ai/logout"));
++    }
++  }
++
++  void OnOtherProfiles(const base::ListValue& args) {
++    BrowserWindowInterface* browser = GetBrowser();
++    Close();
++    if (browser) {
++      static_cast<AvatarToolbarButton*>(ToolbarButtonProvider::From(browser)
++                                            ->GetAvatarToolbarButtonInterface())
++          ->ShowChromiumProfileMenu();
++    }
++  }
++
++  base::WeakPtrFactory<ProfiloPanelHandler> weak_factory_{this};
++};
++
++}  // namespace
++
++ProfiloPanelUI::ProfiloPanelUI(content::WebUI* web_ui)
++    : TopChromeWebUIController(web_ui, /*enable_chrome_send=*/true) {
++  web_ui->AddMessageHandler(std::make_unique<ProfiloPanelHandler>());
++  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
++      Profile::FromWebUI(web_ui), chrome::kChromeUIProfiloPanelHost);
++  source->AddResourcePath("profilo_panel.js", IDR_PROFILO_PANEL_JS);
++  source->SetDefaultResource(IDR_PROFILO_PANEL_HTML);
++}
++
++ProfiloPanelUI::~ProfiloPanelUI() = default;
++
++WEB_UI_CONTROLLER_TYPE_IMPL(ProfiloPanelUI)
+diff --git a/chrome/browser/ui/webui/profilo_panel_ui.h b/chrome/browser/ui/webui/profilo_panel_ui.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..36113b9cf00fc3e684830bcee0cdd27324510dd2
+--- /dev/null
++++ b/chrome/browser/ui/webui/profilo_panel_ui.h
+@@ -0,0 +1,38 @@
++#ifndef CHROME_BROWSER_UI_WEBUI_PROFILO_PANEL_UI_H_
++#define CHROME_BROWSER_UI_WEBUI_PROFILO_PANEL_UI_H_
++
++#include <string_view>
++
++#include "chrome/browser/ui/webui/top_chrome/top_chrome_web_ui_controller.h"
++#include "chrome/browser/ui/webui/top_chrome/top_chrome_webui_config.h"
++#include "chrome/common/webui_url_constants.h"
++#include "content/public/common/url_constants.h"
++
++class ProfiloPanelUI;
++
++class ProfiloPanelUIConfig : public DefaultTopChromeWebUIConfig<ProfiloPanelUI> {
++ public:
++  ProfiloPanelUIConfig()
++      : DefaultTopChromeWebUIConfig(content::kChromeUIScheme,
++                                    chrome::kChromeUIProfiloPanelHost) {}
++
++  // TopChromeWebUIConfig:
++  bool ShouldAutoResizeHost() override { return true; }
++};
++
++// The panel of the profile button, as in the boards: "Accedi con Claude".
++class ProfiloPanelUI : public TopChromeWebUIController {
++ public:
++  explicit ProfiloPanelUI(content::WebUI* web_ui);
++  ProfiloPanelUI(const ProfiloPanelUI&) = delete;
++  ProfiloPanelUI& operator=(const ProfiloPanelUI&) = delete;
++  ~ProfiloPanelUI() override;
++
++  static constexpr std::string_view GetWebUIName() { return "ProfiloPanel"; }
++  static constexpr int kBubbleCornerRadius = 18;
++
++ private:
++  WEB_UI_CONTROLLER_TYPE_DECL();
++};
++
++#endif  // CHROME_BROWSER_UI_WEBUI_PROFILO_PANEL_UI_H_
+diff --git a/chrome/browser/ui/webui/proxy_config_ui.cc b/chrome/browser/ui/webui/proxy_config_ui.cc
+index 7a4fc0815ee824d875fb23fdabb44570269d8460..63761a9d043eb349d1cd75bd2bac4ff6c131b1dc 100644
+--- a/chrome/browser/ui/webui/proxy_config_ui.cc
++++ b/chrome/browser/ui/webui/proxy_config_ui.cc
+@@ -36,6 +36,7 @@
+ #include "chrome/browser/platform_util.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/fork/personal_search.h"
++#include "chrome/browser/fork/claude_extension.h"
+ #include "chrome/browser/fork/temporary_site_data_service.h"
+ #include "chrome/browser/fork/vpn_status.h"
+ #include "chrome/browser/search_engines/template_url_service_factory.h"
+@@ -90,6 +91,7 @@ class ProxyConfigMessageHandler
+   void OnGetForkSettings(const base::ListValue& args);
+   void OnSetCookieMode(const base::ListValue& args);
+   void OnSetRememberedSites(const base::ListValue& args);
++  void OnSetClaudeBlockedSites(const base::ListValue& list);
+   void OnSetPersonalSearch(const base::ListValue& args);
+   void OnSetVpnSettings(const base::ListValue& args);
+   void OnSetVpnReserve(const base::ListValue& args);
+@@ -257,6 +259,10 @@ void ProxyConfigMessageHandler::RegisterMessages() {
+       "setCookieMode",
+       base::BindRepeating(&ProxyConfigMessageHandler::OnSetCookieMode,
+                           base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "setClaudeBlockedSites",
++      base::BindRepeating(&ProxyConfigMessageHandler::OnSetClaudeBlockedSites,
++                          base::Unretained(this)));
+   web_ui()->RegisterMessageCallback(
+       "setRememberedSites",
+       base::BindRepeating(&ProxyConfigMessageHandler::OnSetRememberedSites,
+@@ -302,6 +308,8 @@ void ProxyConfigMessageHandler::SendForkSettings() {
+   settings.Set("cookieMode", prefs->GetInteger(browser_fork::kCookieModePref));
+   settings.Set("rememberedSites",
+                prefs->GetList(browser_fork::kRememberedSitesPref).Clone());
++  settings.Set("claudeBlockedSites",
++               prefs->GetList(browser_fork::kClaudeBlockedSitesPref).Clone());
+   std::string search;
+   TemplateURLService* service =
+       TemplateURLServiceFactory::GetForProfile(profile_);
+@@ -341,6 +349,15 @@ void ProxyConfigMessageHandler::OnSetCookieMode(const base::ListValue& list) {
+   SendForkSettings();
+ }
+ 
++void ProxyConfigMessageHandler::OnSetClaudeBlockedSites(
++    const base::ListValue& list) {
++  if (list.size() == 1 && list[0].is_list()) {
++    profile_->GetPrefs()->SetList(browser_fork::kClaudeBlockedSitesPref,
++                                  list[0].GetList().Clone());
++  }
++  SendForkSettings();
++}
++
+ void ProxyConfigMessageHandler::OnSetRememberedSites(
+     const base::ListValue& list) {
+   if (list.size() == 1 && list[0].is_list()) {
+diff --git a/chrome/common/webui_url_constants.h b/chrome/common/webui_url_constants.h
+index 01e99b3edbc5dfebba99a2702d2f2280970a82df..fc1e5fad61c1b41a7153edf7c9844b03e991f7b4 100644
+--- a/chrome/common/webui_url_constants.h
++++ b/chrome/common/webui_url_constants.h
+@@ -224,6 +224,9 @@ inline constexpr char kChromeUINewTabHost[] = "newtab";
+ inline constexpr char kChromeUINewTabFooterHost[] = "newtab-footer";
+ inline constexpr char16_t kChromeUIProxyConfigURL16[] = u"chrome://proxy/";
+ inline constexpr char kChromeUIProxyConfigHost[] = "proxy";
++inline constexpr char kChromeUIProfiloPanelHost[] = "profilo-panel.top-chrome";
++inline constexpr char kChromeUIProfiloPanelURL[] =
++    "chrome://profilo-panel.top-chrome/";
+ inline constexpr char kChromeUISitePanelHost[] = "site-panel.top-chrome";
+ inline constexpr char kChromeUISitePanelURL[] = "chrome://site-panel.top-chrome/";
+ inline constexpr char kChromeUINewTabPageHost[] = "new-tab-page";
+diff --git a/tools/metrics/histograms/metadata/page/histograms.xml b/tools/metrics/histograms/metadata/page/histograms.xml
+index 27abcc926e90d739349cd6481336a4ce932d2ffd..a8a49328a3157d34d1cb24c81c84de51f36d3001 100644
+--- a/tools/metrics/histograms/metadata/page/histograms.xml
++++ b/tools/metrics/histograms/metadata/page/histograms.xml
+@@ -632,6 +632,7 @@ chromium-metrics-reviews@google.com.
+ 
+ <variants name="WebUIName">
+   <variant name=""/>
++  <variant name=".ProfiloPanel"/>
+   <variant name=".SitePanel"/>
+   <variant name=".BookmarksSidePanel"/>
+   <variant name=".CommentsSidePanel"/>
