@@ -16,8 +16,13 @@ aggiornamenti di Cromite come tutto il resto.
   voci qui sotto: assistente all'accesso.
 - Mac, primo giro sulla tavola degli schizzi: vetro vero (il `GlassFrame` di Chromium, NSGlassEffectView)
   su schede e barra come un foglio solo, schede a capsula, pulsanti raggruppati in capsule, condividi e
-  menu insieme, profilo solo icona, niente barra dei segnalibri e niente stella. Mancano le schede
-  "nella barra". Windows resta standard.
+  menu insieme, profilo solo icona, niente barra dei segnalibri e niente stella. Windows resta standard.
+- Schede nella barra, a scelta su Mac (Impostazioni, Aspetto; spenta di base, vale per le finestre che
+  si aprono dopo): come nella tavola, le altre schede ai lati dell'indirizzo centrato, che mostra solo
+  il sito finché non lo si modifica, ricarica dentro il campo, Claude solo icona. Una scheda si chiude
+  col clic centrale o Cmd+W. Mancano il pulsante della barra laterale, i gruppi di schede, il
+  trascinamento delle schede e il loro menu. Da sistemare: a schermo intero resta una striscia vuota
+  sopra la barra e, con la finestra stretta, le schede spariscono del tutto.
 - Claude nella barra: pulsante e pannello laterale come nella tavola, con "Questa pagina" (Claude in
   Chrome, che il browser installa dal Chrome Web Store) e "Le tue chat" (claude.ai). Pulsante del
   profilo con l'omino e pannello "Accedi con Claude". Nella pagina `chrome://proxy` c'è l'elenco

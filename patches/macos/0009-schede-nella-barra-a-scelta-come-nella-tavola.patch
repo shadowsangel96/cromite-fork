@@ -1,0 +1,741 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 20:24:24 +0100
+Subject: [PATCH] mac: schede nella barra a scelta, come nella tavola
+
+Fork-Patch: macos/0009-schede-nella-barra-a-scelta-come-nella-tavola.patch
+
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index 227e8c2d662dec8420532035288bf7fccd8fdc08..430b8040ff1c98660a62655cc202fb8bcf124cab 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -36,6 +36,7 @@
+ #include "chrome/browser/ui/toolbar/toolbar_pref_names.h"
+ #include "chrome/common/chrome_features.h"
+ #include "chrome/common/extensions/api/settings_private.h"
++#include "chrome/browser/fork/compact_tabs.h"
+ #include "chrome/common/pref_names.h"
+ #include "components/adblock/core/common/adblock_prefs.h"
+ #include "components/autofill/core/common/autofill_prefs.h"
+@@ -285,6 +286,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+     (*s_allowlist)[autofill::prefs::kAutofillGmailOtpFillingEnabled] =
+         settings_api::PrefType::kBoolean;
+   }
++  (*s_allowlist)[browser_fork::kCompactTabsPref] =
++      settings_api::PrefType::kBoolean;
+   (*s_allowlist)[bookmarks::prefs::kShowBookmarkBar] =
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[bookmarks::prefs::kBookmarkBarVisibilityState] =
+diff --git a/chrome/browser/fork/compact_tabs.h b/chrome/browser/fork/compact_tabs.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..9edba0e29f506695f10fb0d95b02728f887be0c0
+--- /dev/null
++++ b/chrome/browser/fork/compact_tabs.h
+@@ -0,0 +1,12 @@
++#ifndef CHROME_BROWSER_FORK_COMPACT_TABS_H_
++#define CHROME_BROWSER_FORK_COMPACT_TABS_H_
++
++namespace browser_fork {
++
++// The choice in the settings on the Mac: the tabs in the toolbar instead of a
++// row above it. It applies to the windows opened afterwards.
++inline constexpr char kCompactTabsPref[] = "fork.compact_tabs";
++
++}  // namespace browser_fork
++
++#endif  // CHROME_BROWSER_FORK_COMPACT_TABS_H_
+diff --git a/chrome/browser/fork/temporary_site_data_service.cc b/chrome/browser/fork/temporary_site_data_service.cc
+index 27f58efbf7fb63dc1afa33562118e5731d06576c..50b580d7e792d0c54b1cf16326acbb05dc2d8837 100644
+--- a/chrome/browser/fork/temporary_site_data_service.cc
++++ b/chrome/browser/fork/temporary_site_data_service.cc
+@@ -1,6 +1,7 @@
+ #include "chrome/browser/fork/temporary_site_data_service.h"
+ 
+ #include "chrome/browser/fork/claude_extension.h"
++#include "chrome/browser/fork/compact_tabs.h"
+ 
+ #include <utility>
+ 
+@@ -47,6 +48,7 @@ void TemporarySiteDataService::RegisterProfilePrefs(
+                                 static_cast<int>(CookieMode::kTemporary));
+   registry->RegisterListPref(kRememberedSitesPref);
+   registry->RegisterListPref(kClaudeBlockedSitesPref);
++  registry->RegisterBooleanPref(kCompactTabsPref, false);
+ }
+ 
+ // static
+diff --git a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
+index 41b80c71f317ac260bbebec024aca8e7f25face5..4aa448ddd9b27f9ca0987f1fa5a70cb8f121cd72 100644
+--- a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
+@@ -83,6 +83,13 @@ export function getHtml(this: SettingsAppearancePageElement) {
+     <div class="hr" ?hidden="${!this.showHr_(
+         this.pageVisibility_.setTheme, this.pageVisibility_.homeButton)}">
+     </div>
++    <if expr="is_macosx">
++    <settings-toggle-button id="compactTabs"
++        pref-key="fork.compact_tabs"
++        label="Schede nella barra degli strumenti"
++        sub-label="Compatte, come Safari. Vale per le finestre che apri dopo.">
++    </settings-toggle-button>
++    </if>
+     <settings-toggle-button elide-label
+         ?hidden="${!this.pageVisibility_.homeButton}"
+         pref-key="browser.show_home_button"
+diff --git a/chrome/browser/ui/browser_location_bar_model_delegate.cc b/chrome/browser/ui/browser_location_bar_model_delegate.cc
+index 4742779b3a55816799c5e180bbe17f83cd17055b..acffb93652fdc74c16f6985447ab41cf48f89da7 100644
+--- a/chrome/browser/ui/browser_location_bar_model_delegate.cc
++++ b/chrome/browser/ui/browser_location_bar_model_delegate.cc
+@@ -5,7 +5,11 @@
+ #include "chrome/browser/ui/browser_location_bar_model_delegate.h"
+ 
+ #include "base/check_deref.h"
++#include "build/build_config.h"
++#include "chrome/browser/fork/compact_tabs.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "components/prefs/pref_service.h"
+ 
+ BrowserLocationBarModelDelegate::BrowserLocationBarModelDelegate(
+     TabStripModel* tab_strip_model)
+@@ -17,3 +21,15 @@ content::WebContents* BrowserLocationBarModelDelegate::GetActiveWebContents()
+     const {
+   return tab_strip_model_->GetActiveWebContents();
+ }
++
++bool BrowserLocationBarModelDelegate::ShouldTrimDisplayUrlAfterHostName() const {
++#if BUILDFLAG(IS_MAC)
++  // With the tabs in the toolbar only the site is shown, as in the boards; the
++  // whole address comes back when the field is edited.
++  if (tab_strip_model_->profile()->GetPrefs()->GetBoolean(
++          browser_fork::kCompactTabsPref)) {
++    return true;
++  }
++#endif
++  return ChromeLocationBarModelDelegate::ShouldTrimDisplayUrlAfterHostName();
++}
+diff --git a/chrome/browser/ui/browser_location_bar_model_delegate.h b/chrome/browser/ui/browser_location_bar_model_delegate.h
+index 95ea5d88f542832649bbe80e09d8fb243fa49a22..dd64e97f4cc60fb5a36559df887a9e9bf96d516e 100644
+--- a/chrome/browser/ui/browser_location_bar_model_delegate.h
++++ b/chrome/browser/ui/browser_location_bar_model_delegate.h
+@@ -25,6 +25,7 @@ class BrowserLocationBarModelDelegate : public ChromeLocationBarModelDelegate {
+ 
+   // ChromeLocationBarModelDelegate:
+   content::WebContents* GetActiveWebContents() const override;
++  bool ShouldTrimDisplayUrlAfterHostName() const override;
+ 
+  private:
+   const raw_ref<TabStripModel> tab_strip_model_;
+diff --git a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
+index e249d046f1df0a9de0f0175d54c49dac0597c4ec..b73f7bbb4be53bcee1c1db13bc729ed1b0dbce4d 100644
+--- a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
++++ b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
+@@ -41,6 +41,7 @@
+ #include "chrome/browser/ui/views/frame/browser_widget.h"
+ #include "chrome/browser/ui/views/frame/glass_frame_service.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
++#include "chrome/browser/ui/views/toolbar/compact_tabs_view.h"
+ #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_utils.h"
+ #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+ #include "chrome/common/pref_names.h"
+@@ -265,6 +266,10 @@ - (NSTouchBar*)makeTouchBar {
+     if (!browser_view_->ShouldDrawTabStrip()) {
+       *titlebar_height += kWebAppMenuMargin * 2;
+     }
++    // The window buttons in the middle of the only row, as in the boards.
++    if (browser_view_->GetProperty(browser_fork::kCompactTabsKey)) {
++      *titlebar_height = browser_fork::kCompactTabsToolbarHeight;
++    }
+   } else {
+     *override_titlebar_height = false;
+     *titlebar_height = 0;
+diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
+index f9b1d3de0545b1426169859660f555f825e02468..dda919df5460ffd5dd7069f1bab23cd0cb9947b9 100644
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -4,6 +4,12 @@
+ 
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ 
++#include "build/build_config.h"
++#if BUILDFLAG(IS_MAC)
++#include "chrome/browser/fork/compact_tabs.h"
++#include "chrome/browser/ui/views/toolbar/compact_tabs_view.h"
++#endif
++
+ #include <stdint.h>
+ 
+ #include <algorithm>
+@@ -882,6 +888,13 @@ BrowserView::BrowserView(Browser* browser)
+       exclusive_access_context_(
+           std::make_unique<ExclusiveAccessContextImpl>(*this)),
+       browser_(browser) {
++#if BUILDFLAG(IS_MAC)
++  if (browser_->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL &&
++      browser_->GetProfile()->GetPrefs()->GetBoolean(
++          browser_fork::kCompactTabsPref)) {
++    SetProperty(browser_fork::kCompactTabsKey, true);
++  }
++#endif
+   if (auto* manager = InitialWebUIWindowMetricsManager::From(browser_.get())) {
+     manager->OnBrowserWindowCreated();
+   }
+@@ -1389,6 +1402,13 @@ bool BrowserView::ShouldDrawTabStrip() const {
+     return false;
+   }
+ 
++#if BUILDFLAG(IS_MAC)
++  // The tabs are in the toolbar: the same as a window without a tab strip.
++  if (GetProperty(browser_fork::kCompactTabsKey)) {
++    return false;
++  }
++#endif
++
+   // Return false if the tabstrip has not yet been created (by InitViews()),
+   // since callers may otherwise try to access it.
+   // Under the TabStripUnification feature, we only initialize the tab strip
+@@ -4717,6 +4737,17 @@ int BrowserView::NonClientHitTest(const gfx::Point& point) {
+     }
+   }
+ 
++#if BUILDFLAG(IS_MAC)
++  // With the tabs in the toolbar, the window is dragged from its empty parts.
++  if (GetProperty(browser_fork::kCompactTabsKey)) {
++    gfx::Point test_point(point);
++    if (ConvertedHitTest(parent(), top_container_, &test_point) &&
++        top_container_->IsPositionInWindowCaption(test_point)) {
++      return HTNOWHERE;
++    }
++  }
++#endif
++
+   // For apps with window-controls-overlay or unframed display mode, see if
+   // we're in an app defined draggable region so we can return `HTCAPTION`.
+   web_app::AppBrowserController* controller =
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+index 5ed38209b4107927b60834157eba1de80359b235..a6ba11270296a23a996d47eca5b865cbdc89c030 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -63,6 +63,7 @@
+ #include "chrome/browser/ui/views/bubble_anchor_util_views.h"
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+ #include "chrome/browser/ui/views/chrome_typography.h"
++#include "chrome/browser/ui/view_ids.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/location_bar/content_setting_image_view.h"
+ #include "chrome/browser/ui/views/location_bar/location_bar_actions.h"
+@@ -856,6 +857,18 @@ void LocationBarView::Layout(PassKey) {
+     }
+   };
+ 
++#if BUILDFLAG(IS_MAC)
++  // With the tabs in the toolbar, the reload button is the last thing in the bar.
++  if (views::View* reload = GetViewByID(VIEW_ID_RELOAD_BUTTON)) {
++    constexpr int kReloadSize = 26;
++    trailing_decorations.AddDecoration((height() - kReloadSize) / 2, kReloadSize,
++                                       /*auto_collapse=*/false,
++                                       /*max_fraction=*/0,
++                                       /*intra_item_padding=*/0,
++                                       /*edge_padding=*/4, reload);
++  }
++#endif
++
+   // uBlock Origin comes last in the bar, as tall as the bar to fit its badge.
+   if (ublock_button_ && ublock_button_->GetVisible()) {
+     trailing_decorations.AddDecoration(0, height(), /*auto_collapse=*/false,
+@@ -1923,6 +1936,12 @@ void LocationBarView::OnOmniboxFocused() {
+     views::FocusRing::Get(this)->Refresh();
+   }
+ 
++#if BUILDFLAG(IS_MAC)
++  if (GetViewByID(VIEW_ID_RELOAD_BUTTON)) {
++    omnibox_view_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
++  }
++#endif
++
+   // Only show hover animation in unfocused steady state.  Since focusing
+   // the omnibox is intentional, snapping is better than transitioning here.
+   hover_animation_.Reset();
+@@ -1946,6 +1965,13 @@ void LocationBarView::OnOmniboxBlurred() {
+   if (views::FocusRing::Get(this)) {
+     views::FocusRing::Get(this)->Refresh();
+   }
++
++#if BUILDFLAG(IS_MAC)
++  // In the boards the address is centered while it is not being edited.
++  if (GetViewByID(VIEW_ID_RELOAD_BUTTON)) {
++    omnibox_view_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
++  }
++#endif
+   RefreshBackground();
+ 
+   // The AI mode page action should only be visible when the omnibox
+diff --git a/chrome/browser/ui/views/toolbar/BUILD.gn b/chrome/browser/ui/views/toolbar/BUILD.gn
+index 03f051d4c76c37470fe5df2de4657ecd5e4ab473..27101da1e4fc353e5f9e4007edceef91c8135fba 100644
+--- a/chrome/browser/ui/views/toolbar/BUILD.gn
++++ b/chrome/browser/ui/views/toolbar/BUILD.gn
+@@ -168,7 +168,9 @@ source_set("impl") {
+   ]
+   if (is_mac) {
+     sources += [
++      "compact_tabs_view.h",
+       "share_page_mac.h",
++      "compact_tabs_view.cc",
+       "share_page_mac.mm",
+     ]
+   }
+diff --git a/chrome/browser/ui/views/toolbar/claude_button.cc b/chrome/browser/ui/views/toolbar/claude_button.cc
+index 0e1508b74aeb96e4a7b5200720275f1987a599ff..07eeaef6e8abbcbff12096e933c9b6a8dee03d33 100644
+--- a/chrome/browser/ui/views/toolbar/claude_button.cc
++++ b/chrome/browser/ui/views/toolbar/claude_button.cc
+@@ -1,5 +1,7 @@
+ #include "chrome/browser/ui/views/toolbar/claude_button.h"
+ 
++#include <string>
++
+ #include "base/functional/bind.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/views/side_panel/claude_side_panel.h"
+@@ -24,6 +26,11 @@ ClaudeButton::ClaudeButton(BrowserWindowInterface* browser)
+ 
+ ClaudeButton::~ClaudeButton() = default;
+ 
++void ClaudeButton::SetIconOnly() {
++  SetText(std::u16string());
++  SetHorizontalAlignment(gfx::ALIGN_CENTER);
++}
++
+ void ClaudeButton::UpdateIcon() {
+   if (!GetColorProvider()) {
+     return;
+diff --git a/chrome/browser/ui/views/toolbar/claude_button.h b/chrome/browser/ui/views/toolbar/claude_button.h
+index a8ff29b0867e0b096a39bb714c736d6c6614e177..b17dd226bc17548da0de5109606a08307e531d32 100644
+--- a/chrome/browser/ui/views/toolbar/claude_button.h
++++ b/chrome/browser/ui/views/toolbar/claude_button.h
+@@ -16,6 +16,9 @@ class ClaudeButton : public ToolbarButton {
+   ClaudeButton& operator=(const ClaudeButton&) = delete;
+   ~ClaudeButton() override;
+ 
++  // The icon without the name, for the toolbar with the tabs in it.
++  void SetIconOnly();
++
+   // ToolbarButton:
+   void UpdateIcon() override;
+ };
+diff --git a/chrome/browser/ui/views/toolbar/compact_tabs_view.cc b/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..31c0991c0d433dc219e561ba29844b5df450d31b
+--- /dev/null
++++ b/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
+@@ -0,0 +1,216 @@
++#include "chrome/browser/ui/views/toolbar/compact_tabs_view.h"
++
++#include <algorithm>
++#include <string>
++
++#include "base/functional/bind.h"
++#include "chrome/browser/favicon/favicon_utils.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/tabs/tab_enums.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/image_model.h"
++#include "ui/color/color_provider.h"
++#include "ui/events/event.h"
++#include "ui/gfx/color_utils.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/background.h"
++#include "ui/views/controls/button/label_button.h"
++#include "ui/views/layout/flex_layout.h"
++#include "ui/views/view_class_properties.h"
++
++namespace browser_fork {
++
++DEFINE_UI_CLASS_PROPERTY_KEY(bool, kCompactTabsKey, false)
++
++}  // namespace browser_fork
++
++namespace {
++
++constexpr int kChipHeight = 30;
++constexpr int kChipMaxWidth = 150;
++// Enough for the icon alone when many tabs have to fit.
++constexpr int kChipMinWidth = 36;
++constexpr int kChipGap = 8;
++// After every button of the toolbar, which would otherwise go in the overflow
++// menu to make room for the tabs; only the empty space comes later.
++constexpr int kTabsFlexOrder = 1900;
++
++class CompactTabChip : public views::LabelButton {
++  METADATA_HEADER(CompactTabChip, views::LabelButton)
++
++ public:
++  explicit CompactTabChip(TabStripModel* model)
++      : views::LabelButton(base::BindRepeating(&CompactTabChip::OnPressed,
++                                               base::Unretained(this))),
++        model_(model) {
++    SetTriggerableEventFlags(ui::EF_LEFT_MOUSE_BUTTON |
++                             ui::EF_MIDDLE_MOUSE_BUTTON);
++    SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, 10)));
++    SetImageLabelSpacing(7);
++    SetMaxSize(gfx::Size(kChipMaxWidth, kChipHeight));
++    SetMinSize(gfx::Size(0, kChipHeight));
++    SetHorizontalAlignment(gfx::ALIGN_LEFT);
++    SetProperty(
++        views::kFlexBehaviorKey,
++        views::FlexSpecification(
++            views::MinimumFlexSizeRule::kScaleToMinimumSnapToZero,
++            views::MaximumFlexSizeRule::kPreferred));
++  }
++
++  void SetTab(int index) {
++    index_ = index;
++    content::WebContents* contents = model_->GetWebContentsAt(index);
++    const std::u16string title = contents->GetTitle();
++    SetText(title);
++    SetTooltipText(title);
++    GetViewAccessibility().SetName(title);
++    const gfx::Image favicon = favicon::TabFaviconFromWebContents(contents);
++    SetImageModel(views::Button::STATE_NORMAL,
++                  ui::ImageModel::FromImage(
++                      favicon.IsEmpty() ? favicon::GetDefaultFavicon() : favicon));
++  }
++
++  // views::View:
++  gfx::Size GetMinimumSize() const override {
++    return gfx::Size(kChipMinWidth, kChipHeight);
++  }
++
++  void OnThemeChanged() override {
++    views::LabelButton::OnThemeChanged();
++    const bool dark =
++        color_utils::IsDark(GetColorProvider()->GetColor(kColorToolbar));
++    const SkColor text = dark ? SkColorSetRGB(0xf5, 0xf5, 0xf7)
++                              : SkColorSetRGB(0x1d, 0x1d, 0x1f);
++    SetTextColor(ButtonState::STATE_NORMAL, text);
++    SetTextColor(ButtonState::STATE_HOVERED, text);
++    SetTextColor(ButtonState::STATE_PRESSED, text);
++    UpdateBackground();
++  }
++
++  void StateChanged(ButtonState old_state) override {
++    views::LabelButton::StateChanged(old_state);
++    UpdateBackground();
++  }
++
++ private:
++  void UpdateBackground() {
++    if (!GetColorProvider()) {
++      return;
++    }
++    const bool dark =
++        color_utils::IsDark(GetColorProvider()->GetColor(kColorToolbar));
++    const bool hovered = GetState() != ButtonState::STATE_NORMAL;
++    SetBackground(views::CreateRoundedRectBackground(
++        dark ? SkColorSetA(SK_ColorWHITE, hovered ? 0x2e : 0x1a)
++             : SkColorSetA(SK_ColorBLACK, hovered ? 0x1f : 0x12),
++        kChipHeight / 2));
++  }
++
++  void OnPressed(const ui::Event& event) {
++    if (!model_->ContainsIndex(index_)) {
++      return;
++    }
++    if (event.IsMouseEvent() &&
++        event.AsMouseEvent()->IsOnlyMiddleMouseButton()) {
++      model_->CloseWebContentsAt(index_, TabCloseTypes::CLOSE_USER_GESTURE);
++      return;
++    }
++    model_->ActivateTabAt(index_,
++                          TabStripUserGestureDetails(
++                              TabStripUserGestureDetails::GestureType::kMouse));
++  }
++
++  const raw_ptr<TabStripModel> model_;
++  int index_ = TabStripModel::kNoTab;
++};
++
++BEGIN_METADATA(CompactTabChip)
++END_METADATA
++
++gfx::Size SmallestUntilBounded(int chips,
++                               const views::View* view,
++                               const views::SizeBounds& bounds) {
++  const int width =
++      bounds.width().is_bounded()
++          ? std::min(bounds.width().value(), view->GetPreferredSize().width())
++          : chips * kChipMinWidth + std::max(chips - 1, 0) * kChipGap;
++  return gfx::Size(width, kChipHeight);
++}
++
++}  // namespace
++
++CompactTabsSpacer::CompactTabsSpacer() {
++  SetProperty(
++      views::kFlexBehaviorKey,
++      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
++                               views::MaximumFlexSizeRule::kUnbounded)
++          .WithOrder(2000));
++  SetProperty(views::kMarginsKey, gfx::Insets());
++}
++
++void CompactTabsSpacer::OnPaint(gfx::Canvas* canvas) {}
++
++BEGIN_METADATA(CompactTabsSpacer)
++END_METADATA
++
++CompactTabsView::CompactTabsView(TabStripModel* model, Side side)
++    : model_(model), side_(side) {
++  auto* const layout = SetLayoutManager(std::make_unique<views::FlexLayout>());
++  layout->SetOrientation(views::LayoutOrientation::kHorizontal)
++      .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
++      .SetCollapseMargins(true)
++      .SetDefault(views::kMarginsKey, gfx::Insets::VH(0, kChipGap / 2));
++  SetProperty(views::kMarginsKey, gfx::Insets::VH(0, kChipGap));
++  model_->AddObserver(this);
++  Update();
++}
++
++CompactTabsView::~CompactTabsView() = default;
++
++void CompactTabsView::OnTabStripModelChanged(
++    TabStripModel* tab_strip_model,
++    const TabStripModelChange& change,
++    const TabStripSelectionChange& selection) {
++  Update();
++}
++
++void CompactTabsView::OnTabChangedAt(tabs::TabInterface* tab,
++                                     TabChangeType change_type) {
++  Update();
++}
++
++void CompactTabsView::Update() {
++  const int active = model_->active_index();
++  const int first = side_ == Side::kBeforeActive ? 0 : active + 1;
++  const int last =
++      side_ == Side::kBeforeActive ? std::max(active, 0) : model_->count();
++  const size_t wanted = active == TabStripModel::kNoTab
++                            ? 0
++                            : static_cast<size_t>(std::max(last - first, 0));
++  while (children().size() > wanted) {
++    RemoveChildViewT(children().back());
++  }
++  while (children().size() < wanted) {
++    AddChildView(std::make_unique<CompactTabChip>(model_));
++  }
++  for (size_t i = 0; i < wanted; ++i) {
++    static_cast<CompactTabChip*>(children()[i])
++        ->SetTab(first + static_cast<int>(i));
++  }
++  // The two sides share the space by tab: the toolbar takes from each what is
++  // over its smallest size, in proportion to the weight.
++  SetProperty(
++      views::kFlexBehaviorKey,
++      views::FlexSpecification(base::BindRepeating(&SmallestUntilBounded,
++                                                    static_cast<int>(wanted)))
++          .WithOrder(kTabsFlexOrder)
++          .WithWeight(std::max(static_cast<int>(wanted), 1)));
++  SetVisible(wanted > 0);
++  InvalidateLayout();
++}
++
++BEGIN_METADATA(CompactTabsView)
++END_METADATA
+diff --git a/chrome/browser/ui/views/toolbar/compact_tabs_view.h b/chrome/browser/ui/views/toolbar/compact_tabs_view.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..349080e3f0a31a59e6947f644e71a463bc8d738b
+--- /dev/null
++++ b/chrome/browser/ui/views/toolbar/compact_tabs_view.h
+@@ -0,0 +1,63 @@
++#ifndef CHROME_BROWSER_UI_VIEWS_TOOLBAR_COMPACT_TABS_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_TOOLBAR_COMPACT_TABS_VIEW_H_
++
++#include "base/memory/raw_ptr.h"
++#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
++#include "ui/base/class_property.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/views/controls/separator.h"
++#include "ui/views/view.h"
++
++class TabStripModel;
++
++namespace browser_fork {
++
++// Set on the BrowserView of a window with the tabs in the toolbar, for the whole
++// life of the window: the setting only applies to the windows opened afterwards.
++extern const ui::ClassProperty<bool>* const kCompactTabsKey;
++
++// The height of the row of the boards, which also places the window buttons.
++inline constexpr int kCompactTabsToolbarHeight = 52;
++
++}  // namespace browser_fork
++
++// The empty space that centers the tabs and the address. A separator because the
++// toolbar lets the window be dragged from those, and this one draws nothing.
++class CompactTabsSpacer : public views::Separator {
++  METADATA_HEADER(CompactTabsSpacer, views::Separator)
++
++ public:
++  CompactTabsSpacer();
++
++  // views::View:
++  void OnPaint(gfx::Canvas* canvas) override;
++};
++
++// The tabs of the boards before or after the address, which stands for the
++// active tab. Each one is a chip with its icon and title.
++class CompactTabsView : public views::View, public TabStripModelObserver {
++  METADATA_HEADER(CompactTabsView, views::View)
++
++ public:
++  enum class Side { kBeforeActive, kAfterActive };
++
++  CompactTabsView(TabStripModel* model, Side side);
++  CompactTabsView(const CompactTabsView&) = delete;
++  CompactTabsView& operator=(const CompactTabsView&) = delete;
++  ~CompactTabsView() override;
++
++  // TabStripModelObserver:
++  void OnTabStripModelChanged(TabStripModel* tab_strip_model,
++                              const TabStripModelChange& change,
++                              const TabStripSelectionChange& selection) override;
++  void OnTabChangedAt(tabs::TabInterface* tab,
++                      TabChangeType change_type) override;
++
++ private:
++  void Update();
++
++  const raw_ptr<TabStripModel> model_;
++  const Side side_;
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_TOOLBAR_COMPACT_TABS_VIEW_H_
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index fdae18e099e4e41be0475e40a9080e466f59cc58..dcf1f454038772c34d422b23a33e7bdd49646052 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -102,6 +102,9 @@
+ #include <initializer_list>
+ 
+ #include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/app/vector_icons/vector_icons.h"
++#include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
++#include "chrome/browser/ui/views/toolbar/compact_tabs_view.h"
+ #include "chrome/browser/ui/views/toolbar/share_page_mac.h"
+ #include "components/omnibox/browser/vector_icons.h"
+ #include "third_party/skia/include/core/SkRRect.h"
+@@ -516,6 +519,18 @@ void ToolbarView::Init() {
+     AddChildViewAt(std::move(button), 0);
+   }
+ 
++#if BUILDFLAG(IS_MAC)
++  // The layout of the boards with the tabs in the toolbar: the other tabs on
++  // either side of the address, all in the middle of the free space.
++  const bool compact_tabs =
++      browser_view_->GetProperty(browser_fork::kCompactTabsKey);
++  if (compact_tabs) {
++    AddChildView(std::make_unique<CompactTabsSpacer>());
++    AddChildView(std::make_unique<CompactTabsView>(
++        browser_->tab_strip_model(), CompactTabsView::Side::kBeforeActive));
++  }
++#endif
++
+   if (location_bar_view) {
+     location_bar_view_ = AddChildView(std::move(location_bar_view));
+     location_bar_ = location_bar_view_;
+@@ -523,8 +538,28 @@ void ToolbarView::Init() {
+     location_bar_ = toolbar_webview_->GetLocationBar();
+   }
+ 
++#if BUILDFLAG(IS_MAC)
++  if (compact_tabs) {
++    AddChildView(std::make_unique<CompactTabsView>(
++        browser_->tab_strip_model(), CompactTabsView::Side::kAfterActive));
++    auto new_tab = std::make_unique<ToolbarButton>(
++        base::BindRepeating(callback, browser_, IDC_NEW_TAB));
++    new_tab->SetVectorIcons(kAddIcon, kAddIcon);
++    new_tab->GetViewAccessibility().SetName(u"Nuova scheda");
++    new_tab->SetProperty(views::kMarginsKey, gfx::Insets());
++    AddChildView(std::move(new_tab));
++    AddChildView(std::make_unique<CompactTabsSpacer>());
++  }
++#endif
++
+   if (!browser_->GetProfile()->IsOffTheRecord()) {
+-    claude_button_ = AddChildView(std::make_unique<ClaudeButton>(browser_));
++    auto claude_button = std::make_unique<ClaudeButton>(browser_);
++#if BUILDFLAG(IS_MAC)
++    if (compact_tabs) {
++      claude_button->SetIconOnly();
++    }
++#endif
++    claude_button_ = AddChildView(std::move(claude_button));
+   }
+   AddChildView(std::make_unique<VpnStatusButton>(browser_));
+ 
+@@ -688,6 +723,15 @@ void ToolbarView::Init() {
+ 
+   if (location_bar_view_) {
+     location_bar_view_->Init();
++#if BUILDFLAG(IS_MAC)
++    // In the boards with the tabs in the toolbar, reload is inside the field.
++    if (compact_tabs && reload_) {
++      reload_->SetPreferredSize(gfx::Size(26, 26));
++      location_bar_view_->AddChildView(RemoveChildViewT(reload_.get()));
++      location_bar_view_->omnibox_view()->SetHorizontalAlignment(
++          gfx::ALIGN_CENTER);
++    }
++#endif
+   } else {
+     toolbar_webview_->GetLocationBar()->Init(toolbar_webview_.get());
+   }
+@@ -1449,6 +1493,11 @@ gfx::Size ToolbarView::CalculatePreferredSize(
+                                layout_manager_->interior_margin().height();
+         size.SetToMin({size.width(), max_height});
+       }
++#if BUILDFLAG(IS_MAC)
++      if (browser_view_->GetProperty(browser_fork::kCompactTabsKey)) {
++        size.set_height(browser_fork::kCompactTabsToolbarHeight);
++      }
++#endif
+   }
+   size.set_height(size.height() * size_animation_.GetCurrentValue());
+   return size;
+@@ -1564,7 +1613,7 @@ void ToolbarView::OnPaintBackground(gfx::Canvas* canvas) {
+   const auto capsule = [&](std::initializer_list<views::View*> group) {
+     gfx::Rect rect;
+     for (views::View* view : group) {
+-      if (view && view->GetVisible()) {
++      if (view && view->parent() == this && view->GetVisible()) {
+         rect.Union(view->GetMirroredBounds());
+       }
+     }
+@@ -1665,6 +1714,25 @@ void ToolbarView::InitLayout() {
+   if (location_bar_view_) {
+     location_bar_view_->SetProperty(views::kFlexBehaviorKey,
+                                     location_bar_flex_rule);
++#if BUILDFLAG(IS_MAC)
++    if (browser_view_->GetProperty(browser_fork::kCompactTabsKey)) {
++      // As wide as in the boards, and first to get space.
++      location_bar_view_->SetProperty(
++          views::kFlexBehaviorKey,
++          views::FlexSpecification(
++              base::BindRepeating([](const views::View* view,
++                                     const views::SizeBounds& bounds) {
++                constexpr int kMinWidth = 200;
++                constexpr int kMaxWidth = 460;
++                const int width =
++                    bounds.width().is_bounded()
++                        ? std::clamp(bounds.width().value(), kMinWidth, kMaxWidth)
++                        : kMaxWidth;
++                return gfx::Size(width, view->GetPreferredSize().height());
++              }))
++              .WithOrder(1));
++    }
++#endif
+     location_bar_view_->SetProperty(views::kMarginsKey,
+                                     gfx::Insets::VH(0, location_bar_margin));
+   }
