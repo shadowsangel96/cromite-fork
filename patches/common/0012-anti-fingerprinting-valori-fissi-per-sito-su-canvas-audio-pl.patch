@@ -1,0 +1,825 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Mon, 2 Nov 2026 15:02:12 +0100
+Subject: [PATCH] Anti-fingerprinting: valori fissi per sito su canvas, audio,
+ plugin, processori e WebGL
+
+Fork-Patch: common/0012-anti-fingerprinting-valori-fissi-per-sito-su-canvas-audio-pl.patch
+
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index b5996577fac99d4b6277e196ac9fc01ffb27c288..b5d749e21ad5688cde3627fea7d694c94f7c52e2 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -43,6 +43,7 @@
+ #include "base/path_service.h"
+ #include "base/stl_util.h"
+ #include "base/strings/strcat.h"
++#include "base/rand_util.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/string_split.h"
+ #include "base/strings/string_util.h"
+@@ -2831,6 +2832,27 @@ bool ChromeContentBrowserClient::IsFileAccessAllowed(
+ 
+ namespace {
+ 
++// The key of the noise against fingerprinting: one for each profile, new at
++// every start of the browser and only in memory. The renderers mix it with the
++// site, so a site reads the same values for the whole session and two sites
++// can't match them.
++struct FarblingKeyData : public base::SupportsUserData::Data {
++  std::string key = base::HexEncode(base::RandBytesAsVector(32));
++};
++
++constexpr char kFarblingKeyUserDataKey[] = "fork_farbling_key";
++
++const std::string& GetFarblingKey(Profile* profile) {
++  auto* data = static_cast<FarblingKeyData*>(
++      profile->GetUserData(kFarblingKeyUserDataKey));
++  if (!data) {
++    auto owned = std::make_unique<FarblingKeyData>();
++    data = owned.get();
++    profile->SetUserData(kFarblingKeyUserDataKey, std::move(owned));
++  }
++  return data->key;
++}
++
+ void MaybeAppendBlinkSettingsSwitchForFieldTrial(
+     const base::CommandLine& browser_command_line,
+     base::CommandLine* command_line) {
+@@ -2968,6 +2990,8 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
+     if (process) {
+       Profile* profile =
+           Profile::FromBrowserContext(process->GetBrowserContext());
++      command_line->AppendSwitchASCII("fork-farbling-key",
++                                      GetFarblingKey(profile));
+       PrefService* prefs = profile->GetPrefs();
+       PrefService* local_state = g_browser_process->local_state();
+       // Currently this pref is only registered if applied via a policy.
+diff --git a/chrome/browser/fork/fingerprinting_counter.cc b/chrome/browser/fork/fingerprinting_counter.cc
+index 0c8c566dcb29a55a076a127c4905e295cefec04c..70c1b00482745b0a3a0306dd7eba6727945d5332 100644
+--- a/chrome/browser/fork/fingerprinting_counter.cc
++++ b/chrome/browser/fork/fingerprinting_counter.cc
+@@ -28,10 +28,11 @@ struct Category {
+ };
+ 
+ // The categories of the boards, in their order, with what the browser answers
+-// by default: the noise of Cromite on canvas, text sizes, rects and audio,
+-// WebGL off until the site is allowed, WebGPU off, fixed battery values, no
+-// local addresses through WebRTC. The time zone stays the real one unless it
+-// is changed in the settings of the site.
++// by default: noise fixed for each site on canvas, audio, plugins and
++// processor count, the noise of Cromite on text sizes and rects, WebGL off
++// until the site is allowed (then with a common card and the noise), WebGPU
++// off, fixed battery values, no local addresses through WebRTC. The time zone
++// stays the real one unless it is changed in the settings of the site.
+ constexpr Category kCategories[] = {
+     {"Canvas", FingerprintingAnswer::kRandomized},
+     {"WebGL", FingerprintingAnswer::kBlocked},
+@@ -222,7 +223,7 @@ std::vector<FingerprintingRow> FingerprintingCounter::GetRows(
+   for (size_t i = 0; i < kCategoryCount; ++i) {
+     FingerprintingAnswer answer = kCategories[i].answer;
+     if (i == kWebGL && contents && IsWebglAllowed(contents)) {
+-      answer = FingerprintingAnswer::kAllowed;
++      answer = FingerprintingAnswer::kRandomized;
+     }
+     rows.push_back({kCategories[i].name, counter ? counter->counts_[i] : 0,
+                     answer});
+diff --git a/chrome/browser/resources/site_panel.html b/chrome/browser/resources/site_panel.html
+index cd20e7a1946c80efcdfbf38b4d2fac676b4078ab..484b3dc89177b3b0d001661990cca8d12559e849 100644
+--- a/chrome/browser/resources/site_panel.html
++++ b/chrome/browser/resources/site_panel.html
+@@ -97,7 +97,7 @@ figcaption { margin-top: 4px; font-size: 11px; color: var(--sub); }
+       </figure>
+       <figure id="webgl-on" hidden>
+         <div class="preview"><svg width="100%" height="64" viewBox="0 0 160 64" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><polygon points="80,6 142,58 18,58" fill="#2f6fd6" opacity="0.85"></polygon><polygon points="80,6 111,32 49,32" fill="#e8a33a" opacity="0.85"></polygon><polygon points="49,32 80,58 18,58" fill="#3fa36b" opacity="0.8"></polygon></svg></div>
+-        <figcaption>WebGL · consentito su questo sito</figcaption>
++        <figcaption>WebGL · rumore e GPU generica</figcaption>
+       </figure>
+     </div>
+     <button id="webgl"></button>
+diff --git a/chrome/browser/resources/site_panel.js b/chrome/browser/resources/site_panel.js
+index dde443e8b5f8d236334fcb7bc3d9cc51caa0f7b3..f21c5f02c9ea2492353b6abcf2b2a9e21d860827 100644
+--- a/chrome/browser/resources/site_panel.js
++++ b/chrome/browser/resources/site_panel.js
+@@ -66,7 +66,7 @@ window.SitePanel = (function() {
+     $('webgl-off').hidden = s.webgl;
+     $('webgl').classList.toggle('on', s.webgl);
+     $('webgl').textContent = s.webgl ? 'Blocca di nuovo WebGL su questo sito' :
+-                                       'Consenti WebGL su questo sito';
++                                       'Consenti WebGL su questo sito (randomizzato)';
+     $('remember-value').textContent = s.remembered ? 'Sì' : 'No';
+     $('cookies-value').textContent = s.cookies ? s.cookies + ' in uso' : 'Nessuno';
+     $('blocking-value').textContent = s.blocked || '0';
+diff --git a/third_party/blink/renderer/core/canvas_interventions/build.gni b/third_party/blink/renderer/core/canvas_interventions/build.gni
+index 799b6b7135d2052cbca2d3f5b964ef3f0e152db2..8fc021ef52cc2df19e57e9caa1dcffd744d7cfd3 100644
+--- a/third_party/blink/renderer/core/canvas_interventions/build.gni
++++ b/third_party/blink/renderer/core/canvas_interventions/build.gni
+@@ -3,6 +3,8 @@
+ # found in the LICENSE file.
+ 
+ blink_core_sources_canvas_interventions = [
++  "fork_farbling_seed.cc",
++  "fork_farbling_seed.h",
+   "noise_hash.cc",
+   "noise_hash.h",
+   "noise_helper.cc",
+diff --git a/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.cc b/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..4c5af5f0dd6da9932762f5b8b13fd2425ee0c1af
+--- /dev/null
++++ b/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.cc
+@@ -0,0 +1,91 @@
++#include "third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.h"
++
++#include <optional>
++#include <string>
++#include <vector>
++
++#include "base/command_line.h"
++#include "base/containers/span.h"
++#include "base/no_destructor.h"
++#include "base/numerics/byte_conversions.h"
++#include "base/rand_util.h"
++#include "base/strings/string_number_conversions.h"
++#include "crypto/hmac.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/platform/fork_farbling.h"
++#include "third_party/blink/renderer/platform/network/blink_schemeful_site.h"
++#include "third_party/blink/renderer/platform/storage/blink_storage_key.h"
++#include "v8/include/v8-context.h"
++#include "v8/include/v8-isolate.h"
++
++namespace blink {
++
++namespace {
++
++// Given by the browser to every renderer of the profile.
++constexpr char kFarblingKeySwitch[] = "fork-farbling-key";
++
++const std::vector<uint8_t>& FarblingKey() {
++  static const base::NoDestructor<std::vector<uint8_t>> key([] {
++    std::vector<uint8_t> bytes;
++    if (!base::HexStringToBytes(
++            base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
++                kFarblingKeySwitch),
++            &bytes) ||
++        bytes.size() < 16) {
++      // Not given: a key for this process alone, still never the same twice.
++      bytes = base::RandBytesAsVector(32);
++    }
++    return bytes;
++  }());
++  return *key;
++}
++
++// The site whose values the context reads: the top-level one for a page and
++// its frames, a credentialless frame apart from the others.
++std::string FarblingSite(ExecutionContext* context) {
++  if (auto* window = DynamicTo<LocalDOMWindow>(context)) {
++    const BlinkStorageKey& key = window->GetStorageKey();
++    std::string site = key.GetTopLevelSite().Serialize().Utf8();
++    if (key.GetNonce()) {
++      site += " " + key.GetNonce()->ToString();
++    }
++    return site;
++  }
++  return BlinkSchemefulSite(context->GetSecurityOrigin()).Serialize().Utf8();
++}
++
++uint64_t SeedOfRunningScript() {
++  v8::Isolate* isolate = v8::Isolate::TryGetCurrent();
++  if (!isolate || !isolate->InContext()) {
++    return FarblingSeed(nullptr);
++  }
++  return FarblingSeed(ExecutionContext::From(isolate->GetCurrentContext()));
++}
++
++}  // namespace
++
++uint64_t FarblingSeed(ExecutionContext* context) {
++  if (!context) {
++    static const uint64_t seed = base::RandUint64();
++    return seed;
++  }
++  if (const std::optional<NoiseToken>& token = context->CanvasNoiseToken()) {
++    return token->Value();
++  }
++  const std::string site = FarblingSite(context);
++  const auto mac = crypto::hmac::SignSha256(base::span(FarblingKey()),
++                                            base::as_byte_span(site));
++  const uint64_t seed =
++      base::U64FromNativeEndian(base::span(mac).first<8>());
++  context->SetCanvasNoiseToken(NoiseToken(seed));
++  return seed;
++}
++
++void InstallFarblingSeedProvider() {
++  SetFarblingSeedProvider(&SeedOfRunningScript);
++}
++
++}  // namespace blink
+diff --git a/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.h b/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..ce890b8add4915c7780fb311566dafc3a1eb91f0
+--- /dev/null
++++ b/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.h
+@@ -0,0 +1,23 @@
++#ifndef THIRD_PARTY_BLINK_RENDERER_CORE_CANVAS_INTERVENTIONS_FORK_FARBLING_SEED_H_
++#define THIRD_PARTY_BLINK_RENDERER_CORE_CANVAS_INTERVENTIONS_FORK_FARBLING_SEED_H_
++
++#include <cstdint>
++
++#include "third_party/blink/renderer/core/core_export.h"
++
++namespace blink {
++
++class ExecutionContext;
++
++// The seed of the noise against fingerprinting for `context`: a key of the
++// profile, new at every start of the browser, mixed with the top-level site of
++// the page, so frames of other sites inside it read the same values as the
++// page. Kept in the canvas noise token of the context.
++CORE_EXPORT uint64_t FarblingSeed(ExecutionContext* context);
++
++// Lets the platform find the seed of the running script.
++void InstallFarblingSeedProvider();
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_CANVAS_INTERVENTIONS_FORK_FARBLING_SEED_H_
+diff --git a/third_party/blink/renderer/core/core_initializer.cc b/third_party/blink/renderer/core/core_initializer.cc
+index 948451b578a011fad504e7b9dfa15df343e12936..ad5bb9b72fe88ce6ba0423dd230cb70d180ac144 100644
+--- a/third_party/blink/renderer/core/core_initializer.cc
++++ b/third_party/blink/renderer/core/core_initializer.cc
+@@ -28,6 +28,7 @@
+  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+ 
++#include "third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.h"
+ #include "third_party/blink/renderer/core/core_initializer.h"
+ 
+ #include "third_party/blink/public/platform/platform.h"
+@@ -96,6 +97,7 @@ void CoreInitializer::Initialize() {
+   // Initialize must be called once by singleton ModulesInitializer.
+   DCHECK(!instance_);
+   instance_ = this;
++  InstallFarblingSeedProvider();
+   // Note: in order to add core static strings for a new module (1)
+   // the value of 'coreStaticStringsCount' must be updated with the
+   // added strings count, (2) if the added strings are quialified names
+diff --git a/third_party/blink/renderer/core/frame/navigator_concurrent_hardware.cc b/third_party/blink/renderer/core/frame/navigator_concurrent_hardware.cc
+index d5994d3e8616ed8a60c13bb70d28a4c61d236773..8048e714686b38106495cef20af975430f243ff0 100644
+--- a/third_party/blink/renderer/core/frame/navigator_concurrent_hardware.cc
++++ b/third_party/blink/renderer/core/frame/navigator_concurrent_hardware.cc
+@@ -3,8 +3,12 @@
+ // found in the LICENSE file.
+ 
+ #include "third_party/blink/renderer/core/frame/navigator_concurrent_hardware.h"
++
++#include <algorithm>
++
+ #include "build/build_config.h"
+ #include "base/system/sys_info.h"
++#include "third_party/blink/renderer/platform/fork_farbling.h"
+ 
+ namespace blink {
+ 
+@@ -12,7 +16,14 @@ unsigned NavigatorConcurrentHardware::hardwareConcurrency() const {
+ #if BUILDFLAG(IS_ANDROID)
+   return static_cast<unsigned>(4);
+ #else
+-  return static_cast<unsigned>(8);
++  // A common count for each site, from 4 to 8 and never above the real one,
++  // as in Brave: the same on a site for the whole session, so sites can't
++  // match each other on it, and it never tells how big the machine is.
++  const unsigned real =
++      static_cast<unsigned>(base::SysInfo::NumberOfProcessors());
++  const unsigned highest = std::clamp(real, 4u, 8u);
++  FarblingRandom random(CurrentFarblingSeed() ^ 0x6861726477617265ull);
++  return 4 + static_cast<unsigned>(random.Below(highest - 3));
+ #endif
+ }
+ 
+diff --git a/third_party/blink/renderer/modules/plugins/dom_plugin_array.cc b/third_party/blink/renderer/modules/plugins/dom_plugin_array.cc
+index 534277a85ae07f59ea9fabdd98b7ad411d18e5d0..b9e33b282edec9dda50d8ccd4dd73b2de2900aea 100644
+--- a/third_party/blink/renderer/modules/plugins/dom_plugin_array.cc
++++ b/third_party/blink/renderer/modules/plugins/dom_plugin_array.cc
+@@ -21,6 +21,7 @@
+ #include "third_party/blink/renderer/modules/plugins/dom_plugin_array.h"
+ 
+ #include "third_party/blink/public/common/features.h"
++#include "third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
+ #include "third_party/blink/renderer/core/frame/navigator.h"
+@@ -28,8 +29,11 @@
+ #include "third_party/blink/renderer/core/page/plugin_data.h"
+ #include "third_party/blink/renderer/modules/plugins/dom_mime_type_array.h"
+ #include "third_party/blink/renderer/modules/plugins/navigator_plugins.h"
++#include "third_party/blink/renderer/platform/fork_farbling.h"
+ #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+ #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
++#include "third_party/blink/renderer/platform/wtf/text/strcat.h"
++#include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
+ #include "third_party/blink/renderer/platform/wtf/vector.h"
+ 
+ namespace blink {
+@@ -50,6 +54,42 @@ DOMPlugin* MakeFakePlugin(String plugin_name, LocalDOMWindow* window) {
+   }
+   return MakeGarbageCollected<DOMPlugin>(window, *plugin_info);
+ }
++
++template <size_t N>
++const char* Pick(FarblingRandom& random, const char* const (&words)[N]) {
++  return words[random.Below(N)];
++}
++
++String RandomLetters(FarblingRandom& random, int length) {
++  static constexpr char kLetters[] = "abcdefghijklmnopqrstuvwxyz0123456789";
++  StringBuilder builder;
++  for (int i = 0; i < length; ++i) {
++    builder.Append(kLetters[random.Below(sizeof(kLetters) - 1)]);
++  }
++  return builder.ToString();
++}
++
++// A plugin that exists only for this site in this session, named like the
++// ones of the browsers, as in Brave: the list stops matching between sites.
++DOMPlugin* MakeFarbledPlugin(FarblingRandom& random, LocalDOMWindow* window) {
++  static constexpr const char* kMakers[] = {
++      "Chrome ", "Chromium ", "Web ", "Browser ", "OpenSource ", "Online ", ""};
++  static constexpr const char* kKinds[] = {
++      "PDF ", "Portable Document Format ", "Document ", "PDF and PS ",
++      "Media ", "Native Client "};
++  static constexpr const char* kRoles[] = {"Viewer", "Renderer", "Display",
++                                           "Plugin", "Reader", "Extension"};
++  const String name = StrCat(
++      {Pick(random, kMakers), Pick(random, kKinds), Pick(random, kRoles)});
++  auto* plugin_info = MakeGarbageCollected<PluginInfo>(
++      name, RandomLetters(random, 32), StrCat({name, " ", RandomLetters(random, 6)}),
++      /*background_color=*/Color::kTransparent,
++      /*may_use_external_handler=*/false);
++  plugin_info->AddMimeType(MakeGarbageCollected<MimeClassInfo>(
++      StrCat({"application/x-", RandomLetters(random, 8)}), name, *plugin_info,
++      Vector<String>{RandomLetters(random, 3)}));
++  return MakeGarbageCollected<DOMPlugin>(window, *plugin_info);
++}
+ }  // namespace
+ 
+ DOMPluginArray::DOMPluginArray(LocalDOMWindow* window) : window_(window) {
+@@ -63,6 +103,11 @@ DOMPluginArray::DOMPluginArray(LocalDOMWindow* window) : window_(window) {
+     for (auto name : plugins) {
+       dom_plugins_.push_back(MakeFakePlugin(name, window));
+     }
++    // Two more, different on every site.
++    FarblingRandom random(FarblingSeed(window) ^ 0x706c7567696e73ull);
++    for (int i = 0; i < 2; ++i) {
++      dom_plugins_.push_back(MakeFarbledPlugin(random, window));
++    }
+   }
+ }
+ 
+diff --git a/third_party/blink/renderer/modules/webaudio/base_audio_context.cc b/third_party/blink/renderer/modules/webaudio/base_audio_context.cc
+index 1c0fda75fa00712ee610a19d1efcfe684de5b936..9bf466f4038df3727c7be236b9296a9f614f72f7 100644
+--- a/third_party/blink/renderer/modules/webaudio/base_audio_context.cc
++++ b/third_party/blink/renderer/modules/webaudio/base_audio_context.cc
+@@ -27,6 +27,7 @@
+ 
+ #include "base/metrics/histogram_functions.h"
+ #include "base/rand_util.h"
++#include "third_party/blink/renderer/platform/fork_farbling.h"
+ #include "build/build_config.h"
+ #include "media/base/audio_bus.h"
+ #include "third_party/blink/public/common/features.h"
+@@ -778,9 +779,11 @@ LocalDOMWindow* BaseAudioContext::GetWindow() const {
+ /*static*/
+ float BaseAudioContext::ShuffleAudioData(float data, unsigned index) {
+   if (base::FeatureList::IsEnabled(features::kAudioContextShuffleEnabled)) {
+-    float rnd = 1.0f +
+-                (base::RandDouble() / 10000.0) *
+-                  (base::RandIntInclusive(0,10) > 5 ? 1.f : -1.f);
++    // The same tiny change for each sample on a site for the whole session,
++    // another one on another site: reading again gives the same sound.
++    FarblingRandom random(CurrentFarblingSeed() ^
++                          (static_cast<uint64_t>(index) * 0x9e3779b97f4a7c15ull));
++    float rnd = 1.0f + static_cast<float>((random.Unit() * 2 - 1) / 10000.0);
+     return data * rnd;
+   }
+   return data;
+diff --git a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
+index 56800f55986dd21ed9193f77d8f390ce255b022c..a8bcca1efa8b8184cf05472d85a67852400e639b 100644
+--- a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
++++ b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
+@@ -47,6 +47,8 @@
+ #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+ #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+ #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
++#include "third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.h"
++#include "third_party/blink/renderer/platform/fork_farbling.h"
+ #include "third_party/blink/renderer/platform/wtf/math_extras.h"
+ #include "third_party/blink/renderer/platform/wtf/text/strcat.h"
+ 
+@@ -436,7 +438,11 @@ void OfflineAudioContext::FireCompletionEvent() {
+     if (!rendered_buffer) {
+       return;
+     }
+-    rendered_buffer->ShuffleAudioData();
++    {
++      // Outside of a script: the seed of the page that started the rendering.
++      ScopedFarblingSeed farbling_seed(FarblingSeed(GetExecutionContext()));
++      rendered_buffer->ShuffleAudioData();
++    }
+ 
+     // Call the offline rendering completion event listener and resolve the
+     // promise too.
+diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+index 4de66e1610bbe7d05b7ada82b5635cd7e49049bc..6e4557c372cb230ee6abee6b1d1a558045b0b35e 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -168,6 +168,102 @@
+ #include "third_party/skia/include/core/SkImage.h"
+ #include "third_party/skia/include/gpu/ganesh/GrTypes.h"
+ #include "ui/gfx/geometry/size.h"
++#include "third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.h"
++#include "third_party/blink/renderer/platform/fork_farbling.h"
++
++namespace {
++
++// What a site that may use WebGL learns of the graphics card: a name and
++// limits that many machines share, never the real model. Lower limits are
++// always safe, the card can do more than it says.
++#if BUILDFLAG(IS_MAC)
++constexpr char kFarbledVendor[] = "Google Inc. (Apple)";
++constexpr char kFarbledRenderer[] =
++    "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)";
++#elif BUILDFLAG(IS_WIN)
++constexpr char kFarbledVendor[] = "Google Inc. (Intel)";
++constexpr char kFarbledRenderer[] =
++    "ANGLE (Intel, Intel(R) UHD Graphics 620 (0x00003EA0) Direct3D11 "
++    "vs_5_0 ps_5_0, D3D11)";
++#else
++constexpr char kFarbledVendor[] = "Google Inc. (Intel)";
++constexpr char kFarbledRenderer[] =
++    "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL 4.6)";
++#endif
++
++int64_t CommonLimit(GLenum pname, int64_t value) {
++  int64_t common = value;
++  switch (pname) {
++    case GL_MAX_TEXTURE_SIZE:
++    case GL_MAX_CUBE_MAP_TEXTURE_SIZE:
++    case GL_MAX_RENDERBUFFER_SIZE:
++    case GL_MAX_VIEWPORT_DIMS:
++      common = 16384;
++      break;
++    case GL_MAX_VERTEX_ATTRIBS:
++    case GL_MAX_TEXTURE_IMAGE_UNITS:
++    case GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS:
++      common = 16;
++      break;
++    case GL_MAX_VERTEX_UNIFORM_VECTORS:
++    case GL_MAX_FRAGMENT_UNIFORM_VECTORS:
++      common = 1024;
++      break;
++    case GL_MAX_VARYING_VECTORS:
++      common = 30;
++      break;
++    case GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS:
++      common = 32;
++      break;
++    case GL_MAX_3D_TEXTURE_SIZE:
++    case GL_MAX_ARRAY_TEXTURE_LAYERS:
++      common = 2048;
++      break;
++    case GL_MAX_DRAW_BUFFERS:
++    case GL_MAX_COLOR_ATTACHMENTS:
++      common = 8;
++      break;
++    case GL_MAX_SAMPLES:
++    case GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS:
++    case GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS:
++      common = 4;
++      break;
++    case GL_MAX_VERTEX_UNIFORM_COMPONENTS:
++    case GL_MAX_FRAGMENT_UNIFORM_COMPONENTS:
++      common = 4096;
++      break;
++    case GL_MAX_VERTEX_UNIFORM_BLOCKS:
++    case GL_MAX_FRAGMENT_UNIFORM_BLOCKS:
++      common = 12;
++      break;
++    case GL_MAX_COMBINED_UNIFORM_BLOCKS:
++    case GL_MAX_UNIFORM_BUFFER_BINDINGS:
++      common = 24;
++      break;
++    case GL_MAX_VERTEX_OUTPUT_COMPONENTS:
++    case GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS:
++      common = 64;
++      break;
++    case GL_MAX_FRAGMENT_INPUT_COMPONENTS:
++    case GL_MAX_VARYING_COMPONENTS:
++      common = 60;
++      break;
++    case GL_MAX_ELEMENTS_INDICES:
++    case GL_MAX_ELEMENTS_VERTICES:
++    case GL_MAX_UNIFORM_BLOCK_SIZE:
++      common = 65536;
++      break;
++    case GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS:
++    case GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS:
++      common = 4096 + 12 * 65536 / 4;
++      break;
++    default:
++      break;
++  }
++  return std::min(value, common);
++}
++
++}  // namespace
+ 
+ 
+ // Populates parameters from texImage2D except for border, width, height, and
+@@ -4207,8 +4303,7 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+       return ScriptValue::CreateNull(script_state->GetIsolate());
+     case WebGLDebugRendererInfo::kUnmaskedRendererWebgl:
+       if (ExtensionEnabled(kWebGLDebugRendererInfoName)) {
+-        return WebGLAny(script_state,
+-                        String(ContextGL()->GetString(GL_RENDERER)));
++        return WebGLAny(script_state, String(kFarbledRenderer));
+       }
+       SynthesizeGLError(
+           GL_INVALID_ENUM, "getParameter",
+@@ -4216,8 +4311,7 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+       return ScriptValue::CreateNull(script_state->GetIsolate());
+     case WebGLDebugRendererInfo::kUnmaskedVendorWebgl:
+       if (ExtensionEnabled(kWebGLDebugRendererInfoName)) {
+-        return WebGLAny(script_state,
+-                        String(ContextGL()->GetString(GL_VENDOR)));
++        return WebGLAny(script_state, String(kFarbledVendor));
+       }
+       SynthesizeGLError(
+           GL_INVALID_ENUM, "getParameter",
+@@ -5363,6 +5457,22 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
+     }
+     ContextGL()->ReadPixels(x, y, width, height, format, type, data);
+   }
++
++  // The noise of the canvas on what the site reads back, the same on a site
++  // for the whole session: only on big reads, so picking an object by the
++  // color of one pixel, as 3D maps do, keeps working.
++  if (format == GL_RGBA && type == GL_UNSIGNED_BYTE && width > 0 &&
++      height > 0 && static_cast<int64_t>(width) * height >= 256) {
++    const size_t size = std::min<size_t>(
++        static_cast<size_t>(width) * height * 4, buffer_size.ValueOrDie());
++    base::span<uint8_t> bytes = UNSAFE_BUFFERS(base::span(data, size));
++    FarblingRandom random(FarblingHash(
++        FarblingSeed(Host()->GetTopExecutionContext()), bytes));
++    for (int i = 0; i < 512; ++i) {
++      const uint64_t pixel = random.Below(size / 4);
++      bytes[pixel * 4 + random.Below(3)] ^= 1;
++    }
++  }
+ }
+ 
+ void WebGLRenderingContextBase::RenderbufferStorageImpl(
+@@ -7937,6 +8047,7 @@ ScriptValue WebGLRenderingContextBase::GetIntParameter(
+       default:
+         break;
+     }
++    value = static_cast<GLint>(CommonLimit(pname, value));
+   }
+   return WebGLAny(script_state, value);
+ }
+@@ -7945,8 +8056,10 @@ ScriptValue WebGLRenderingContextBase::GetInt64Parameter(
+     ScriptState* script_state,
+     GLenum pname) {
+   GLint64 value = 0;
+-  if (!isContextLost())
++  if (!isContextLost()) {
+     ContextGL()->GetInteger64v(pname, &value);
++    value = CommonLimit(pname, value);
++  }
+   return WebGLAny(script_state, value);
+ }
+ 
+@@ -7968,7 +8081,13 @@ ScriptValue WebGLRenderingContextBase::GetWebGLFloatArrayParameter(
+   unsigned length = 0;
+   switch (pname) {
+     case GL_ALIASED_POINT_SIZE_RANGE:
++      value[1] = std::min(value[1], 511.0f);
++      length = 2;
++      break;
+     case GL_ALIASED_LINE_WIDTH_RANGE:
++      value[1] = std::min(value[1], 1.0f);
++      length = 2;
++      break;
+     case GL_DEPTH_RANGE:
+       length = 2;
+       break;
+@@ -7993,6 +8112,8 @@ ScriptValue WebGLRenderingContextBase::GetWebGLIntArrayParameter(
+   switch (pname) {
+     case GL_MAX_VIEWPORT_DIMS:
+       length = 2;
++      value[0] = static_cast<GLint>(CommonLimit(pname, value[0]));
++      value[1] = static_cast<GLint>(CommonLimit(pname, value[1]));
+       break;
+     case GL_SCISSOR_BOX:
+     case GL_VIEWPORT:
+diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
+index 6a5438b7236c4eb7ce3525fe91dff6b1af599076..4e419a5667edfac96e4db2a6af19835b3c31e481 100644
+--- a/third_party/blink/renderer/platform/BUILD.gn
++++ b/third_party/blink/renderer/platform/BUILD.gn
+@@ -1277,6 +1277,8 @@ component("platform") {
+     "graphics/skia/skia_utils.h",
+     "graphics/static_bitmap_image.cc",
+     "graphics/static_bitmap_image.h",
++    "fork_farbling.cc",
++    "fork_farbling.h",
+     "graphics/static_bitmap_image_to_video_frame_copier.cc",
+     "graphics/static_bitmap_image_to_video_frame_copier.h",
+     "graphics/static_bitmap_image_transform.cc",
+diff --git a/third_party/blink/renderer/platform/fork_farbling.cc b/third_party/blink/renderer/platform/fork_farbling.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..88628d4849339360cbbf71ea118e88f150575ff9
+--- /dev/null
++++ b/third_party/blink/renderer/platform/fork_farbling.cc
+@@ -0,0 +1,58 @@
++#include "third_party/blink/renderer/platform/fork_farbling.h"
++
++#include <atomic>
++
++#include "base/rand_util.h"
++
++namespace blink {
++
++namespace {
++
++std::atomic<FarblingSeedProvider> g_provider{nullptr};
++
++constinit thread_local bool g_has_scoped_seed = false;
++constinit thread_local uint64_t g_scoped_seed = 0;
++
++// Without a page, a seed for the whole process: still the same on every read.
++uint64_t ProcessSeed() {
++  static const uint64_t seed = base::RandUint64();
++  return seed;
++}
++
++}  // namespace
++
++void SetFarblingSeedProvider(FarblingSeedProvider provider) {
++  g_provider.store(provider);
++}
++
++uint64_t CurrentFarblingSeed() {
++  if (g_has_scoped_seed) {
++    return g_scoped_seed;
++  }
++  if (FarblingSeedProvider provider = g_provider.load()) {
++    return provider();
++  }
++  return ProcessSeed();
++}
++
++ScopedFarblingSeed::ScopedFarblingSeed(uint64_t seed)
++    : had_seed_(g_has_scoped_seed), previous_seed_(g_scoped_seed) {
++  g_has_scoped_seed = true;
++  g_scoped_seed = seed;
++}
++
++ScopedFarblingSeed::~ScopedFarblingSeed() {
++  g_has_scoped_seed = had_seed_;
++  g_scoped_seed = previous_seed_;
++}
++
++uint64_t FarblingHash(uint64_t seed, base::span<const uint8_t> data) {
++  // FNV-1a over the bytes, then mixed once more with the seed.
++  uint64_t hash = 0xcbf29ce484222325ull;
++  for (uint8_t byte : data) {
++    hash = (hash ^ byte) * 0x100000001b3ull;
++  }
++  return FarblingRandom(seed ^ hash).Next();
++}
++
++}  // namespace blink
+diff --git a/third_party/blink/renderer/platform/fork_farbling.h b/third_party/blink/renderer/platform/fork_farbling.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..2f7f4a64c2dd15a9a12b03d217aead943c6e5c92
+--- /dev/null
++++ b/third_party/blink/renderer/platform/fork_farbling.h
+@@ -0,0 +1,65 @@
++#ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_FORK_FARBLING_H_
++#define THIRD_PARTY_BLINK_RENDERER_PLATFORM_FORK_FARBLING_H_
++
++#include <cstdint>
++
++#include "base/containers/span.h"
++#include "third_party/blink/renderer/platform/platform_export.h"
++
++namespace blink {
++
++// The noise against fingerprinting comes from a seed that is the same on a
++// site for the whole session of the browser and different between sites, so a
++// site always reads the same values and two sites can't match them. The seed
++// itself comes from core, which knows the site of the running script.
++using FarblingSeedProvider = uint64_t (*)();
++PLATFORM_EXPORT void SetFarblingSeedProvider(FarblingSeedProvider provider);
++
++// The seed of the page whose script is running, or of the ScopedFarblingSeed
++// around the current work.
++PLATFORM_EXPORT uint64_t CurrentFarblingSeed();
++
++// For the work that doesn't run inside a script of the page, like the end of
++// an offline audio rendering.
++class PLATFORM_EXPORT ScopedFarblingSeed {
++ public:
++  explicit ScopedFarblingSeed(uint64_t seed);
++  ScopedFarblingSeed(const ScopedFarblingSeed&) = delete;
++  ScopedFarblingSeed& operator=(const ScopedFarblingSeed&) = delete;
++  ~ScopedFarblingSeed();
++
++ private:
++  const bool had_seed_;
++  const uint64_t previous_seed_;
++};
++
++// SplitMix64: a fixed sequence of values for each seed.
++class FarblingRandom {
++ public:
++  explicit FarblingRandom(uint64_t seed) : state_(seed) {}
++
++  uint64_t Next() {
++    uint64_t z = (state_ += 0x9e3779b97f4a7c15ull);
++    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ull;
++    z = (z ^ (z >> 27)) * 0x94d049bb133111ebull;
++    return z ^ (z >> 31);
++  }
++
++  // A value from 0 to `n` - 1.
++  uint64_t Below(uint64_t n) { return n ? Next() % n : 0; }
++
++  // A value from 0 (included) to 1 (excluded).
++  double Unit() { return (Next() >> 11) * 0x1.0p-53; }
++
++ private:
++  uint64_t state_;
++};
++
++// Mixes `data` into `seed`: the same content on the same site gets the same
++// noise.
++PLATFORM_EXPORT uint64_t FarblingHash(uint64_t seed,
++                                      base::span<const uint8_t> data);
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_FORK_FARBLING_H_
+diff --git a/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc b/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
+index 4b5c6c1bd78126317ec4beb24c8b11a524242329..97cd95bae3621ab8bfeddfc31ee1290b518bdfa3 100644
+--- a/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
++++ b/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
+ 
++#include "base/compiler_specific.h"
+ #include "base/logging.h"
+ #include "base/rand_util.h"
+ #include "base/numerics/checked_math.h"
+@@ -21,6 +22,7 @@
+ #include "ui/gfx/geometry/skia_conversions.h"
+ #include "v8/include/v8.h"
+ 
++#include "third_party/blink/renderer/platform/fork_farbling.h"
+ #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+ #include "third_party/skia/src/core/SkColorData.h"
+ 
+@@ -146,12 +148,24 @@ void StaticBitmapImage::ShuffleSubchannelColorData(const SkPixmap& src_data,
+ 
+   DLOG(INFO) << "BRM: ShuffleSubchannelColorData() w=" << w << " h=" << h << " colorType=" << colorType << " fRowBytes=" << fRowBytes;
+ 
++  // The noise depends on the site and on the image: the same drawing reads
++  // the same on a site for the whole session, and differently on another site.
++  uint64_t seed = CurrentFarblingSeed();
++  const size_t row_bytes = info.width() * info.bytesPerPixel();
++  for (int row = 0; row < info.height(); ++row) {
++    seed = FarblingHash(
++        seed, UNSAFE_BUFFERS(base::span(
++                  static_cast<const uint8_t*>(src_data.addr(0, row)),
++                  row_bytes)));
++  }
++  FarblingRandom random(seed);
++
+   for (; pixels > 0; pixels--) {
+-    int x = base::RandIntInclusive(0, w - 1);
+-    int y = base::RandIntInclusive(0, h - 1);
++    int x = random.Below(w);
++    int y = random.Below(h);
+ 
+     // calculate randomisation amounts for each RGB component
+-    uint8_t shuffleR = base::RandIntInclusive(0, 4);
++    uint8_t shuffleR = random.Below(5);
+     uint8_t shuffleG = (shuffleR + x) % 4;
+     uint8_t shuffleB = (shuffleG + y) % 4;
+ 

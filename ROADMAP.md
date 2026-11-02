@@ -41,6 +41,9 @@ aggiornamenti di Cromite come tutto il resto.
   strada dei dati, WebGL per sito e "Ricorda questo sito". Scrive solo protezioni misurate sul browser
   vero. Su Mac le larghezze del testo hanno il rumore ma i font installati si riconoscono ancora: da
   chiudere con la voce sul fingerprinting.
+- Anti-fingerprinting per sito: canvas, audio, plugin, numero di processori e WebGL consentito
+  danno valori fissi dentro un sito e diversi tra siti (dettagli nella voce 2). Cover Your Tracks
+  dice "your browser has a randomized fingerprint", provato due volte sulla build Mac.
 - Contatore del fingerprinting: numero sullo scudo, numeri per riga, totale e "Mostra tutte e 15 le
   categorie", come nella tavola. Conta le letture che Blink registra già (i contatori d'uso che
   arrivano al browser con le metriche della pagina): ogni API una volta per frame, si azzera a ogni
@@ -132,31 +135,36 @@ impercettibile ma diversi per ogni sito, così due visite non danno la stessa im
   alleggerire le protezioni.
 - Verifica con la pagina di test del farbling di Brave e con i test di impronta più noti: il
   valore deve cambiare tra siti, tra sessioni e dopo aver cancellato i dati del sito.
-- **Obiettivo da superare: Cover Your Tracks (EFF) deve dire "your browser has a randomized
-  fingerprint"**, come con Brave ed Epic. Dal suo codice (`static/fetch_whorls.js`, funzione
-  `determine_randomized`): legge l'impronta **due volte di fila nella stessa pagina** e dà quel
-  risultato se **almeno 4** di questi attributi cambiano tra le due letture: canvas, hash WebGL,
-  vendor/renderer WebGL, audio, font, supporto touch, fuso orario (offset e nome), plugin,
-  supercookie.
-  - Con WebGL spento i suoi due attributi non contano: i 4 da far variare sono **canvas, audio,
-    font e plugin**.
+- **Cover Your Tracks (EFF) dice "your browser has a randomized fingerprint"** (fatto, 2 novembre
+  2026). Il criterio vero, letto in `static/fetch_whorls.js` e `templates/kcarter.html`: il test
+  raccoglie l'impronta su un primo dominio e poi su coveryourtracks.eff.org, e conta quanti valori
+  sono **diversi tra i due domini** tra canvas, audio, hash WebGL, plugin e `hardwareConcurrency`;
+  ne servono almeno 4. I valori che cambiano dentro la stessa pagina non contano, anzi: diventano
+  "randomized" su entrambi i domini e risultano uguali. I font non contano. Con WebGL spento
+  servono tutti e quattro gli altri.
 
-**Metodo: il meno tracciabile possibile.**
+**Metodo: il meno tracciabile possibile** (fatto per canvas, audio, plugin, processori e WebGL).
 
-- **Un'impronta diversa per ogni sito:** seme per sessione × sito (eTLD+1) × area di storage.
-  Due siti non possono collegarti confrontando le impronte; l'impronta cambia a ogni riavvio del
-  browser e quando cancelli i dati del sito.
-- **Varianti a rotazione:** per ogni sessione e sito, poche varianti fisse (per esempio 3) di
-  canvas, audio, font e plugin, usate a turno a ogni lettura.
-  - Due letture di fila sono diverse, quindi per Cover Your Tracks l'impronta è "randomized".
-  - La media di tante letture dà la media delle varianti, che hanno uno scostamento comune dal
-    valore vero: non lo fa riemergere, come invece succede con un rumore nuovo a ogni lettura.
+- **Un'impronta diversa per ogni sito, fissa dentro il sito:** chiave casuale per profilo, nuova a
+  ogni avvio e solo in memoria, passata dal browser ai renderer; HMAC-SHA256 della chiave con il
+  sito principale (`top_level_site` della chiave di storage, con il nonce dei frame
+  credentialless). Iframe di altri siti usano il seme della pagina, come in Brave. Il seme sta nel
+  `CanvasNoiseToken` del contesto, che Cromite lascia vuoto.
+- **Stabile nel sito, quindi niente media:** lo stesso contenuto dà sempre lo stesso risultato
+  sullo stesso sito (il rumore dipende anche dall'immagine), così leggere cento volte non fa
+  riemergere il valore vero.
+- Processori: da 4 a 8, mai sopra quelli veri. Plugin: i 5 lettori PDF dello standard più due
+  finti con nomi, file e tipi diversi per sito.
+- WebGL consentito: nome della scheda video comune per sistema ("Apple M1" su Mac), limiti
+  abbassati a valori comuni (abbassarli è sempre sicuro), rumore per sito sulle letture di almeno
+  16×16 pixel; quelle piccole, che le mappe 3D usano per capire cosa si clicca, restano esatte.
+- Restano da fare: i font (elenco dei font di sistema per piattaforma più un sottoinsieme per
+  sito, come Brave), la cancellazione dell'impronta insieme ai dati del sito, il fuso orario.
 - **Valori credibili:** rumore impercettibile su canvas e audio, sottoinsiemi diversi di un elenco
   di font comune, elenchi di plugin plausibili come quelli di Brave. Mai valori impossibili, che
   renderebbero l'impronta rara invece di confonderla.
 - **Fuso orario:** resta fisso per sessione (casuale o scelto, come già fa Cromite), non a ogni
   lettura, per non sbagliare gli orari mostrati dai siti.
-- Prima di scrivere codice, verificare come ci riescono Brave ed Epic.
 
 **Priorità**, in base a quello che i tracker leggono davvero (riferimento: i segnali raccolti
 da FingerprintJS, la libreria open source più diffusa, `src/sources/index.ts`):
