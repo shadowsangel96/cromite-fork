@@ -21,3 +21,4 @@ common/0010-claude-il-pannello-si-apre-anche-quando-l-estensione-non-fa.patch
 macos/0009-schede-nella-barra-a-scelta-come-nella-tavola.patch
 common/0011-contatore-del-fingerprinting-numeri-nel-pannello-del-sito-e.patch
 common/0012-anti-fingerprinting-valori-fissi-per-sito-su-canvas-audio-pl.patch
+common/0014-privacy-font-di-sistema-una-lingua-niente-do-not-track-impro.patch

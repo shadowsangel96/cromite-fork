@@ -1,0 +1,636 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Mon, 2 Nov 2026 15:31:29 +0100
+Subject: [PATCH] Privacy: font di sistema, una lingua, niente Do Not Track,
+ impronta nuova cancellando i dati
+
+Fork-Patch: common/0014-privacy-font-di-sistema-una-lingua-niente-do-not-track-impro.patch
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 0100a7ab23791cb0c4872a040d5df8761fc4530d..5efc95fbdf5f4286f64198a0133dcfddcd43eb23 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -839,6 +839,8 @@ source_set("core") {
+   sources = [
+     "about_flags.cc",
+     "adblock/adblock_chrome_content_browser_client.cc",
++    "fork/farbling_key.cc",
++    "fork/farbling_key.h",
+     "fork/fingerprinting_counter.cc",
+     "fork/fingerprinting_counter.h",
+     "fork/personal_search.h",
+diff --git a/chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.cc b/chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.cc
+index c638dd9428eb3b9be7686adbedb9aaf25779bfc4..bffce60fa43b5471b50c38ead3dffbdd8d3c3dbd 100644
+--- a/chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.cc
++++ b/chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
+ 
++#include "chrome/browser/fork/farbling_key.h"
++
+ #include <stdint.h>
+ 
+ #include <algorithm>
+@@ -337,6 +339,13 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
+   content::GetUIThreadTaskRunner({})->PostDelayedTask(
+       FROM_HERE, slow_pending_tasks_closure_.callback(), kSlowTaskTimeout);
+ 
++  // With the cookies of every site gone, the fingerprint goes too: the pages
++  // opened from now on read new values.
++  if ((remove_mask & content::BrowsingDataRemover::DATA_TYPE_COOKIES) &&
++      filter_builder->MatchesAllOriginsAndDomains()) {
++    browser_fork::ResetFarblingKey(profile_);
++  }
++
+   // Embedder-defined DOM-accessible storage currently contains only
+   // one datatype, which is the persistent storage permission.
+   if (remove_mask &
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index b5d749e21ad5688cde3627fea7d694c94f7c52e2..24b4f602f47ba8d87f037674cab925e6df5d19db 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -43,7 +43,6 @@
+ #include "base/path_service.h"
+ #include "base/stl_util.h"
+ #include "base/strings/strcat.h"
+-#include "base/rand_util.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/string_split.h"
+ #include "base/strings/string_util.h"
+@@ -78,6 +77,7 @@
+ #include "chrome/browser/chrome_content_browser_client_binder_policies.h"
+ #include "chrome/browser/chrome_content_browser_client_navigation_throttles.h"
+ #include "chrome/browser/chrome_content_browser_client_parts.h"
++#include "chrome/browser/fork/farbling_key.h"
+ #include "chrome/browser/content_settings/cookie_settings_factory.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/contextual_tasks/contextual_tasks_ui_service.h"
+@@ -2832,27 +2832,6 @@ bool ChromeContentBrowserClient::IsFileAccessAllowed(
+ 
+ namespace {
+ 
+-// The key of the noise against fingerprinting: one for each profile, new at
+-// every start of the browser and only in memory. The renderers mix it with the
+-// site, so a site reads the same values for the whole session and two sites
+-// can't match them.
+-struct FarblingKeyData : public base::SupportsUserData::Data {
+-  std::string key = base::HexEncode(base::RandBytesAsVector(32));
+-};
+-
+-constexpr char kFarblingKeyUserDataKey[] = "fork_farbling_key";
+-
+-const std::string& GetFarblingKey(Profile* profile) {
+-  auto* data = static_cast<FarblingKeyData*>(
+-      profile->GetUserData(kFarblingKeyUserDataKey));
+-  if (!data) {
+-    auto owned = std::make_unique<FarblingKeyData>();
+-    data = owned.get();
+-    profile->SetUserData(kFarblingKeyUserDataKey, std::move(owned));
+-  }
+-  return data->key;
+-}
+-
+ void MaybeAppendBlinkSettingsSwitchForFieldTrial(
+     const base::CommandLine& browser_command_line,
+     base::CommandLine* command_line) {
+@@ -2991,7 +2970,7 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
+       Profile* profile =
+           Profile::FromBrowserContext(process->GetBrowserContext());
+       command_line->AppendSwitchASCII("fork-farbling-key",
+-                                      GetFarblingKey(profile));
++                                      browser_fork::GetFarblingKey(profile));
+       PrefService* prefs = profile->GetPrefs();
+       PrefService* local_state = g_browser_process->local_state();
+       // Currently this pref is only registered if applied via a policy.
+diff --git a/chrome/browser/fork/farbling_key.cc b/chrome/browser/fork/farbling_key.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..61928f20cc3c1466368a29ee7eb28cbccb28c4c2
+--- /dev/null
++++ b/chrome/browser/fork/farbling_key.cc
+@@ -0,0 +1,40 @@
++#include "chrome/browser/fork/farbling_key.h"
++
++#include <memory>
++
++#include "base/rand_util.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/supports_user_data.h"
++#include "chrome/browser/profiles/profile.h"
++#include "content/public/browser/spare_render_process_host_manager.h"
++
++namespace browser_fork {
++
++namespace {
++
++struct FarblingKeyData : public base::SupportsUserData::Data {
++  std::string key = base::HexEncode(base::RandBytesAsVector(32));
++};
++
++constexpr char kFarblingKeyUserDataKey[] = "fork_farbling_key";
++
++}  // namespace
++
++const std::string& GetFarblingKey(Profile* profile) {
++  auto* data = static_cast<FarblingKeyData*>(
++      profile->GetUserData(kFarblingKeyUserDataKey));
++  if (!data) {
++    auto owned = std::make_unique<FarblingKeyData>();
++    data = owned.get();
++    profile->SetUserData(kFarblingKeyUserDataKey, std::move(owned));
++  }
++  return data->key;
++}
++
++void ResetFarblingKey(Profile* profile) {
++  profile->RemoveUserData(kFarblingKeyUserDataKey);
++  // The spare renderer, ready for the next page, still has the old key.
++  content::SpareRenderProcessHostManager::Get().CleanupSparesForTesting();
++}
++
++}  // namespace browser_fork
+diff --git a/chrome/browser/fork/farbling_key.h b/chrome/browser/fork/farbling_key.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..9a323c57fe83ebd67a824ced2a285d4c768d342e
+--- /dev/null
++++ b/chrome/browser/fork/farbling_key.h
+@@ -0,0 +1,22 @@
++#ifndef CHROME_BROWSER_FORK_FARBLING_KEY_H_
++#define CHROME_BROWSER_FORK_FARBLING_KEY_H_
++
++#include <string>
++
++class Profile;
++
++namespace browser_fork {
++
++// The key of the noise against fingerprinting: one for each profile, new at
++// every start of the browser and only in memory. The renderers mix it with the
++// site, so a site reads the same values for the whole session and two sites
++// can't match them.
++const std::string& GetFarblingKey(Profile* profile);
++
++// A new key when the data of every site is deleted: the pages opened from now
++// on show a new fingerprint.
++void ResetFarblingKey(Profile* profile);
++
++}  // namespace browser_fork
++
++#endif  // CHROME_BROWSER_FORK_FARBLING_KEY_H_
+diff --git a/chrome/browser/ui/browser_ui_prefs.cc b/chrome/browser/ui/browser_ui_prefs.cc
+index 4944cd222f37aad4c7902da58218d16f25b32b59..bdfe1291a8df04d0476ee9f972d2cdbc35cd544f 100644
+--- a/chrome/browser/ui/browser_ui_prefs.cc
++++ b/chrome/browser/ui/browser_ui_prefs.cc
+@@ -153,7 +153,9 @@ void RegisterBrowserUserPrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterDictionaryPref(prefs::kBrowserWindowPlacementPopup);
+   registry->RegisterDictionaryPref(prefs::kAppWindowPlacement);
+   registry->RegisterBooleanPref(
+-      prefs::kEnableDoNotTrack, true,
++      // Off in the fork: few browsers still send it, so it tells users apart.
++      // Global Privacy Control stays on.
++      prefs::kEnableDoNotTrack, false,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+   registry->RegisterBooleanPref(prefs::kEnableGPC, true);
+ #if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
+diff --git a/services/network/public/cpp/features.cc b/services/network/public/cpp/features.cc
+index 5b2c90b72372aaae8cde44f2d579a7ddfebab862..b64ec84bc2734facf1f81e714443590020612e23 100644
+--- a/services/network/public/cpp/features.cc
++++ b/services/network/public/cpp/features.cc
+@@ -203,7 +203,9 @@ BASE_FEATURE(kRestrictFrameDestinationsToNavigate,
+ 
+ // Enables support for the `Variants` response header and reduce
+ // accept-language. https://github.com/Tanych/accept-language
+-BASE_FEATURE(kReduceAcceptLanguage, base::FEATURE_DISABLED_BY_DEFAULT);
++// On by default in the fork: sites get only the first language, in the header
++// and in navigator.languages, as in Brave. A list of four is rare.
++BASE_FEATURE(kReduceAcceptLanguage, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ BASE_FEATURE_PARAM(base::TimeDelta,
+                    kReduceAcceptLanguageCacheDuration,
+diff --git a/third_party/blink/renderer/core/css/local_font_face_source.cc b/third_party/blink/renderer/core/css/local_font_face_source.cc
+index ab4e6a9bedfed3f638920641bd58b0a2f3b0e15f..e5af0665c1a49e660de78206b3a65a31e998ee0f 100644
+--- a/third_party/blink/renderer/core/css/local_font_face_source.cc
++++ b/third_party/blink/renderer/core/css/local_font_face_source.cc
+@@ -11,6 +11,7 @@
+ #include "third_party/blink/renderer/core/probe/core_probes.h"
+ #include "third_party/blink/renderer/platform/fonts/bitmap_glyphs_block_list.h"
+ #include "third_party/blink/renderer/platform/fonts/font_cache.h"
++#include "third_party/blink/renderer/platform/fonts/fork_font_allowlist.h"
+ #include "third_party/blink/renderer/platform/fonts/font_custom_platform_data.h"
+ #include "third_party/blink/renderer/platform/fonts/font_description.h"
+ #include "third_party/blink/renderer/platform/fonts/font_global_context.h"
+@@ -43,8 +44,11 @@ bool LocalFontFaceSource::IsLocalNonBlocking() const {
+ bool LocalFontFaceSource::IsLocalFontAvailable(
+     const FontDescription& font_description) const {
+   // TODO(crbug.com/1025945): Properly handle Windows prior to 10 and Android.
+-  bool font_available = FontCache::Get().IsPlatformFontUniqueNameMatchAvailable(
+-      font_description, font_name_);
++  // local() names a font of the system too: only the ones every Mac has.
++  bool font_available =
++      IsLocalFontFamilyAllowed(font_name_) &&
++      FontCache::Get().IsPlatformFontUniqueNameMatchAvailable(font_description,
++                                                              font_name_);
+   return font_available;
+ }
+ 
+diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
+index 4e419a5667edfac96e4db2a6af19835b3c31e481..905e3d5ae4d667ec6f1fe441a13c5789fa8a72f7 100644
+--- a/third_party/blink/renderer/platform/BUILD.gn
++++ b/third_party/blink/renderer/platform/BUILD.gn
+@@ -1279,6 +1279,8 @@ component("platform") {
+     "graphics/static_bitmap_image.h",
+     "fork_farbling.cc",
+     "fork_farbling.h",
++    "fonts/fork_font_allowlist.cc",
++    "fonts/fork_font_allowlist.h",
+     "graphics/static_bitmap_image_to_video_frame_copier.cc",
+     "graphics/static_bitmap_image_to_video_frame_copier.h",
+     "graphics/static_bitmap_image_transform.cc",
+diff --git a/third_party/blink/renderer/platform/fonts/font_fallback_list.cc b/third_party/blink/renderer/platform/fonts/font_fallback_list.cc
+index a35f4d61b28cdcd3c878726fa36cbb0f1b69e2bd..67c4c7fd4afb0fda7895bf6bdc6a929094f3b7cf 100644
+--- a/third_party/blink/renderer/platform/fonts/font_fallback_list.cc
++++ b/third_party/blink/renderer/platform/fonts/font_fallback_list.cc
+@@ -32,6 +32,7 @@
+ #include "third_party/blink/renderer/platform/font_family_names.h"
+ #include "third_party/blink/renderer/platform/fonts/alternate_font_family.h"
+ #include "third_party/blink/renderer/platform/fonts/font_cache.h"
++#include "third_party/blink/renderer/platform/fonts/fork_font_allowlist.h"
+ #include "third_party/blink/renderer/platform/fonts/font_cache_key.h"
+ #include "third_party/blink/renderer/platform/fonts/font_description.h"
+ #include "third_party/blink/renderer/platform/fonts/font_fallback_map.h"
+@@ -156,7 +157,8 @@ const FontData* FontFallbackList::GetFontData(
+     family_index_++;
+     if (!font_selector_) {
+       // Don't query system fonts for empty font family name.
+-      if (!curr_family->FamilyName().empty()) {
++      if (!curr_family->FamilyName().empty() &&
++          IsLocalFontFamilyAllowed(curr_family->FamilyName())) {
+         if (auto* result = FontCache::Get().GetFontData(
+                 font_description, curr_family->FamilyName())) {
+           return result;
+@@ -168,7 +170,8 @@ const FontData* FontFallbackList::GetFontData(
+     const FontData* result =
+         font_selector_->GetFontData(font_description, *curr_family);
+     // Don't query system fonts for empty font family name.
+-    if (!result && !curr_family->FamilyName().empty()) {
++    if (!result && !curr_family->FamilyName().empty() &&
++        IsLocalFontFamilyAllowed(curr_family->FamilyName())) {
+       result = FontCache::Get().GetFontData(font_description,
+                                             curr_family->FamilyName());
+     }
+diff --git a/third_party/blink/renderer/platform/fonts/fork_font_allowlist.cc b/third_party/blink/renderer/platform/fonts/fork_font_allowlist.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..4e1b2e02e62c5710d5a975e1e3ba648171a9f962
+--- /dev/null
++++ b/third_party/blink/renderer/platform/fonts/fork_font_allowlist.cc
+@@ -0,0 +1,328 @@
++/* The list of the fonts of macOS comes from brave-core
++ * (third_party/blink/renderer/brave_font_whitelist.cc):
++ * Copyright (c) 2022 The Brave Authors. All rights reserved.
++ * This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
++ * You can obtain one at http://mozilla.org/MPL/2.0/. */
++
++#include "third_party/blink/renderer/platform/fonts/fork_font_allowlist.h"
++
++#include <string_view>
++
++#include "base/containers/fixed_flat_set.h"
++#include "build/build_config.h"
++
++namespace blink {
++
++#if BUILDFLAG(IS_MAC)
++
++namespace {
++
++// The fonts installed by default on macOS 12.3, the same for every newer Mac.
++constexpr auto kSystemFonts = base::MakeFixedFlatSet<std::string_view>(
++    base::sorted_unique,
++    {
++        "-apple-system",
++        "academy engraved let",
++        "al bayan",
++        "al nile",
++        "al tarikh",
++        "american typewriter",
++        "andale mono",
++        "apple braille",
++        "apple braille outline 6 dot",
++        "apple braille outline 8 dot",
++        "apple braille pinpoint 6 dot",
++        "apple braille pinpoint 8 dot",
++        "apple chancery",
++        "apple color emoji",
++        "apple sd gothic neo",
++        "apple symbols",
++        "applegothic",
++        "applemyungjo",
++        "aquakana",
++        "arial",
++        "arial black",
++        "arial hebrew",
++        "arial hebrew scholar",
++        "arial narrow",
++        "arial rounded mt bold",
++        "arial unicode ms",
++        "athelas",
++        "avenir",
++        "avenir black",
++        "avenir black oblique",
++        "avenir book",
++        "avenir heavy",
++        "avenir light",
++        "avenir medium",
++        "avenir next",
++        "avenir next condensed",
++        "avenir next condensed demi bold",
++        "avenir next condensed heavy",
++        "avenir next condensed medium",
++        "avenir next condensed ultra light",
++        "avenir next demi bold",
++        "avenir next heavy",
++        "avenir next medium",
++        "avenir next ultra light",
++        "ayuthaya",
++        "baghdad",
++        "bangla mn",
++        "bangla sangam mn",
++        "baskerville",
++        "beirut",
++        "big caslon",
++        "blinkmacsystemfont",
++        "bodoni 72",
++        "bodoni 72 oldstyle",
++        "bodoni 72 smallcaps",
++        "bodoni ornaments",
++        "bradley hand",
++        "brush script mt",
++        "chalkboard",
++        "chalkboard se",
++        "chalkduster",
++        "charter",
++        "charter black",
++        "cochin",
++        "comic sans ms",
++        "copperplate",
++        "corsiva hebrew",
++        "courier",
++        "courier new",
++        "damascus",
++        "decotype naskh",
++        "devanagari mt",
++        "devanagari sangam mn",
++        "didot",
++        "din alternate",
++        "din condensed",
++        "diwan kufi",
++        "diwan thuluth",
++        "euphemia ucas",
++        "farah",
++        "farisi",
++        "futura",
++        "galvji",
++        "gb18030 bitmap",
++        "geeza pro",
++        "geneva",
++        "georgia",
++        "gill sans",
++        "grantha sangam mn",
++        "gujarati mt",
++        "gujarati sangam mn",
++        "gurmukhi mn",
++        "gurmukhi mt",
++        "gurmukhi sangam mn",
++        "heiti sc",
++        "heiti tc",
++        "helvetica",
++        "helvetica neue",
++        "herculanum",
++        "hiragino kaku gothic pro",
++        "hiragino kaku gothic pro w3",
++        "hiragino kaku gothic pro w6",
++        "hiragino kaku gothic pron",
++        "hiragino kaku gothic pron w3",
++        "hiragino kaku gothic pron w6",
++        "hiragino kaku gothic std",
++        "hiragino kaku gothic std w8",
++        "hiragino kaku gothic stdn",
++        "hiragino kaku gothic stdn w8",
++        "hiragino maru gothic pro",
++        "hiragino maru gothic pro w4",
++        "hiragino maru gothic pron",
++        "hiragino maru gothic pron w4",
++        "hiragino mincho pro",
++        "hiragino mincho pro w3",
++        "hiragino mincho pro w6",
++        "hiragino mincho pron",
++        "hiragino mincho pron w3",
++        "hiragino mincho pron w6",
++        "hiragino sans",
++        "hiragino sans gb",
++        "hiragino sans gb w3",
++        "hiragino sans gb w6",
++        "hiragino sans w0",
++        "hiragino sans w1",
++        "hiragino sans w2",
++        "hiragino sans w3",
++        "hiragino sans w4",
++        "hiragino sans w5",
++        "hiragino sans w6",
++        "hiragino sans w7",
++        "hiragino sans w8",
++        "hiragino sans w9",
++        "hoefler text",
++        "hoefler text ornaments",
++        "impact",
++        "inaimathi",
++        "iowan old style",
++        "iowan old style black",
++        "itf devanagari",
++        "itf devanagari marathi",
++        "kailasa",
++        "kannada mn",
++        "kannada sangam mn",
++        "kefa",
++        "khmer mn",
++        "khmer sangam mn",
++        "kohinoor bangla",
++        "kohinoor devanagari",
++        "kohinoor gujarati",
++        "kohinoor telugu",
++        "kokonor",
++        "krungthep",
++        "kufistandardgk",
++        "lao mn",
++        "lao sangam mn",
++        "lastresort",
++        "lucida grande",
++        "luminari",
++        "malayalam mn",
++        "malayalam sangam mn",
++        "marion",
++        "marker felt",
++        "menlo",
++        "microsoft sans serif",
++        "mishafi",
++        "mishafi gold",
++        "monaco",
++        "mshtakan",
++        "mukta mahee",
++        "muna",
++        "myanmar mn",
++        "myanmar sangam mn",
++        "nadeem",
++        "new peninim mt",
++        "noteworthy",
++        "noto nastaliq urdu",
++        "noto sans gothic",
++        "noto sans linear a",
++        "noto sans linear b",
++        "noto sans old italic",
++        "noto serif ahom",
++        "noto serif balinese",
++        "noto serif myanmar",
++        "optima",
++        "oriya mn",
++        "oriya sangam mn",
++        "palatino",
++        "papyrus",
++        "party let",
++        "phosphate",
++        "pingfang hk",
++        "pingfang sc",
++        "pingfang tc",
++        "plantagenet cherokee",
++        "pt mono",
++        "pt sans",
++        "pt sans caption",
++        "pt sans narrow",
++        "pt serif",
++        "pt serif caption",
++        "raanana",
++        "rockwell",
++        "sana",
++        "sathu",
++        "savoye let",
++        "savoye let plain cc.:1.0",
++        "savoye let plain:1.0",
++        "seravek",
++        "seravek extralight",
++        "seravek light",
++        "seravek medium",
++        "shree devanagari 714",
++        "signpainter",
++        "signpainter-housescript",
++        "silom",
++        "sinhala mn",
++        "sinhala sangam mn",
++        "skia",
++        "snell roundhand",
++        "songti sc",
++        "songti tc",
++        "stixgeneral",
++        "stixgeneral-bold",
++        "stixgeneral-bolditalic",
++        "stixgeneral-italic",
++        "stixgeneral-regular",
++        "stixintegralsd",
++        "stixintegralsd-bold",
++        "stixintegralsd-regular",
++        "stixintegralssm",
++        "stixintegralssm-bold",
++        "stixintegralssm-regular",
++        "stixintegralsup",
++        "stixintegralsup-bold",
++        "stixintegralsup-regular",
++        "stixintegralsupd",
++        "stixintegralsupd-bold",
++        "stixintegralsupd-regular",
++        "stixintegralsupsm",
++        "stixintegralsupsm-bold",
++        "stixintegralsupsm-regular",
++        "stixnonunicode",
++        "stixnonunicode-bold",
++        "stixnonunicode-bolditalic",
++        "stixnonunicode-italic",
++        "stixnonunicode-regular",
++        "stixsizefivesym",
++        "stixsizefivesym-regular",
++        "stixsizefoursym",
++        "stixsizefoursym-bold",
++        "stixsizefoursym-regular",
++        "stixsizeonesym",
++        "stixsizeonesym-bold",
++        "stixsizeonesym-regular",
++        "stixsizethreesym",
++        "stixsizethreesym-bold",
++        "stixsizethreesym-regular",
++        "stixsizetwosym",
++        "stixsizetwosym-bold",
++        "stixsizetwosym-regular",
++        "stixvariants",
++        "stixvariants-bold",
++        "stixvariants-regular",
++        "stsong",
++        "sukhumvit set",
++        "superclarendon",
++        "symbol",
++        "system-ui",
++        "tahoma",
++        "tamil mn",
++        "tamil sangam mn",
++        "telugu mn",
++        "telugu sangam mn",
++        "thonburi",
++        "times new roman",
++        "trattatello",
++        "trebuchet ms",
++        "verdana",
++        "waseem",
++        "webdings",
++        "wingdings",
++        "wingdings 2",
++        "wingdings 3",
++        "zapf dingbats",
++        "zapfino",
++    });
++
++}  // namespace
++
++bool IsLocalFontFamilyAllowed(const AtomicString& family) {
++  return kSystemFonts.contains(family.ToAsciiLower().Ascii());
++}
++
++#else
++
++// Cromite already keeps the standard fonts alone on Windows.
++bool IsLocalFontFamilyAllowed(const AtomicString& family) {
++  return true;
++}
++
++#endif
++
++}  // namespace blink
+diff --git a/third_party/blink/renderer/platform/fonts/fork_font_allowlist.h b/third_party/blink/renderer/platform/fonts/fork_font_allowlist.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..7855ac4344d848007f50dda04fa48078d5318842
+--- /dev/null
++++ b/third_party/blink/renderer/platform/fonts/fork_font_allowlist.h
+@@ -0,0 +1,16 @@
++#ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_FONTS_FORK_FONT_ALLOWLIST_H_
++#define THIRD_PARTY_BLINK_RENDERER_PLATFORM_FONTS_FORK_FONT_ALLOWLIST_H_
++
++#include "third_party/blink/renderer/platform/platform_export.h"
++#include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
++
++namespace blink {
++
++// Whether pages may use the font of the system with this family name. On Mac,
++// only the fonts that come with the system: the ones a user installed would
++// tell them apart. Fonts of the page and generic families don't come here.
++PLATFORM_EXPORT bool IsLocalFontFamilyAllowed(const AtomicString& family);
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_FONTS_FORK_FONT_ALLOWLIST_H_

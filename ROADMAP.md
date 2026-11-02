@@ -41,6 +41,9 @@ aggiornamenti di Cromite come tutto il resto.
   strada dei dati, WebGL per sito e "Ricorda questo sito". Scrive solo protezioni misurate sul browser
   vero. Su Mac le larghezze del testo hanno il rumore ma i font installati si riconoscono ancora: da
   chiudere con la voce sul fingerprinting.
+- Privacy, resto della voce 2: solo i font di sistema su Mac, una sola lingua, Do Not Track spento,
+  impronta nuova anche dopo "Cancella dati di navigazione". Verifiche della voce 2 tutte passate,
+  tranne il letterboxing, tolto per la protezione del viewport di Cromite (dettagli nella voce 2).
 - Anti-fingerprinting per sito: canvas, audio, plugin, numero di processori e WebGL consentito
   danno valori fissi dentro un sito e diversi tra siti (dettagli nella voce 2). Cover Your Tracks
   dice "your browser has a randomized fingerprint", provato due volte sulla build Mac.
@@ -158,8 +161,24 @@ impercettibile ma diversi per ogni sito, così due visite non danno la stessa im
 - WebGL consentito: nome della scheda video comune per sistema ("Apple M1" su Mac), limiti
   abbassati a valori comuni (abbassarli è sempre sicuro), rumore per sito sulle letture di almeno
   16×16 pixel; quelle piccole, che le mappe 3D usano per capire cosa si clicca, restano esatte.
-- Restano da fare: i font (elenco dei font di sistema per piattaforma più un sottoinsieme per
-  sito, come Brave), la cancellazione dell'impronta insieme ai dati del sito, il fuso orario.
+- **Font** (fatto): su Mac i siti vedono solo i font che vengono con macOS (elenco di macOS 12.3
+  preso da Brave, MPL-2.0), anche in `local()` e nel canvas; i font scaricati dal sito e quelli
+  generici non cambiano. Provato con due font installati a parte: la build vecchia li vede,
+  quella nuova no. Niente sottoinsieme diverso per sito: servirebbe il sito
+  a ogni impaginazione, anche fuori dagli script, e il testo cambierebbe font tra un disegno e
+  l'altro; con l'elenco fisso tutti i Mac sembrano uguali. Su Windows filtra già Cromite.
+- **Impronta nuova** (fatto) dopo un riavvio e dopo "Cancella dati di navigazione" con i cookie di
+  tutti i siti: la chiave del profilo si rinnova e il processo di riserva si scarta. Non succede
+  quando i cookie temporanei cancellano un sito solo: servirebbe un seme per sito mandato a ogni
+  navigazione.
+- **Lingue** (fatto): `ReduceAcceptLanguage` acceso, i siti ricevono solo la prima lingua
+  nell'header e in `navigator.languages`.
+- **Do Not Track spento** di base (Cromite lo accende): lo mandano ormai pochi browser e rende più
+  riconoscibili; resta acceso Global Privacy Control.
+- **Fuso orario** reale, scelta voluta: con la VPN il fuso deve combaciare con il paese di uscita,
+  e uno diverso sarebbe un segnale in più. Si cambia sito per sito nelle impostazioni di Cromite.
+- **Preferenze di visualizzazione** (contrasto, movimento ridotto, colori) reali: servono a chi le
+  usa per accessibilità. La gamma P3 è quella di tutti i Mac recenti.
 - **Valori credibili:** rumore impercettibile su canvas e audio, sottoinsiemi diversi di un elenco
   di font comune, elenchi di plugin plausibili come quelli di Brave. Mai valori impossibili, che
   renderebbero l'impronta rara invece di confonderla.
@@ -181,7 +200,8 @@ da FingerprintJS, la libreria open source più diffusa, `src/sources/index.ts`):
 4. Il resto, confrontato con quello che fa già Cromite: preferenze di visualizzazione (contrasto,
    HDR, gamma di colori, movimento ridotto), formato di data e lingua, `enumerateDevices`.
 
-**Uniformare: Client Hints.** Sono le informazioni su browser e sistema negli header
+**Uniformare: Client Hints** (verificato, già fatto da Cromite: versione `153.0.0.0`, sistema
+"Intel Mac OS X 10_15_7", nessun valore ad alta precisione, header e JavaScript coerenti). Sono le informazioni su browser e sistema negli header
 `Sec-CH-UA-*` e in `navigator.userAgentData`. Quelle ad alta precisione diventano uguali per
 tutti:
 
@@ -199,7 +219,10 @@ tutti:
 - Risoluzione dichiarata come uno dei tagli più comuni per quel sistema; area utilizzabile
   (`availWidth`/`availHeight`) uguale allo schermo intero, così non si leggono dimensione e
   posizione di barra delle applicazioni e Dock; profondità colore standard.
-- **Letterboxing** come in Tor Browser e Mullvad Browser: l'area della pagina viene arrotondata a
+- **Letterboxing: tolto dal piano.** La protezione del viewport di Cromite scala già finestra e
+  schermo di un fattore casuale a ogni cambio di sito (misurato: il sito legge 1211×740 per una
+  finestra di 1200×820), quindi la misura esatta non si legge; il bordo costerebbe spazio per poco.
+  Idea di partenza: **letterboxing** come in Tor Browser e Mullvad Browser: l'area della pagina viene arrotondata a
   multipli fissi (per esempio 200×100 pixel) con un bordo neutro, così la dimensione esatta della
   finestra, il dato più identificante, non si legge. Il bordo si vede, quindi è un'opzione:
   attiva di default in incognito, attivabile anche nella navigazione normale.
