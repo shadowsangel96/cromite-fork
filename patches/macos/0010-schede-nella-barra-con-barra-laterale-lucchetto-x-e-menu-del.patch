@@ -1,0 +1,388 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Mon, 2 Nov 2026 16:36:04 +0100
+Subject: [PATCH] mac: schede nella barra con barra laterale, lucchetto, X e
+ menu delle schede
+
+Fork-Patch: macos/0010-schede-nella-barra-con-barra-laterale-lucchetto-x-e-menu-del.patch
+
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+index ee5b994424a95abe930f3fbb23ac4db72da1f082..907e9edbaa7ed1cc4a663cc42c07a949562b5630 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -175,6 +175,7 @@
+ #include "ui/views/widget/widget.h"
+ 
+ #if BUILDFLAG(IS_MAC)
++#include "chrome/browser/ui/views/toolbar/compact_tabs_view.h"
+ #include "chrome/browser/web_applications/os_integration/mac/app_shim_registry.h"
+ #include "chrome/browser/web_applications/web_app_tab_helper.h"
+ #endif
+@@ -971,6 +972,28 @@ void LocationBarView::Layout(PassKey) {
+     //  in an incorrect scroll until the next update. Look into doing (3) before
+     //  (2) to more robustly handle these edge cases.
+     omnibox_view_->SetBoundsRect(location_bounds);
++#if BUILDFLAG(IS_MAC)
++    // The lock of the boards, just before the site in the middle of the field.
++    for (views::View* child : children()) {
++      if (!child->GetProperty(browser_fork::kCompactLockKey)) {
++        continue;
++      }
++      const bool show = !IsEditingOrEmpty() &&
++                        GetLocationBarModel()->GetSecurityLevel() ==
++                            security_state::SECURE;
++      child->SetVisible(show);
++      if (show) {
++        const int text_width = std::min(omnibox_view_->GetUnelidedTextWidth(),
++                                        location_bounds.width());
++        const gfx::Size size = child->GetPreferredSize();
++        child->SetBounds(location_bounds.x() +
++                             (location_bounds.width() - text_width) / 2 -
++                             size.width() - 4,
++                         (height() - size.height()) / 2, size.width(),
++                         size.height());
++      }
++    }
++#endif
+ 
+   } else {
+     // A helper to allocate the remaining location bar width preferring calls in
+diff --git a/chrome/browser/ui/views/toolbar/compact_tabs_view.cc b/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
+index 31c0991c0d433dc219e561ba29844b5df450d31b..077a534d85459fdc30a875230caa21e9eb7251f0 100644
+--- a/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
++++ b/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
+@@ -4,6 +4,21 @@
+ #include <string>
+ 
+ #include "base/functional/bind.h"
++#include "cc/paint/paint_flags.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/side_panel/side_panel_entry_id.h"
++#include "chrome/browser/ui/side_panel/side_panel_entry_key.h"
++#include "chrome/browser/ui/side_panel/side_panel_enums.h"
++#include "chrome/browser/ui/side_panel/side_panel_ui.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_button.h"
++#include "chrome/grit/generated_resources.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/menus/simple_menu_model.h"
++#include "ui/gfx/canvas.h"
++#include "ui/gfx/image/canvas_image_source.h"
++#include "ui/views/context_menu_controller.h"
++#include "ui/views/controls/menu/menu_runner.h"
+ #include "chrome/browser/favicon/favicon_utils.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/tabs/tab_enums.h"
+@@ -24,6 +39,8 @@
+ namespace browser_fork {
+ 
+ DEFINE_UI_CLASS_PROPERTY_KEY(bool, kCompactTabsKey, false)
++DEFINE_UI_CLASS_PROPERTY_KEY(bool, kSidebarButtonKey, false)
++DEFINE_UI_CLASS_PROPERTY_KEY(bool, kCompactLockKey, false)
+ 
+ }  // namespace browser_fork
+ 
+@@ -38,7 +55,32 @@ constexpr int kChipGap = 8;
+ // menu to make room for the tabs; only the empty space comes later.
+ constexpr int kTabsFlexOrder = 1900;
+ 
+-class CompactTabChip : public views::LabelButton {
++// The X of the boards, drawn where the icon of the site was.
++class CloseImageSource : public gfx::CanvasImageSource {
++ public:
++  explicit CloseImageSource(SkColor color)
++      : gfx::CanvasImageSource(gfx::Size(16, 16)), color_(color) {}
++
++  void Draw(gfx::Canvas* canvas) override {
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setColor(SkColorSetA(color_, 0x24));
++    canvas->DrawCircle(gfx::PointF(8, 8), 8, flags);
++    flags.setColor(color_);
++    flags.setStrokeWidth(1.5f);
++    flags.setStyle(cc::PaintFlags::kStroke_Style);
++    flags.setStrokeCap(cc::PaintFlags::kRound_Cap);
++    canvas->DrawLine(gfx::PointF(5.5f, 5.5f), gfx::PointF(10.5f, 10.5f), flags);
++    canvas->DrawLine(gfx::PointF(10.5f, 5.5f), gfx::PointF(5.5f, 10.5f), flags);
++  }
++
++ private:
++  const SkColor color_;
++};
++
++class CompactTabChip : public views::LabelButton,
++                       public views::ContextMenuController,
++                       public ui::SimpleMenuModel::Delegate {
+   METADATA_HEADER(CompactTabChip, views::LabelButton)
+ 
+  public:
+@@ -53,6 +95,7 @@ class CompactTabChip : public views::LabelButton {
+     SetMaxSize(gfx::Size(kChipMaxWidth, kChipHeight));
+     SetMinSize(gfx::Size(0, kChipHeight));
+     SetHorizontalAlignment(gfx::ALIGN_LEFT);
++    set_context_menu_controller(this);
+     SetProperty(
+         views::kFlexBehaviorKey,
+         views::FlexSpecification(
+@@ -68,9 +111,49 @@ class CompactTabChip : public views::LabelButton {
+     SetTooltipText(title);
+     GetViewAccessibility().SetName(title);
+     const gfx::Image favicon = favicon::TabFaviconFromWebContents(contents);
+-    SetImageModel(views::Button::STATE_NORMAL,
+-                  ui::ImageModel::FromImage(
+-                      favicon.IsEmpty() ? favicon::GetDefaultFavicon() : favicon));
++    favicon_ = ui::ImageModel::FromImage(
++        favicon.IsEmpty() ? favicon::GetDefaultFavicon() : favicon);
++    SetImageModel(views::Button::STATE_NORMAL, favicon_);
++    UpdateCloseIcon();
++  }
++
++  // views::ContextMenuController:
++  void ShowContextMenuForViewImpl(
++      views::View* source,
++      const gfx::Point& point,
++      ui::mojom::MenuSourceType source_type) override {
++    // The menu of the tabs of Chromium, with its words.
++    menu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
++    menu_model_->AddItemWithStringId(TabStripModel::CommandNewTabToRight,
++                                     IDS_TAB_CXMENU_NEWTABTORIGHT);
++    menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
++    menu_model_->AddItemWithStringId(TabStripModel::CommandReload,
++                                     IDS_TAB_CXMENU_RELOAD);
++    menu_model_->AddItemWithStringId(TabStripModel::CommandDuplicate,
++                                     IDS_TAB_CXMENU_DUPLICATE);
++    menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
++    menu_model_->AddItemWithStringId(TabStripModel::CommandCloseTab,
++                                     IDS_TAB_CXMENU_CLOSETAB);
++    menu_model_->AddItemWithStringId(TabStripModel::CommandCloseOtherTabs,
++                                     IDS_TAB_CXMENU_CLOSEOTHERTABS);
++    menu_runner_ = std::make_unique<views::MenuRunner>(
++        menu_model_.get(), views::MenuRunner::CONTEXT_MENU);
++    menu_runner_->RunMenuAt(GetWidget(), nullptr, gfx::Rect(point, gfx::Size()),
++                            views::MenuAnchorPosition::kTopLeft, source_type);
++  }
++
++  // ui::SimpleMenuModel::Delegate:
++  bool IsCommandIdEnabled(int command_id) const override {
++    return model_->ContainsIndex(index_) &&
++           model_->IsContextMenuCommandEnabled(
++               index_, static_cast<TabStripModel::ContextMenuCommand>(command_id));
++  }
++
++  void ExecuteCommand(int command_id, int event_flags) override {
++    if (model_->ContainsIndex(index_)) {
++      model_->ExecuteContextMenuCommand(
++          index_, static_cast<TabStripModel::ContextMenuCommand>(command_id));
++    }
+   }
+ 
+   // views::View:
+@@ -93,6 +176,7 @@ class CompactTabChip : public views::LabelButton {
+   void StateChanged(ButtonState old_state) override {
+     views::LabelButton::StateChanged(old_state);
+     UpdateBackground();
++    UpdateCloseIcon();
+   }
+ 
+  private:
+@@ -109,12 +193,37 @@ class CompactTabChip : public views::LabelButton {
+         kChipHeight / 2));
+   }
+ 
++  // With the pointer on the tab, the X takes the place of the icon, as in
++  // Safari.
++  void UpdateCloseIcon() {
++    if (!GetColorProvider()) {
++      return;
++    }
++    const bool dark =
++        color_utils::IsDark(GetColorProvider()->GetColor(kColorToolbar));
++    SetImageModel(
++        views::Button::STATE_HOVERED,
++        ui::ImageModel::FromImageSkia(
++            gfx::CanvasImageSource::MakeImageSkia<CloseImageSource>(
++                dark ? SkColorSetRGB(0xf5, 0xf5, 0xf7)
++                     : SkColorSetRGB(0x1d, 0x1d, 0x1f))));
++    SetImageModel(views::Button::STATE_PRESSED,
++                  GetImageModel(views::Button::STATE_HOVERED));
++  }
++
++  bool IsOnCloseIcon(const ui::Event& event) const {
++    return event.IsMouseEvent() && image_container_view() &&
++           event.AsMouseEvent()->x() <=
++               image_container_view()->bounds().right() + 3;
++  }
++
+   void OnPressed(const ui::Event& event) {
+     if (!model_->ContainsIndex(index_)) {
+       return;
+     }
+     if (event.IsMouseEvent() &&
+-        event.AsMouseEvent()->IsOnlyMiddleMouseButton()) {
++        (event.AsMouseEvent()->IsOnlyMiddleMouseButton() ||
++         IsOnCloseIcon(event))) {
+       model_->CloseWebContentsAt(index_, TabCloseTypes::CLOSE_USER_GESTURE);
+       return;
+     }
+@@ -125,8 +234,68 @@ class CompactTabChip : public views::LabelButton {
+ 
+   const raw_ptr<TabStripModel> model_;
+   int index_ = TabStripModel::kNoTab;
++  ui::ImageModel favicon_;
++  std::unique_ptr<ui::SimpleMenuModel> menu_model_;
++  std::unique_ptr<views::MenuRunner> menu_runner_;
++};
++
++// The icon of the boards: a window with the sidebar on the left.
++class SidebarImageSource : public gfx::CanvasImageSource {
++ public:
++  explicit SidebarImageSource(SkColor color)
++      : gfx::CanvasImageSource(gfx::Size(16, 16)), color_(color) {}
++
++  void Draw(gfx::Canvas* canvas) override {
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setColor(color_);
++    flags.setStyle(cc::PaintFlags::kStroke_Style);
++    flags.setStrokeWidth(1.5f);
++    canvas->DrawRoundRect(gfx::RectF(1.75f, 2.75f, 12.5f, 10.5f), 2.5f, flags);
++    canvas->DrawLine(gfx::PointF(6, 3), gfx::PointF(6, 13), flags);
++  }
++
++ private:
++  const SkColor color_;
+ };
+ 
++class SidebarButton : public ToolbarButton {
++  METADATA_HEADER(SidebarButton, ToolbarButton)
++
++ public:
++  explicit SidebarButton(BrowserWindowInterface* browser)
++      : ToolbarButton(base::BindRepeating(
++            [](BrowserWindowInterface* browser) {
++              if (SidePanelUI* side_panel =
++                      browser->GetFeatures().side_panel_ui()) {
++                side_panel->Toggle(
++                    SidePanelEntryKey(SidePanelEntryId::kBookmarks),
++                    SidePanelOpenTrigger::kToolbarButton);
++              }
++            },
++            browser)) {
++    GetViewAccessibility().SetName(u"Barra laterale");
++    SetTooltipText(u"Barra laterale");
++    SetProperty(browser_fork::kSidebarButtonKey, true);
++    SetProperty(views::kMarginsKey, gfx::Insets::VH(0, 6));
++  }
++
++  // ToolbarButton:
++  void UpdateIcon() override {
++    if (!GetColorProvider()) {
++      return;
++    }
++    SetImageModel(views::Button::STATE_NORMAL,
++                  ui::ImageModel::FromImageSkia(
++                      gfx::CanvasImageSource::MakeImageSkia<SidebarImageSource>(
++                          GetColorProvider()->GetColor(
++                              kColorToolbarButtonIcon))));
++  }
++};
++
++BEGIN_METADATA(SidebarButton)
++END_METADATA
++
+ BEGIN_METADATA(CompactTabChip)
+ END_METADATA
+ 
+@@ -142,6 +311,11 @@ gfx::Size SmallestUntilBounded(int chips,
+ 
+ }  // namespace
+ 
++std::unique_ptr<views::View> browser_fork::CreateSidebarButton(
++    BrowserWindowInterface* browser) {
++  return std::make_unique<SidebarButton>(browser);
++}
++
+ CompactTabsSpacer::CompactTabsSpacer() {
+   SetProperty(
+       views::kFlexBehaviorKey,
+diff --git a/chrome/browser/ui/views/toolbar/compact_tabs_view.h b/chrome/browser/ui/views/toolbar/compact_tabs_view.h
+index 349080e3f0a31a59e6947f644e71a463bc8d738b..42a7aacb35ada5d17189e9f743a945c731f0520d 100644
+--- a/chrome/browser/ui/views/toolbar/compact_tabs_view.h
++++ b/chrome/browser/ui/views/toolbar/compact_tabs_view.h
+@@ -8,6 +8,9 @@
+ #include "ui/views/controls/separator.h"
+ #include "ui/views/view.h"
+ 
++#include <memory>
++
++class BrowserWindowInterface;
+ class TabStripModel;
+ 
+ namespace browser_fork {
+@@ -19,6 +22,18 @@ extern const ui::ClassProperty<bool>* const kCompactTabsKey;
+ // The height of the row of the boards, which also places the window buttons.
+ inline constexpr int kCompactTabsToolbarHeight = 52;
+ 
++// Set on the lock inside the field, which the location bar places just before
++// the site in the middle.
++extern const ui::ClassProperty<bool>* const kCompactLockKey;
++
++// Set on the sidebar button, so the toolbar can draw its capsule.
++extern const ui::ClassProperty<bool>* const kSidebarButtonKey;
++
++// The button of the boards at the left of the row: it opens and closes the
++// side panel with the bookmarks and the reading list.
++std::unique_ptr<views::View> CreateSidebarButton(
++    BrowserWindowInterface* browser);
++
+ }  // namespace browser_fork
+ 
+ // The empty space that centers the tabs and the address. A separator because the
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index dcf1f454038772c34d422b23a33e7bdd49646052..1fc98d3c210faa145d1efa5e71d6cc0fc6dc6714 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -105,6 +105,8 @@
+ #include "chrome/app/vector_icons/vector_icons.h"
+ #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
+ #include "chrome/browser/ui/views/toolbar/compact_tabs_view.h"
++#include "components/vector_icons/vector_icons.h"
++#include "ui/views/controls/image_view.h"
+ #include "chrome/browser/ui/views/toolbar/share_page_mac.h"
+ #include "components/omnibox/browser/vector_icons.h"
+ #include "third_party/skia/include/core/SkRRect.h"
+@@ -525,6 +527,8 @@ void ToolbarView::Init() {
+   const bool compact_tabs =
+       browser_view_->GetProperty(browser_fork::kCompactTabsKey);
+   if (compact_tabs) {
++    // The sidebar button opens the row, before back and forward.
++    AddChildViewAt(browser_fork::CreateSidebarButton(browser_), 0);
+     AddChildView(std::make_unique<CompactTabsSpacer>());
+     AddChildView(std::make_unique<CompactTabsView>(
+         browser_->tab_strip_model(), CompactTabsView::Side::kBeforeActive));
+@@ -730,6 +734,13 @@ void ToolbarView::Init() {
+       location_bar_view_->AddChildView(RemoveChildViewT(reload_.get()));
+       location_bar_view_->omnibox_view()->SetHorizontalAlignment(
+           gfx::ALIGN_CENTER);
++      auto lock = std::make_unique<views::ImageView>(
++          ui::ImageModel::FromVectorIcon(vector_icons::kLockIcon,
++                                         kColorOmniboxText, 12));
++      lock->SetProperty(browser_fork::kCompactLockKey, true);
++      lock->SetCanProcessEventsWithinSubtree(false);
++      lock->SetVisible(false);
++      location_bar_view_->AddChildView(std::move(lock));
+     }
+ #endif
+   } else {
+@@ -1621,6 +1632,11 @@ void ToolbarView::OnPaintBackground(gfx::Canvas* canvas) {
+       PaintCapsule(canvas, rect, dark);
+     }
+   };
++  for (views::View* child : children()) {
++    if (child->GetProperty(browser_fork::kSidebarButtonKey)) {
++      capsule({child});
++    }
++  }
+   capsule({back_.get(), forward_.get()});
+   capsule({reload_.get()});
+   capsule({claude_button_.get()});
