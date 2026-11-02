@@ -1,6 +1,8 @@
 # Roadmap
 
-Ordine indicativo. Ogni voce diventa una o più patch in `patches/` (titolo del commit con
+Ordine deciso: prima si finisce l'interfaccia Mac come negli schizzi, poi la voce 3 (privacy e
+pannello), i redirect (12b), uBlock al posto dell'adblock (12), nome e traduzioni (12c), poi
+Windows. Ordine indicativo per il resto. Ogni voce diventa una o più patch in `patches/` (titolo del commit con
 `win:`, `mac:` o `ios:` per quelle di una sola piattaforma), quindi sopravvive agli
 aggiornamenti di Cromite come tutto il resto.
 
@@ -241,15 +243,22 @@ tutti:
 Licenza: brave-core è MPL-2.0, compatibile con la GPL-3.0 di Cromite; i file portati mantengono
 la loro intestazione MPL.
 
-## 3. Pannello "Fingerprinting": quello che resta
+## 3. Privacy e pannello "Fingerprinting": quello che resta (da fare tutto)
 
-Elenco per categoria, numeri e contatore sullo scudo sono fatti (vedi "Fatto"). Restano:
+Elenco per categoria, numeri e contatore sullo scudo sono fatti (vedi "Fatto"). Restano, tutti
+richiesti:
+
+- **Impronta nuova anche quando i cookie temporanei cancellano un sito solo**, non solo dopo un
+  riavvio o "Cancella dati di navigazione": un seme per sito, rinnovato a ogni cancellazione e
+  mandato al renderer a ogni navigazione (come il token di Brave, che vive nelle impostazioni del
+  sito). I siti da ricordare tengono la loro impronta.
 
 - **Canvas e WebGL:** l'anteprima vera dell'immagine che il sito ha disegnato per ricavare
   l'impronta, al posto dell'esempio di adesso ("Cosa ha ricevuto il sito" nella tavola). Serve
   Blink: copiare la tela al momento della lettura e mandarla al browser.
 - **eval e Referrer:** Blink non ha contatori d'uso per questi due; aggiungerli vuol dire cambiare
-  `web_feature.mojom`, che ricompila quasi tutto Blink. Da fare insieme ad altre modifiche di Blink.
+  `web_feature.mojom`, che ricompila quasi tutto Blink (alcune ore sul Mac): build da lanciare di
+  notte, insieme all'anteprima vera qui sopra.
 - Gli stati delle righe seguono le protezioni: quando arriva la randomizzazione (voce 2), fuso
   orario e WebGL consentito cambiano scritta.
 
@@ -516,7 +525,8 @@ spento come già in Cromite (`Do-not-store-passwords-by-default.patch`,
   - Distribuito con il browser dalla release ufficiale su GitHub (GPL-3.0, come Cromite), non dal
     Chrome Web Store, così Google non lo vede. Il controllo giornaliero segue anche le release di
     uBlock Origin. Le liste di filtri si aggiornano da sole, passando dalla VPN.
-  - L'adblock di Cromite resta disponibile ma spento di default, per non filtrare due volte.
+  - **Da fare: togliere del tutto l'adblock di Cromite** (motore eyeo) dalle impostazioni e
+    dall'interfaccia, così resta solo uBlock Origin. Oggi è spento ma ancora presente.
   - **Piano B**, quando Chromium toglierà del tutto MV2 e la patch di Cromite non basterà più:
     il motore nativo `adblock-rust` di Brave (MPL-2.0), che legge le liste e gli scriptlet di
     uBlock Origin. Nel frattempo, uBlock Origin Lite (MV3).
@@ -526,6 +536,23 @@ spento come già in Cromite (`Do-not-store-passwords-by-default.patch`,
   di default in incognito. I motivi: fingerprinting (le estensioni che inseriscono elementi nelle
   pagine si vedono), sicurezza (accesso a tutti i siti, aggiornamenti che possono diventare
   malevoli) e il fatto che le funzioni più comuni sono già nel browser.
+
+## 12b. Redirect dei siti che tracciano verso versioni rispettose
+
+- Un sistema di redirect: aprendo un sito che traccia, il browser va da solo alla sua versione
+  rispettosa, con un interruttore per sito e la possibilità di tornare all'originale.
+- **YouTube → Invidious** sul proprio server (container già attivo). L'indirizzo si inserisce
+  nella pagina "Rete e privacy" come quello della VPN e di SearXNG, mai nel repo.
+- **Instagram e TikTok:** stesso sistema, indirizzi dei frontend da ricevere dall'utente.
+- Link condivisi, incorporati (iframe di YouTube) e app web: da coprire anche quelli.
+
+## 12c. Nome del browser e traduzioni inglesi
+
+- **Scegliere il nome definitivo** (oggi "NomeBrowser") e sostituirlo ovunque compare "Cromite":
+  stringhe dell'interfaccia ("Your Cromite", "Cromite didn't shut down correctly", il chip sulle
+  pagine chrome://, la pagina Informazioni), icone e nomi dei file.
+- **Traduzioni inglesi** delle stringhe delle nostre patch, oggi solo in italiano, per chi usa il
+  browser in inglese (le italiane di Cromite sono la voce 4).
 
 ## 13. iOS
 
