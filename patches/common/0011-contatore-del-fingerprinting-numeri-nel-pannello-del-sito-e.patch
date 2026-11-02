@@ -1,0 +1,901 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Mon, 2 Nov 2026 13:17:59 +0100
+Subject: [PATCH] Contatore del fingerprinting: numeri nel pannello del sito e
+ sullo scudo
+
+Fork-Patch: common/0011-contatore-del-fingerprinting-numeri-nel-pannello-del-sito-e.patch
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 553ae7ae8c9fc1e5551d6070dd410b1d9ac87aef..0100a7ab23791cb0c4872a040d5df8761fc4530d 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -839,6 +839,8 @@ source_set("core") {
+   sources = [
+     "about_flags.cc",
+     "adblock/adblock_chrome_content_browser_client.cc",
++    "fork/fingerprinting_counter.cc",
++    "fork/fingerprinting_counter.h",
+     "fork/personal_search.h",
+     "fork/personal_search_tab_helper.cc",
+     "fork/personal_search_tab_helper.h",
+diff --git a/chrome/browser/fork/fingerprinting_counter.cc b/chrome/browser/fork/fingerprinting_counter.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..0c8c566dcb29a55a076a127c4905e295cefec04c
+--- /dev/null
++++ b/chrome/browser/fork/fingerprinting_counter.cc
+@@ -0,0 +1,258 @@
++#include "chrome/browser/fork/fingerprinting_counter.h"
++
++#include <iterator>
++#include <optional>
++
++#include "base/no_destructor.h"
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/content_settings/core/common/content_settings.h"
++#include "components/content_settings/core/common/content_settings_types.h"
++#include "components/page_load_metrics/browser/page_load_metrics_observer.h"
++#include "content/public/browser/page.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-shared.h"
++#include "third_party/blink/public/mojom/use_counter/use_counter_feature.mojom-shared.h"
++#include "url/gurl.h"
++
++namespace browser_fork {
++
++namespace {
++
++using blink::mojom::WebFeature;
++
++struct Category {
++  const char* name;
++  FingerprintingAnswer answer;
++};
++
++// The categories of the boards, in their order, with what the browser answers
++// by default: the noise of Cromite on canvas, text sizes, rects and audio,
++// WebGL off until the site is allowed, WebGPU off, fixed battery values, no
++// local addresses through WebRTC. The time zone stays the real one unless it
++// is changed in the settings of the site.
++constexpr Category kCategories[] = {
++    {"Canvas", FingerprintingAnswer::kRandomized},
++    {"WebGL", FingerprintingAnswer::kBlocked},
++    {"Audio", FingerprintingAnswer::kRandomized},
++    {"Font", FingerprintingAnswer::kRandomized},
++    {"Schermo", FingerprintingAnswer::kRandomized},
++    {"Navigator e Client Hints", FingerprintingAnswer::kUniform},
++    {"WebGPU", FingerprintingAnswer::kBlocked},
++    {"ClientRects", FingerprintingAnswer::kRandomized},
++    {"Fuso orario", FingerprintingAnswer::kAllowed},
++    {"WebRTC", FingerprintingAnswer::kLimited},
++    {"Storage", FingerprintingAnswer::kAllowed},
++    {"Permessi", FingerprintingAnswer::kAllowed},
++    {"Batteria", FingerprintingAnswer::kUniform},
++    {"eval", FingerprintingAnswer::kNotCounted},
++    {"Referrer", FingerprintingAnswer::kNotCounted},
++};
++static_assert(std::size(kCategories) == FingerprintingCounter::kCategoryCount);
++
++constexpr size_t kWebGL = 1;
++
++// The APIs that tell a device apart, as the use counters of Blink name them.
++std::optional<size_t> CategoryOf(WebFeature feature) {
++  switch (feature) {
++    case WebFeature::kCanvasToDataURL:
++    case WebFeature::kCanvasToBlob:
++    case WebFeature::kOffscreenCanvasConvertToBlob:
++    case WebFeature::kCanvas2DGetImageData:
++      return 0;
++    // A WebGL context also counts when it is refused.
++    case WebFeature::kHTMLCanvasElement_WebGL:
++    case WebFeature::kHTMLCanvasElement_WebGL2:
++    case WebFeature::kOffscreenCanvas_WebGL:
++    case WebFeature::kOffscreenCanvas_WebGL2:
++    case WebFeature::kWebGLRenderingContextGetParameter:
++    case WebFeature::kWebGLDebugRendererInfo:
++    case WebFeature::kWebGLRenderingContextGetShaderPrecisionFormat:
++    case WebFeature::kV8WebGLRenderingContext_GetSupportedExtensions_Method:
++    case WebFeature::kV8WebGL2RenderingContext_GetSupportedExtensions_Method:
++      return 1;
++    case WebFeature::kAudioContextCreateAnalyser:
++    case WebFeature::kV8AnalyserNode_GetFloatFrequencyData_Method:
++    case WebFeature::kV8AnalyserNode_GetFloatTimeDomainData_Method:
++    case WebFeature::kV8AnalyserNode_GetByteFrequencyData_Method:
++    case WebFeature::kV8AnalyserNode_GetByteTimeDomainData_Method:
++    case WebFeature::kV8AudioBuffer_GetChannelData_Method:
++    case WebFeature::kOfflineAudioContextStartRendering:
++    case WebFeature::kAudioContextBaseLatency:
++    case WebFeature::kAudioContextOutputLatency:
++      return 2;
++    case WebFeature::kCanvas2DMeasureText:
++    case WebFeature::kV8Window_QueryLocalFonts_Method:
++      return 3;
++    case WebFeature::kV8Screen_Width_AttributeGetter:
++    case WebFeature::kV8Screen_Height_AttributeGetter:
++    case WebFeature::kV8Screen_AvailWidth_AttributeGetter:
++    case WebFeature::kV8Screen_AvailHeight_AttributeGetter:
++    case WebFeature::kV8Screen_AvailLeft_AttributeGetter:
++    case WebFeature::kV8Screen_AvailTop_AttributeGetter:
++    case WebFeature::kV8Screen_ColorDepth_AttributeGetter:
++    case WebFeature::kV8Screen_PixelDepth_AttributeGetter:
++      return 4;
++    case WebFeature::kNavigatorHardwareConcurrency:
++    case WebFeature::kNavigatorDeviceMemory:
++    case WebFeature::kNavigatorPlatform:
++    case WebFeature::kNavigatorMaxTouchPoints:
++    case WebFeature::kNavigatorPlugins:
++    case WebFeature::kNavigatorMimeTypes:
++    case WebFeature::kNavigatorUAData_GetHighEntropyValues:
++    case WebFeature::kNetInfoRtt:
++    case WebFeature::kNetInfoDownlink:
++    case WebFeature::kNetInfoEffectiveType:
++    case WebFeature::kNetInfoSaveData:
++    case WebFeature::kMediaDevicesEnumerateDevices:
++      return 5;
++    case WebFeature::kWebGPURequestAdapter:
++    case WebFeature::kHTMLCanvasElement_WebGPU:
++    case WebFeature::kOffscreenCanvas_WebGPU:
++      return 6;
++    case WebFeature::kV8Element_GetClientRects_Method:
++    case WebFeature::kV8Element_GetBoundingClientRect_Method:
++    case WebFeature::kV8Range_GetClientRects_Method:
++    case WebFeature::kV8Range_GetBoundingClientRect_Method:
++      return 7;
++    case WebFeature::kDateTimeFormat:
++      return 8;
++    case WebFeature::kRTCPeerConnectionConstructorCompliant:
++    case WebFeature::kRTCPeerConnectionConstructorConstraints:
++      return 9;
++    case WebFeature::kPersistentStorageEstimate:
++      return 10;
++    case WebFeature::kV8Permissions_Query_Method:
++      return 11;
++    case WebFeature::kBatteryStatusGetBattery:
++      return 12;
++    default:
++      return std::nullopt;
++  }
++}
++
++bool IsWebglAllowed(content::WebContents* contents) {
++  const GURL& url = contents->GetLastCommittedURL();
++  return HostContentSettingsMapFactory::GetForProfile(
++             contents->GetBrowserContext())
++             ->GetContentSetting(url, url, ContentSettingsType::WEBGL) ==
++         CONTENT_SETTING_ALLOW;
++}
++
++base::RepeatingCallbackList<void(content::WebContents*)>& GetCallbacks() {
++  static base::NoDestructor<
++      base::RepeatingCallbackList<void(content::WebContents*)>>
++      callbacks;
++  return *callbacks;
++}
++
++class FingerprintingObserver
++    : public page_load_metrics::PageLoadMetricsObserver {
++ public:
++  // page_load_metrics::PageLoadMetricsObserver:
++  const char* GetObserverName() const override {
++    return "FingerprintingObserver";
++  }
++
++  ObservePolicy OnFencedFramesStart(
++      content::NavigationHandle* navigation_handle,
++      const GURL& currently_committed_url) override {
++    return FORWARD_OBSERVING;
++  }
++
++  ObservePolicy OnPrerenderStart(content::NavigationHandle* navigation_handle,
++                                 const GURL& currently_committed_url) override {
++    return CONTINUE_OBSERVING;
++  }
++
++  // The page can come back with the back button and read more.
++  ObservePolicy OnEnterBackForwardCache(
++      const page_load_metrics::mojom::PageLoadTiming& timing) override {
++    return CONTINUE_OBSERVING;
++  }
++
++  void OnFeaturesUsageObserved(
++      content::RenderFrameHost* render_frame_host,
++      const std::vector<blink::UseCounterFeature>& features) override {
++    FingerprintingCounter::RecordFeatures(render_frame_host, features);
++  }
++};
++
++}  // namespace
++
++FingerprintingCounter::FingerprintingCounter(content::Page& page)
++    : content::PageUserData<FingerprintingCounter>(page) {}
++
++FingerprintingCounter::~FingerprintingCounter() = default;
++
++// static
++void FingerprintingCounter::RecordFeatures(
++    content::RenderFrameHost* render_frame_host,
++    const std::vector<blink::UseCounterFeature>& features) {
++  // The frames of the page, fenced frames included, count for the page.
++  content::Page& page = render_frame_host->GetOutermostMainFrame()->GetPage();
++  FingerprintingCounter* counter = nullptr;
++  for (const blink::UseCounterFeature& feature : features) {
++    if (feature.type() != blink::mojom::UseCounterFeatureType::kWebFeature) {
++      continue;
++    }
++    const std::optional<size_t> category =
++        CategoryOf(static_cast<WebFeature>(feature.value()));
++    if (!category) {
++      continue;
++    }
++    if (!counter) {
++      counter = GetOrCreateForPage(page);
++    }
++    ++counter->counts_[*category];
++  }
++  if (counter && page.IsPrimary()) {
++    GetCallbacks().Notify(
++        content::WebContents::FromRenderFrameHost(render_frame_host));
++  }
++}
++
++// static
++std::vector<FingerprintingRow> FingerprintingCounter::GetRows(
++    content::WebContents* contents) {
++  FingerprintingCounter* counter =
++      contents ? GetForPage(contents->GetPrimaryPage()) : nullptr;
++  std::vector<FingerprintingRow> rows;
++  for (size_t i = 0; i < kCategoryCount; ++i) {
++    FingerprintingAnswer answer = kCategories[i].answer;
++    if (i == kWebGL && contents && IsWebglAllowed(contents)) {
++      answer = FingerprintingAnswer::kAllowed;
++    }
++    rows.push_back({kCategories[i].name, counter ? counter->counts_[i] : 0,
++                    answer});
++  }
++  return rows;
++}
++
++// static
++int FingerprintingCounter::GetBlocked(content::WebContents* contents) {
++  int blocked = 0;
++  for (const FingerprintingRow& row : GetRows(contents)) {
++    if (row.answer != FingerprintingAnswer::kAllowed &&
++        row.answer != FingerprintingAnswer::kNotCounted) {
++      blocked += row.count;
++    }
++  }
++  return blocked;
++}
++
++// static
++base::CallbackListSubscription FingerprintingCounter::RegisterChangedCallback(
++    base::RepeatingCallback<void(content::WebContents*)> callback) {
++  return GetCallbacks().Add(std::move(callback));
++}
++
++std::unique_ptr<page_load_metrics::PageLoadMetricsObserver>
++CreateFingerprintingObserver() {
++  return std::make_unique<FingerprintingObserver>();
++}
++
++PAGE_USER_DATA_KEY_IMPL(FingerprintingCounter);
++
++}  // namespace browser_fork
+diff --git a/chrome/browser/fork/fingerprinting_counter.h b/chrome/browser/fork/fingerprinting_counter.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..f3e724dbc52e9b3c7bc654115a8aae0dc05323ce
+--- /dev/null
++++ b/chrome/browser/fork/fingerprinting_counter.h
+@@ -0,0 +1,87 @@
++#ifndef CHROME_BROWSER_FORK_FINGERPRINTING_COUNTER_H_
++#define CHROME_BROWSER_FORK_FINGERPRINTING_COUNTER_H_
++
++#include <array>
++#include <memory>
++#include <vector>
++
++#include "base/callback_list.h"
++#include "base/functional/callback.h"
++#include "content/public/browser/page_user_data.h"
++#include "third_party/blink/public/common/use_counter/use_counter_feature.h"
++
++namespace content {
++class Page;
++class RenderFrameHost;
++class WebContents;
++}  // namespace content
++
++namespace page_load_metrics {
++class PageLoadMetricsObserver;
++}  // namespace page_load_metrics
++
++namespace browser_fork {
++
++// What the browser answers when a site reads the APIs of a category.
++enum class FingerprintingAnswer {
++  kRandomized,
++  kBlocked,
++  kUniform,
++  kLimited,
++  // The real value: nothing protects it yet.
++  kAllowed,
++  // Blink doesn't tell when a site uses it.
++  kNotCounted,
++};
++
++struct FingerprintingRow {
++  const char* name;
++  int count;
++  FingerprintingAnswer answer;
++};
++
++// The fingerprinting APIs a page read, by category: the 15 of the panel of the
++// site. Each API counts once for every frame that reads it, from the use
++// counters Blink already sends to the browser.
++class FingerprintingCounter
++    : public content::PageUserData<FingerprintingCounter> {
++ public:
++  static constexpr size_t kCategoryCount = 15;
++
++  FingerprintingCounter(const FingerprintingCounter&) = delete;
++  FingerprintingCounter& operator=(const FingerprintingCounter&) = delete;
++  ~FingerprintingCounter() override;
++
++  // The features a frame of the page used for the first time.
++  static void RecordFeatures(
++      content::RenderFrameHost* render_frame_host,
++      const std::vector<blink::UseCounterFeature>& features);
++
++  // The categories of the page shown in the tab, in the order of the boards.
++  static std::vector<FingerprintingRow> GetRows(content::WebContents* contents);
++
++  // The reads the browser answered with a protection: the number on the
++  // shield.
++  static int GetBlocked(content::WebContents* contents);
++
++  // Called when the counts of the page shown in a tab change.
++  static base::CallbackListSubscription RegisterChangedCallback(
++      base::RepeatingCallback<void(content::WebContents*)> callback);
++
++ private:
++  friend class content::PageUserData<FingerprintingCounter>;
++
++  explicit FingerprintingCounter(content::Page& page);
++
++  std::array<int, kCategoryCount> counts_ = {};
++
++  PAGE_USER_DATA_KEY_DECL();
++};
++
++// What passes the use counters of every page to FingerprintingCounter.
++std::unique_ptr<page_load_metrics::PageLoadMetricsObserver>
++CreateFingerprintingObserver();
++
++}  // namespace browser_fork
++
++#endif  // CHROME_BROWSER_FORK_FINGERPRINTING_COUNTER_H_
+diff --git a/chrome/browser/page_load_metrics/page_load_metrics_initialize.cc b/chrome/browser/page_load_metrics/page_load_metrics_initialize.cc
+index 909538aa5347be06cd136caddfb37dc7795184ff..015c9d418d84c8bb7cbbf48fef1f3e0aef804a13 100644
+--- a/chrome/browser/page_load_metrics/page_load_metrics_initialize.cc
++++ b/chrome/browser/page_load_metrics/page_load_metrics_initialize.cc
+@@ -13,6 +13,7 @@
+ #include "build/buildflag.h"
+ #include "chrome/browser/after_startup_task_utils.h"
+ #include "chrome/browser/browser_process.h"
++#include "chrome/browser/fork/fingerprinting_counter.h"
+ #include "components/page_load_metrics/browser/observers/core/uma_page_load_metrics_observer.h"
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+@@ -216,6 +217,7 @@ void PageLoadMetricsEmbedder::RegisterObservers(
+ 
+   // Observers for regular web pages.
+   RegisterCommonObservers(tracker);
++  tracker->AddObserver(browser_fork::CreateFingerprintingObserver());
+ 
+   if (!IsNoStatePrefetch(web_contents())) {
+     tracker->AddObserver(std::make_unique<AMPPageLoadMetricsObserver>());
+diff --git a/chrome/browser/resources/site_panel.html b/chrome/browser/resources/site_panel.html
+index 517f56222a4e0149cb9a649e9f091331377841d4..cd20e7a1946c80efcdfbf38b4d2fac676b4078ab 100644
+--- a/chrome/browser/resources/site_panel.html
++++ b/chrome/browser/resources/site_panel.html
+@@ -36,7 +36,11 @@ header > div { flex: 1; min-width: 0; }
+ #route.down { background: var(--orange-bg); color: var(--orange); }
+ #route.direct { background: #c4001a; color: #ffffff; }
+ #route.normal { background: var(--field); color: var(--sub); }
+-h2 { margin: 0; font-size: 13px; font-weight: 700; }
++h2 { margin: 0; flex: 1; font-size: 13px; font-weight: 700; }
++.fp-head { display: flex; align-items: baseline; gap: 8px; }
++#fp-total { font-size: 12px; color: var(--sub); }
++#fp-rows { overflow: auto; max-height: 270px; }
++.count { min-width: 22px; text-align: right; font-size: 12px; color: var(--sub); }
+ h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--sub); }
+ .hint { margin: 4px 0 8px; font-size: 12px; line-height: 1.4; color: var(--sub); }
+ .group { border-radius: 12px; background: var(--group); }
+@@ -47,6 +51,9 @@ h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--sub); }
+ .rand { background: var(--accent-bg); color: var(--accent); }
+ .block { background: var(--red-bg); color: var(--red); }
+ .uni { background: var(--field); color: var(--text); }
++.allowed { background: var(--field); color: var(--sub); }
++.none { background: transparent; color: var(--sub); }
++#fp-all { margin-top: 6px; min-height: 22px; padding: 0; border: 0; background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; }
+ .value { font-size: 12px; color: var(--sub); }
+ .row svg { color: var(--sub); }
+ .previews { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@@ -72,16 +79,10 @@ figcaption { margin-top: 4px; font-size: 11px; color: var(--sub); }
+   </header>
+   <button id="route"><span aria-hidden="true"></span><b id="route-text"></b></button>
+   <div>
+-    <h2>Fingerprinting</h2>
+-    <p class="hint">Le protezioni attive su ogni sito. Quante volte un sito ci prova si vedrà con il contatore, non ancora pronto.</p>
+-    <div class="group">
+-      <div class="row"><span>Canvas</span><span class="chip rand">Randomizzato</span></div>
+-      <div class="row"><span>WebGL</span><span class="chip block" id="webgl-chip"></span></div>
+-      <div class="row"><span>Audio</span><span class="chip rand">Randomizzato</span></div>
+-      <div class="row"><span>Font</span><span class="chip rand">Randomizzato</span></div>
+-      <div class="row"><span>Schermo</span><span class="chip rand">Randomizzato</span></div>
+-      <div class="row"><span>Navigator e Client Hints</span><span class="chip uni">Uniformato</span></div>
+-    </div>
++    <div class="fp-head"><h2>Fingerprinting</h2><span id="fp-total"></span></div>
++    <p class="hint" id="fp-hint"></p>
++    <div class="group" id="fp-rows"></div>
++    <button id="fp-all"></button>
+   </div>
+   <div>
+     <h3>Come risponde il browser</h3>
+diff --git a/chrome/browser/resources/site_panel.js b/chrome/browser/resources/site_panel.js
+index ad8bf481b51992064a93f00c8c615c935b5bd5ef..dde443e8b5f8d236334fcb7bc3d9cc51caa0f7b3 100644
+--- a/chrome/browser/resources/site_panel.js
++++ b/chrome/browser/resources/site_panel.js
+@@ -2,6 +2,8 @@ window.SitePanel = (function() {
+   'use strict';
+ 
+   let state = null;
++  // "Mostra tutte e 15 le categorie": stays as chosen while the panel lives.
++  let showAll = false;
+ 
+   const $ = (id) => document.getElementById(id);
+ 
+@@ -19,6 +21,38 @@ window.SitePanel = (function() {
+     }
+   }
+ 
++  function row(r) {
++    const used = r.count > 0;
++    const div = document.createElement('div');
++    div.className = 'row';
++    const name = document.createElement('span');
++    name.textContent = r.name;
++    const count = document.createElement('span');
++    count.className = 'count';
++    count.textContent = used ? String(r.count) : '';
++    const chip = document.createElement('span');
++    const counted = r.kind !== 'none';
++    chip.className = 'chip ' + (used || !counted ? r.kind : 'none');
++    chip.textContent = used || !counted ? r.status : 'Non usata';
++    div.append(name, count, chip);
++    return div;
++  }
++
++  // The categories the page read first, then on request all the others.
++  function showFingerprinting(s) {
++    const used = s.fp.filter((r) => r.count > 0);
++    const rows = showAll ? used.concat(s.fp.filter((r) => r.count === 0)) : used;
++    $('fp-total').textContent = s.fpBlocked === 1 ? '1 tentativo bloccato' :
++        s.fpBlocked ? s.fpBlocked + ' tentativi bloccati' : 'Nessun tentativo';
++    $('fp-hint').textContent = used.length ?
++        'Il sito ha cercato di leggere queste API. Ecco cosa gli ha risposto il browser.' :
++        'Finora il sito non ha letto nessuna di queste API.';
++    $('fp-rows').replaceChildren(...rows.map(row));
++    $('fp-rows').hidden = !rows.length;
++    $('fp-all').textContent = showAll ? 'Mostra solo quelle usate' :
++                                        'Mostra tutte e ' + s.fp.length + ' le categorie';
++  }
++
+   function loaded(s) {
+     state = s;
+     $('site').textContent = s.site;
+@@ -27,8 +61,7 @@ window.SitePanel = (function() {
+         s.secure ? 'Connessione sicura' : 'Connessione non sicura';
+     $('route').className = s.route;
+     $('route-text').textContent = routeText(s);
+-    $('webgl-chip').className = 'chip ' + (s.webgl ? 'uni' : 'block');
+-    $('webgl-chip').textContent = s.webgl ? 'Consentito' : 'Bloccato';
++    showFingerprinting(s);
+     $('webgl-on').hidden = !s.webgl;
+     $('webgl-off').hidden = s.webgl;
+     $('webgl').classList.toggle('on', s.webgl);
+@@ -45,6 +78,10 @@ window.SitePanel = (function() {
+     $('close').onclick = () => chrome.send('close');
+     $('route').onclick = () => chrome.send('openVpnSettings');
+     $('webgl').onclick = () => chrome.send('setWebgl', [!state.webgl]);
++    $('fp-all').onclick = () => {
++      showAll = !showAll;
++      showFingerprinting(state);
++    };
+     $('remember').onclick = () => chrome.send('setRemembered', [!state.remembered]);
+     $('cookies').onclick = () => chrome.send('openPageInfo');
+     $('blocking').onclick = () => chrome.send('openBlocking');
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+index a6ba11270296a23a996d47eca5b865cbdc89c030..ee5b994424a95abe930f3fbb23ac4db72da1f082 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -14,6 +14,7 @@
+ #include <string_view>
+ #include <utility>
+ 
++#include "base/callback_list.h"
+ #include "base/feature_list.h"
+ #include "base/functional/bind.h"
+ #include "base/functional/callback_helpers.h"
+@@ -26,6 +27,7 @@
+ #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/command_updater.h"
++#include "chrome/browser/fork/fingerprinting_counter.h"
+ #include "chrome/browser/page_info/merchant_trust_service_factory.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/search_engines/template_url_service_factory.h"
+@@ -130,6 +132,7 @@
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/accessibility/ax_enums.mojom.h"
+ #include "ui/actions/actions.h"
++#include "ui/base/class_property.h"
+ #include "ui/base/clipboard/clipboard.h"
+ #include "ui/base/dragdrop/drag_drop_types.h"
+ #include "ui/base/ime/input_method.h"
+@@ -176,8 +179,14 @@
+ #include "chrome/browser/web_applications/web_app_tab_helper.h"
+ #endif
+ 
++DEFINE_UI_CLASS_PROPERTY_TYPE(base::CallbackListSubscription*)
++
+ namespace {
+ 
++// What keeps the number on the shield up to date, as long as the bar lives.
++DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(base::CallbackListSubscription,
++                                   kFingerprintingSubscriptionKey)
++
+ int IncrementalMinimumWidth(const views::View* view) {
+   return (view && view->GetVisible()) ? view->GetMinimumSize().width() : 0;
+ }
+@@ -437,6 +446,19 @@ void LocationBarView::Init() {
+   if (browser_) {
+     ublock_button_ = AddChildView(
+         std::make_unique<UBlockButton>(this, browser_.get(), profile_));
++    SetProperty(
++        kFingerprintingSubscriptionKey,
++        std::make_unique<base::CallbackListSubscription>(
++            browser_fork::FingerprintingCounter::RegisterChangedCallback(
++                base::BindRepeating(
++                    [](LocationBarView* view, WebContents* contents) {
++                      if (contents && contents == view->GetWebContents()) {
++                        view->location_icon_view_->Update(
++                            /*suppress_animations=*/true,
++                            view->GetOmniboxController()->IsPopupOpen());
++                      }
++                    },
++                    base::Unretained(this)))));
+   }
+ 
+   SkColor icon_color = color_provider->GetColor(kColorOmniboxResultsIcon);
+@@ -841,9 +863,12 @@ void LocationBarView::Layout(PassKey) {
+         /*intra_item_padding=*/0, icon_left, location_icon_view_);
+   } else if (!ShouldChipOverrideLocationIcon()) {
+     location_icon_view_->SetVisible(true);
+-    leading_decorations.AddDecoration(vertical_padding, location_height, false,
+-                                      0, /*intra_item_padding=*/0, icon_left,
+-                                      location_icon_view_);
++    // The shield of the site panel is as tall as the bar, to fit its badge.
++    const bool shield = ShouldUseSitePanel();
++    leading_decorations.AddDecoration(shield ? 0 : vertical_padding,
++                                      shield ? height() : location_height,
++                                      false, 0, /*intra_item_padding=*/0,
++                                      icon_left, location_icon_view_);
+   } else {
+     location_icon_view_->SetVisible(false);
+   }
+diff --git a/chrome/browser/ui/views/location_bar/location_icon_view.cc b/chrome/browser/ui/views/location_bar/location_icon_view.cc
+index a1b0fda337b1dd4d2545377fb934bd7b795282b2..2f9ae8227f518e7cc574f393616dc5ca211c9917 100644
+--- a/chrome/browser/ui/views/location_bar/location_icon_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_icon_view.cc
+@@ -4,13 +4,19 @@
+ 
+ #include "chrome/browser/ui/views/location_bar/location_icon_view.h"
+ 
++#include <algorithm>
++
+ #include "base/functional/bind.h"
+ #include "base/metrics/histogram_functions.h"
++#include "base/strings/strcat.h"
++#include "base/strings/string_number_conversions.h"
+ #include "base/time/time.h"
+ #include "base/trace_event/trace_event.h"
+ #include "build/branding_buildflags.h"
+ #include "build/build_config.h"
++#include "cc/paint/paint_flags.h"
+ #include "chrome/browser/extensions/extension_ui_util.h"
++#include "chrome/browser/fork/fingerprinting_counter.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/layout_constants.h"
+@@ -35,8 +41,15 @@
+ #include "ui/base/ui_base_features.h"
+ #include "ui/color/color_id.h"
+ #include "ui/gfx/animation/tween.h"
++#include "ui/gfx/canvas.h"
++#include "ui/gfx/color_utils.h"
++#include "ui/gfx/font_list.h"
+ #include "ui/gfx/geometry/insets.h"
++#include "ui/gfx/geometry/rect_f.h"
++#include "ui/gfx/image/canvas_image_source.h"
+ #include "ui/gfx/image/image_skia.h"
++#include "ui/gfx/paint_vector_icon.h"
++#include "ui/gfx/text_utils.h"
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
+ #include "ui/views/animation/ink_drop.h"
+@@ -55,6 +68,86 @@
+ using content::WebContents;
+ using security_state::SecurityLevel;
+ 
++namespace {
++
++// The shield of the boards: a 30x26 capsule with a 14 dp badge that sticks out
++// 3 dp at the top right. The image is as tall as the bar, so the badge fits.
++constexpr int kShieldCapsuleWidth = 30;
++constexpr int kShieldCapsuleHeight = 26;
++constexpr int kShieldBadgeHeight = 14;
++constexpr int kShieldBadgeOverhang = 3;
++constexpr int kShieldIconSize = 15;
++
++class ShieldImageSource : public gfx::CanvasImageSource {
++ public:
++  // With nothing blocked on the page, the shield alone in `plain_color`.
++  ShieldImageSource(int blocked, bool dark, SkColor plain_color)
++      : gfx::CanvasImageSource(
++            gfx::Size(kShieldCapsuleWidth + kShieldBadgeOverhang + 2,
++                      kShieldCapsuleHeight + 2 * (kShieldBadgeOverhang + 1))),
++        blocked_(blocked),
++        dark_(dark),
++        plain_color_(plain_color) {}
++
++  // gfx::CanvasImageSource:
++  void Draw(gfx::Canvas* canvas) override {
++    const SkColor accent =
++        dark_ ? SkColorSetRGB(0x5a, 0xa9, 0xff) : SkColorSetRGB(0x00, 0x66, 0xd6);
++    const gfx::Rect capsule(0, kShieldBadgeOverhang + 1, kShieldCapsuleWidth,
++                            kShieldCapsuleHeight);
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    if (blocked_ > 0) {
++      flags.setColor(SkColorSetA(accent, dark_ ? 41 : 31));
++      canvas->DrawRoundRect(capsule, kShieldCapsuleHeight / 2, flags);
++    }
++    canvas->DrawImageInt(
++        gfx::CreateVectorIcon(vector_icons::kShieldIcon, kShieldIconSize,
++                              blocked_ > 0 ? accent : plain_color_),
++        capsule.x() + (capsule.width() - kShieldIconSize) / 2,
++        capsule.y() + (capsule.height() - kShieldIconSize) / 2);
++    if (blocked_ <= 0) {
++      return;
++    }
++
++    const std::u16string text =
++        blocked_ > 99 ? u"99+" : base::NumberToString16(blocked_);
++    const gfx::FontList font =
++        gfx::FontList()
++            .DeriveWithSizeDelta(9 - gfx::FontList().GetFontSize())
++            .DeriveWithWeight(gfx::Font::Weight::BOLD);
++    const int badge_width =
++        std::max(kShieldBadgeHeight, gfx::GetStringWidth(text, font) + 6);
++    const gfx::Rect badge(
++        capsule.right() + kShieldBadgeOverhang - badge_width,
++        capsule.y() - kShieldBadgeOverhang, badge_width, kShieldBadgeHeight);
++    gfx::RectF ring(badge);
++    ring.Outset(1.5f);
++    flags.setColor(dark_ ? SkColorSetRGB(0x2a, 0x2a, 0x2e) : SK_ColorWHITE);
++    canvas->DrawRoundRect(ring, ring.height() / 2, flags);
++    flags.setColor(accent);
++    canvas->DrawRoundRect(badge, kShieldBadgeHeight / 2, flags);
++    canvas->DrawStringRectWithFlags(
++        text, font, dark_ ? SkColorSetRGB(0x0b, 0x1a, 0x2b) : SK_ColorWHITE,
++        badge, gfx::Canvas::TEXT_ALIGN_CENTER);
++  }
++
++ private:
++  const int blocked_;
++  const bool dark_;
++  const SkColor plain_color_;
++};
++
++// What the boards say for the shield with its number.
++std::u16string ShieldName(int blocked) {
++  return base::StrCat({u"Informazioni sul sito: ",
++                       base::NumberToString16(blocked),
++                       blocked == 1 ? u" tentativo di fingerprinting bloccato"
++                                    : u" tentativi di fingerprinting bloccati"});
++}
++
++}  // namespace
++
+ std::optional<ui::ColorId>
+ LocationIconView::Delegate::GetLocationIconBackgroundColorOverride() const {
+   return std::nullopt;
+@@ -291,6 +384,16 @@ void LocationIconView::SetAccessibleProperties() {
+     GetViewAccessibility().SetName(state.name);
+   }
+ 
++  // The number on the shield, said as on the boards.
++  const int blocked =
++      GetWidget() && ShowsShield()
++          ? browser_fork::FingerprintingCounter::GetBlocked(
++                delegate_->GetWebContents())
++          : 0;
++  if (blocked > 0) {
++    GetViewAccessibility().SetName(ShieldName(blocked));
++  }
++
+   if (!state.description.empty() || delegate_->IsEditingOrEmpty() ||
+       !label()->GetText().empty()) {
+     if (delegate_->IsEditingOrEmpty()) {
+@@ -312,9 +415,13 @@ void LocationIconView::UpdateIcon() {
+   if (icon.IsEmpty()) {
+     return;
+   }
+-  if (ShowsShield()) {
+-    icon = ui::ImageModel::FromVectorIcon(vector_icons::kShieldIcon,
+-                                          kColorOmniboxText, 16);
++  if (ShowsShield() && GetColorProvider()) {
++    icon = ui::ImageModel::FromImageSkia(
++        gfx::CanvasImageSource::MakeImageSkia<ShieldImageSource>(
++            browser_fork::FingerprintingCounter::GetBlocked(
++                delegate_->GetWebContents()),
++            color_utils::IsDark(GetColorProvider()->GetColor(kColorToolbar)),
++            GetColorProvider()->GetColor(kColorOmniboxText)));
+   }
+ 
+   // UpdateIcon() calls are for icon updates not related to the page info
+@@ -399,6 +506,13 @@ void LocationIconView::Update(bool suppress_animations,
+   bool is_editing_or_empty = delegate_->IsEditingOrEmpty();
+   // The tooltip should be shown if we are not editing or empty.
+   SetTooltipText(location_bar::GetSecurityChipTooltipText(is_editing_or_empty));
++  if (ShowsShield()) {
++    const int blocked = browser_fork::FingerprintingCounter::GetBlocked(
++        delegate_->GetWebContents());
++    if (blocked > 0) {
++      SetTooltipText(ShieldName(blocked));
++    }
++  }
+ 
+   // We should only enable/disable the InkDrop if the editing state has changed,
+   // as the drop gets recreated when views::InkDrop::Get(this)->SetMode() is
+@@ -444,6 +558,11 @@ bool LocationIconView::IsTriggerableEvent(const ui::Event& event) {
+ }
+ 
+ void LocationIconView::UpdateBorder() {
++  // The shield draws its capsule itself, as wide as on the boards.
++  if (GetWidget() && ShowsShield()) {
++    SetBorder(views::CreateEmptyBorder(gfx::Insets()));
++    return;
++  }
+   // Bubbles are given the full internal height of the location bar so that all
+   // child views in the location bar have the same height. The visible height of
+   // the bubble should be smaller, so use an empty border to shrink down the
+diff --git a/chrome/browser/ui/webui/site_panel_ui.cc b/chrome/browser/ui/webui/site_panel_ui.cc
+index ff8fe4bfe950e9be3e9f982ffbdd98301f347502..f93675b23e474cdf025c5e659213f284cb7b1ebb 100644
+--- a/chrome/browser/ui/webui/site_panel_ui.cc
++++ b/chrome/browser/ui/webui/site_panel_ui.cc
+@@ -4,11 +4,13 @@
+ #include <string>
+ #include <utility>
+ 
++#include "base/callback_list.h"
+ #include "base/functional/bind.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/values.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/extensions/extension_tab_util.h"
++#include "chrome/browser/fork/fingerprinting_counter.h"
+ #include "chrome/browser/fork/temporary_site_data_service.h"
+ #include "chrome/browser/fork/ublock_extension.h"
+ #include "chrome/browser/fork/vpn_status.h"
+@@ -47,6 +49,25 @@ constexpr ContentSettingsType kPermissions[] = {
+     ContentSettingsType::MEDIASTREAM_MIC,
+     ContentSettingsType::MEDIASTREAM_CAMERA};
+ 
++// The chip of a category in the panel: its words and its colors.
++std::pair<const char*, const char*> AnswerChip(
++    browser_fork::FingerprintingAnswer answer) {
++  switch (answer) {
++    case browser_fork::FingerprintingAnswer::kRandomized:
++      return {"Randomizzato", "rand"};
++    case browser_fork::FingerprintingAnswer::kBlocked:
++      return {"Bloccato", "block"};
++    case browser_fork::FingerprintingAnswer::kUniform:
++      return {"Uniformato", "uni"};
++    case browser_fork::FingerprintingAnswer::kLimited:
++      return {"Limitato", "uni"};
++    case browser_fork::FingerprintingAnswer::kAllowed:
++      return {"Consentito", "allowed"};
++    case browser_fork::FingerprintingAnswer::kNotCounted:
++      return {"Non contata", "none"};
++  }
++}
++
+ const char* RouteName(browser_fork::VpnStatus::Route route) {
+   switch (route) {
+     case browser_fork::VpnStatus::Route::kNormal:
+@@ -82,6 +103,11 @@ class SitePanelHandler : public content::WebUIMessageHandler {
+     add("openBlocking", &SitePanelHandler::OnOpenBlocking);
+     add("setRemembered", &SitePanelHandler::OnSetRemembered);
+     add("setWebgl", &SitePanelHandler::OnSetWebgl);
++    // The counts go on while the panel is open.
++    fingerprinting_subscription_ =
++        browser_fork::FingerprintingCounter::RegisterChangedCallback(
++            base::BindRepeating(&SitePanelHandler::OnFingerprintingChanged,
++                                base::Unretained(this)));
+   }
+ 
+  private:
+@@ -162,9 +188,29 @@ class SitePanelHandler : public content::WebUIMessageHandler {
+     state.Set("webgl", map->GetContentSetting(url, url,
+                                               ContentSettingsType::WEBGL) ==
+                            CONTENT_SETTING_ALLOW);
++    base::ListValue rows;
++    for (const browser_fork::FingerprintingRow& row :
++         browser_fork::FingerprintingCounter::GetRows(contents)) {
++      const auto [status, kind] = AnswerChip(row.answer);
++      base::DictValue entry;
++      entry.Set("name", row.name);
++      entry.Set("count", row.count);
++      entry.Set("status", status);
++      entry.Set("kind", kind);
++      rows.Append(std::move(entry));
++    }
++    state.Set("fp", std::move(rows));
++    state.Set("fpBlocked",
++              browser_fork::FingerprintingCounter::GetBlocked(contents));
+     return state;
+   }
+ 
++  void OnFingerprintingChanged(content::WebContents* contents) {
++    if (IsJavascriptAllowed() && contents && contents == GetSiteContents()) {
++      SendState();
++    }
++  }
++
+   void SendState() {
+     if (content::WebContents* contents = GetSiteContents()) {
+       AllowJavascript();
+@@ -254,6 +300,8 @@ class SitePanelHandler : public content::WebUIMessageHandler {
+                                      /*check_for_repost=*/true);
+     SendState();
+   }
++
++  base::CallbackListSubscription fingerprinting_subscription_;
+ };
+ 
+ }  // namespace
+diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+index c2f39aad5a94d10c5d3b8cfe3ded11c73ee8762c..4de66e1610bbe7d05b7ada82b5635cd7e49049bc 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -769,6 +769,16 @@ WebGLRenderingContextBase::CreateWebGraphicsContext3DProvider(
+     Platform::WebGLContextType context_type,
+     Platform::WebGLContextInfo* context_info) {
+   if (!AllowWebglForHost(host)) {
++    // The site asked for WebGL: counted as when it gets it, for the panel of
++    // the site in the browser.
++    const bool webgl2 = context_type == Platform::kWebGL2ContextType;
++    UseCounter::Count(
++        host->GetTopExecutionContext(),
++        host->IsOffscreenCanvas()
++            ? (webgl2 ? WebFeature::kOffscreenCanvas_WebGL2
++                      : WebFeature::kOffscreenCanvas_WebGL)
++            : (webgl2 ? WebFeature::kHTMLCanvasElement_WebGL2
++                      : WebFeature::kHTMLCanvasElement_WebGL));
+     host->HostDispatchEvent(WebGLContextEvent::Create(
+         event_type_names::kWebglcontextcreationerror,
+         "disabled by site settings policy."));

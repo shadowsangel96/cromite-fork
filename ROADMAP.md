@@ -39,9 +39,18 @@ aggiornamenti di Cromite come tutto il resto.
   impostazioni: per ora "Impostazioni" apre quella di uBlock Origin.
 - Pannello del sito: scudo nella barra e pannello come nella tavola, in tema chiaro e scuro, con la
   strada dei dati, WebGL per sito e "Ricorda questo sito". Scrive solo protezioni misurate sul browser
-  vero. Manca il contatore dei tentativi (numeri per riga, totale, "Mostra tutte e 15 le categorie",
-  distintivo sullo scudo): non esiste ancora in Cromite, arriva con la voce sul fingerprinting. Su Mac
-  le larghezze del testo hanno il rumore ma i font installati si riconoscono ancora: da chiudere lì.
+  vero. Su Mac le larghezze del testo hanno il rumore ma i font installati si riconoscono ancora: da
+  chiudere con la voce sul fingerprinting.
+- Contatore del fingerprinting: numero sullo scudo, numeri per riga, totale e "Mostra tutte e 15 le
+  categorie", come nella tavola. Conta le letture che Blink registra già (i contatori d'uso che
+  arrivano al browser con le metriche della pagina): ogni API una volta per frame, si azzera a ogni
+  pagina nuova e sale anche a pannello aperto. Una richiesta di WebGL rifiutata si conta come quella
+  accettata. Nel totale entrano solo le letture a cui il browser risponde con una protezione: fuso
+  orario, Storage e Permessi restano "Consentito" (valori veri), WebRTC è "Limitato" (niente indirizzi
+  locali), Batteria "Uniformato" (valori fissi). eval e Referrer non si possono contare senza toccare i
+  contatori di Blink: "Non contata". Schermo e ClientRects li leggono quasi tutti i siti per
+  l'impaginazione, quindi il numero sullo scudo è raramente zero. Manca l'anteprima vera di quello che
+  il sito ha disegnato ("Cosa ha ricevuto il sito"): il pannello mostra un esempio.
 - VPN: pillola nella barra con le scritte e i colori degli schizzi, siti che escono diretti, riserva
   in memoria che finisce da sola (chiusura, 24 ore, server di nuovo su), pagina di errore propria,
   finestrella di conferma e barra rossa come nella tavola Stati.
@@ -201,25 +210,17 @@ tutti:
 Licenza: brave-core è MPL-2.0, compatibile con la GPL-3.0 di Cromite; i file portati mantengono
 la loro intestazione MPL.
 
-## 3. Pannello "Fingerprinting" nel menu delle informazioni sul sito
+## 3. Pannello "Fingerprinting": quello che resta
 
-Il menu che si apre dall'icona a sinistra dell'indirizzo, quello con "Cookie e dati dei siti"
-e le autorizzazioni.
+Elenco per categoria, numeri e contatore sullo scudo sono fatti (vedi "Fatto"). Restano:
 
-- Una sezione con **tutte le API di fingerprinting** che la pagina ha usato e cosa ha fatto
-  il browser (bloccata, randomizzata, permessa), per categoria: Canvas, WebGL, WebGPU, Audio,
-  ClientRects, Font, Timezone, Navigator, WebRTC, Screen, Storage, Permessi, Battery, `eval`,
-  Referrer.
-- **Canvas e WebGL:** un riquadro con l'anteprima dell'immagine che il sito ha disegnato per
-  ricavare l'impronta, accanto all'elenco delle API bloccate.
-- **Contatore:** un numero accanto all'icona nella barra degli indirizzi con quante API sono
-  state bloccate nella pagina; si azzera quando si cambia sito.
-- Come farlo: Blink registra per ogni frame le chiamate intercettate (stesso punto in cui agisce
-  la randomizzazione) e le manda al processo del browser via Mojo, come Chromium fa per i
-  contenuti bloccati (`PageSpecificContentSettings`); la UI è una nuova sezione di Page Info,
-  il contatore una variante dell'icona di Page Info nella barra degli indirizzi.
-- Comportamento di riferimento: le estensioni di analisi della privacy che mostrano, sito per
-  sito, gli eventi di fingerprinting, l'anteprima di canvas/WebGL e un badge con i blocchi.
+- **Canvas e WebGL:** l'anteprima vera dell'immagine che il sito ha disegnato per ricavare
+  l'impronta, al posto dell'esempio di adesso ("Cosa ha ricevuto il sito" nella tavola). Serve
+  Blink: copiare la tela al momento della lettura e mandarla al browser.
+- **eval e Referrer:** Blink non ha contatori d'uso per questi due; aggiungerli vuol dire cambiare
+  `web_feature.mojom`, che ricompila quasi tutto Blink. Da fare insieme ad altre modifiche di Blink.
+- Gli stati delle righe seguono le protezioni: quando arriva la randomizzazione (voce 2), fuso
+  orario e WebGL consentito cambiano scritta.
 
 ## 4. Traduzioni italiane dove mancano
 

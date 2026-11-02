@@ -19,3 +19,4 @@ common/0008-ublock-origin-integrato-componente-pulsante-nella-barra-e-pa.patch
 common/0009-claude-nella-barra-pulsante-pannello-laterale-e-claude-in-ch.patch
 common/0010-claude-il-pannello-si-apre-anche-quando-l-estensione-non-fa.patch
 macos/0009-schede-nella-barra-a-scelta-come-nella-tavola.patch
+common/0011-contatore-del-fingerprinting-numeri-nel-pannello-del-sito-e.patch
