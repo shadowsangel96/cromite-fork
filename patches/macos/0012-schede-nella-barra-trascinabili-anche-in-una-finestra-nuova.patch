@@ -1,0 +1,147 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Tue, 3 Nov 2026 08:45:31 +0100
+Subject: [PATCH] mac: schede nella barra trascinabili, anche in una finestra
+ nuova
+
+Fork-Patch: macos/0012-schede-nella-barra-trascinabili-anche-in-una-finestra-nuova.patch
+
+diff --git a/chrome/browser/ui/views/toolbar/compact_tabs_view.cc b/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
+index 077a534d85459fdc30a875230caa21e9eb7251f0..e156efff2d02d78e39ff03d2f4700a04a9a835f2 100644
+--- a/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
++++ b/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
+@@ -11,7 +11,11 @@
+ #include "chrome/browser/ui/side_panel/side_panel_entry_key.h"
+ #include "chrome/browser/ui/side_panel/side_panel_enums.h"
+ #include "chrome/browser/ui/side_panel/side_panel_ui.h"
++#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
++#include "ui/compositor/layer.h"
++#include "ui/gfx/geometry/transform.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/menus/simple_menu_model.h"
+@@ -54,6 +58,8 @@ constexpr int kChipGap = 8;
+ // After every button of the toolbar, which would otherwise go in the overflow
+ // menu to make room for the tabs; only the empty space comes later.
+ constexpr int kTabsFlexOrder = 1900;
++// How far below the toolbar a dragged tab goes to its own window.
++constexpr int kDetachDistance = 40;
+ 
+ // The X of the boards, drawn where the icon of the site was.
+ class CloseImageSource : public gfx::CanvasImageSource {
+@@ -157,6 +163,66 @@ class CompactTabChip : public views::LabelButton,
+   }
+ 
+   // views::View:
++  // Dragging a tab moves it among the others, the address standing for the
++  // active one; dropped below the toolbar it goes to a new window.
++  bool OnMousePressed(const ui::MouseEvent& event) override {
++    press_point_ = event.location();
++    return views::LabelButton::OnMousePressed(event);
++  }
++
++  bool OnMouseDragged(const ui::MouseEvent& event) override {
++    if (!dragging_) {
++      if (!event.IsOnlyLeftMouseButton() ||
++          !ExceededDragThreshold(event.location() - press_point_)) {
++        return views::LabelButton::OnMouseDragged(event);
++      }
++      dragging_ = true;
++      SetPaintToLayer();
++      layer()->SetFillsBoundsOpaquely(false);
++    }
++    const gfx::Vector2d delta = event.location() - press_point_;
++    gfx::Transform transform;
++    transform.Translate(delta.x(), std::max(delta.y(), 0) / 3);
++    layer()->SetTransform(transform);
++    return true;
++  }
++
++  void OnMouseReleased(const ui::MouseEvent& event) override {
++    if (!dragging_) {
++      views::LabelButton::OnMouseReleased(event);
++      return;
++    }
++    EndDrag();
++    SetState(ButtonState::STATE_NORMAL);
++    if (!model_->ContainsIndex(index_)) {
++      return;
++    }
++    gfx::Point point = event.location();
++    views::View::ConvertPointToScreen(this, &point);
++    views::View* toolbar = parent() ? parent()->parent() : nullptr;
++    if (!toolbar) {
++      return;
++    }
++    if (point.y() > toolbar->GetBoundsInScreen().bottom() + kDetachDistance) {
++      if (model_->count() > 1) {
++        model_->ExecuteContextMenuCommand(
++            index_, TabStripModel::CommandMoveTabsToNewWindow);
++      }
++      return;
++    }
++    const int to = DropIndex(toolbar, point.x());
++    if (to != index_) {
++      model_->MoveWebContentsAt(index_, to, /*select_after_move=*/false);
++    }
++  }
++
++  void OnMouseCaptureLost() override {
++    if (dragging_) {
++      EndDrag();
++    }
++    views::LabelButton::OnMouseCaptureLost();
++  }
++
+   gfx::Size GetMinimumSize() const override {
+     return gfx::Size(kChipMinWidth, kChipHeight);
+   }
+@@ -211,6 +277,37 @@ class CompactTabChip : public views::LabelButton,
+                   GetImageModel(views::Button::STATE_HOVERED));
+   }
+ 
++  void EndDrag() {
++    dragging_ = false;
++    DestroyLayer();
++  }
++
++  int index() const { return index_; }
++
++  // The index the tab takes: as many tabs as have their middle before `x`.
++  int DropIndex(views::View* toolbar, int x) const {
++    int before = 0;
++    const auto count = [&](const views::View* view, int index) {
++      if (index != index_ && view->GetVisible() &&
++          view->GetBoundsInScreen().CenterPoint().x() < x) {
++        ++before;
++      }
++    };
++    for (views::View* child : toolbar->children()) {
++      if (views::IsViewClass<CompactTabsView>(child)) {
++        for (views::View* chip : child->children()) {
++          count(chip, static_cast<CompactTabChip*>(chip)->index());
++        }
++      }
++    }
++    if (auto* toolbar_view = views::AsViewClass<ToolbarView>(toolbar)) {
++      if (toolbar_view->location_bar_view()) {
++        count(toolbar_view->location_bar_view(), model_->active_index());
++      }
++    }
++    return before;
++  }
++
+   bool IsOnCloseIcon(const ui::Event& event) const {
+     return event.IsMouseEvent() && image_container_view() &&
+            event.AsMouseEvent()->x() <=
+@@ -234,6 +331,8 @@ class CompactTabChip : public views::LabelButton,
+ 
+   const raw_ptr<TabStripModel> model_;
+   int index_ = TabStripModel::kNoTab;
++  gfx::Point press_point_;
++  bool dragging_ = false;
+   ui::ImageModel favicon_;
+   std::unique_ptr<ui::SimpleMenuModel> menu_model_;
+   std::unique_ptr<views::MenuRunner> menu_runner_;
