@@ -24,10 +24,9 @@ aggiornamenti di Cromite come tutto il resto.
   il sito con il lucchetto finché non lo si modifica, ricarica dentro il campo, Claude solo icona,
   pulsante della barra laterale (apre i preferiti nel pannello laterale, a destra come Claude). Sulle
   schede la X compare al passaggio del mouse al posto dell'icona, e il tasto destro apre il menu delle
-  schede di Chromium. Mancano i gruppi di schede e il trascinamento. Da sistemare: a schermo intero
-  resta una striscia con i semafori sopra la barra (è il modo di macOS per le finestre senza riga di
-  schede: va spostata la barra nella barra del titolo, come fa Chromium con le schede) e, con la
-  finestra molto stretta, le schede spariscono del tutto.
+  schede di Chromium. A schermo intero la barra va nella barra del titolo accanto ai semafori, al
+  posto della riga delle schede, con lo stesso colore che ha in finestra. Mancano i gruppi di schede
+  e il trascinamento. Da sistemare: con la finestra molto stretta, le schede spariscono del tutto.
 - Claude nella barra: pulsante e pannello laterale come nella tavola, con "Questa pagina" (Claude in
   Chrome, che il browser installa dal Chrome Web Store) e "Le tue chat" (claude.ai). Pulsante del
   profilo con l'omino e pannello "Accedi con Claude". Nella pagina `chrome://proxy` c'è l'elenco

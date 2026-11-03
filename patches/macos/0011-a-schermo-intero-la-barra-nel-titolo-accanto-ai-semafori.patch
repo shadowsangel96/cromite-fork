@@ -1,0 +1,185 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Tue, 3 Nov 2026 07:56:38 +0100
+Subject: [PATCH] mac: a schermo intero la barra nel titolo, accanto ai
+ semafori
+
+Fork-Patch: macos/0011-a-schermo-intero-la-barra-nel-titolo-accanto-ai-semafori.patch
+
+diff --git a/chrome/browser/ui/views/frame/immersive_mode_controller_mac.h b/chrome/browser/ui/views/frame/immersive_mode_controller_mac.h
+index 18ab7eecac83ff9b6296b6e64354ad343ade3f69..b87ee255fe4859611181c45162e68f508bbe6607 100644
+--- a/chrome/browser/ui/views/frame/immersive_mode_controller_mac.h
++++ b/chrome/browser/ui/views/frame/immersive_mode_controller_mac.h
+@@ -5,6 +5,8 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_FRAME_IMMERSIVE_MODE_CONTROLLER_MAC_H_
+ #define CHROME_BROWSER_UI_VIEWS_FRAME_IMMERSIVE_MODE_CONTROLLER_MAC_H_
+ 
++#include <optional>
++
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+@@ -129,6 +131,9 @@ class ImmersiveModeControllerMac : public ImmersiveModeController,
+ 
+   gfx::Insets GetTabStripRegionViewInsets();
+ 
++  // Places the toolbar in the titlebar, next to the window buttons.
++  void LayOutToolbarInTitlebar();
++
+   // Invoked when the associated browser is closed.
+   void BrowserDidClose(BrowserWindowInterface* browser);
+ 
+@@ -153,6 +158,9 @@ class ImmersiveModeControllerMac : public ImmersiveModeController,
+   // Height of the tab widget, used when resizing. Only non-zero if
+   // `separate_tab_strip_` is true.
+   int tab_widget_height_ = 0;
++  // Where the toolbar was in the top container, while it is in the titlebar
++  // in place of the tab strip (tabs in the toolbar).
++  std::optional<size_t> toolbar_index_;
+   // Total height of the overlay (including the separate tab strip if relevant).
+   int overlay_height_ = 0;
+   // Whether the find bar is currently visible.
+diff --git a/chrome/browser/ui/views/frame/immersive_mode_controller_mac.mm b/chrome/browser/ui/views/frame/immersive_mode_controller_mac.mm
+index fdbb4cf741eb3de803fdf4b053813d8f1ad2d16e..8caa110da1b9b98cbd823e0841912eddb882a780 100644
+--- a/chrome/browser/ui/views/frame/immersive_mode_controller_mac.mm
++++ b/chrome/browser/ui/views/frame/immersive_mode_controller_mac.mm
+@@ -22,6 +22,8 @@
+ #include "chrome/browser/ui/views/frame/browser_frame_view_mac.h"
+ #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/frame/top_container_view.h"
++#include "chrome/browser/ui/views/toolbar/compact_tabs_view.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+ #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
+ #include "chrome/browser/ui/views/omnibox/omnibox_popup_presenter_base.h"
+ #include "components/constrained_window/constrained_window_views.h"
+@@ -64,6 +66,12 @@
+   raw_ptr<BrowserView> browser_view_;
+ };
+ 
++// With the tabs in the toolbar there is no tab strip: the toolbar goes in the
++// titlebar in its place, next to the window buttons, as in the windowed mode.
++bool ToolbarInTitlebar(BrowserView* browser_view) {
++  return browser_view->GetProperty(browser_fork::kCompactTabsKey);
++}
++
+ }  // namespace
+ 
+ ImmersiveModeControllerMac::RevealedLock::RevealedLock(
+@@ -102,7 +110,22 @@
+   if (enabled) {
+     // Vertical tab strip should stay visible and will not be reparented to the
+     // tab overlay.
+-    if (separate_tab_strip_ && !browser_view_->ShouldDrawVerticalTabStrip()) {
++    if (separate_tab_strip_ && ToolbarInTitlebar(browser_view_)) {
++      views::View* toolbar = browser_view_->toolbar();
++      toolbar_index_ = browser_view_->top_container()->GetIndexOf(toolbar);
++      tab_widget_height_ = toolbar->GetPreferredSize().height();
++      browser_view_->tab_overlay_widget()->SetSize(gfx::Size(
++          browser_view_->top_container()->size().width(), tab_widget_height_));
++      browser_view_->tab_overlay_widget()->Show();
++      browser_view_->tab_overlay_view()->AddChildViewRaw(toolbar);
++      LayOutToolbarInTitlebar();
++
++      views::NativeWidgetMacNSWindowHost* tab_overlay_host =
++          views::NativeWidgetMacNSWindowHost::GetFromNativeWindow(
++              browser_view_->tab_overlay_widget()->GetNativeWindow());
++      SetTabNativeWidgetID(tab_overlay_host->bridged_native_widget_id());
++    } else if (separate_tab_strip_ &&
++               !browser_view_->ShouldDrawVerticalTabStrip()) {
+       tab_widget_height_ = browser_view_->tab_strip_view()->height();
+       tab_widget_height_ += static_cast<BrowserFrameViewMac*>(
+                                 browser_view_->browser_widget()->GetFrameView())
+@@ -193,6 +216,13 @@
+       browser_view_->tab_overlay_widget()->Hide();
+       browser_view_->tab_strip_view()->SetBorder(nullptr);
+     }
++    // The toolbar back in its place, before the top container leaves the
++    // overlay.
++    if (toolbar_index_) {
++      browser_view_->top_container()->AddChildViewAt(browser_view_->toolbar(),
++                                                     *toolbar_index_);
++      toolbar_index_.reset();
++    }
+     // Reset tab widget state so that re-entering fullscreen with a different
+     // tab layout (e.g. vertical tabs) does not carry over stale values from a
+     // previous horizontal-tab fullscreen session.
+@@ -233,6 +263,15 @@
+   }
+ }
+ 
++void ImmersiveModeControllerMac::LayOutToolbarInTitlebar() {
++  // The space of the window buttons stays free, as for the tab strip.
++  gfx::Rect bounds(browser_view_->tab_overlay_view()->size());
++  bounds.Inset(GetTabStripRegionViewInsets());
++  bounds.set_y(0);
++  bounds.set_height(tab_widget_height_);
++  browser_view_->toolbar()->SetBoundsRect(bounds);
++}
++
+ // LINT.IfChange(MacTabStripInsets)
+ gfx::Insets ImmersiveModeControllerMac::GetTabStripRegionViewInsets() {
+   // TODO(crbug.com/40892148): Get this dynamically. Unfortunately the
+@@ -351,7 +390,9 @@
+ void ImmersiveModeControllerMac::OnViewBoundsChanged(
+     views::View* observed_view) {
+   gfx::Rect bounds = observed_view->bounds();
+-  if (bounds.IsEmpty()) {
++  // Without the toolbar the top container can be empty in height: the
++  // titlebar still follows its width.
++  if (bounds.IsEmpty() && !(toolbar_index_ && bounds.width() > 0)) {
+     return;
+   }
+   overlay_height_ = bounds.height();
+@@ -360,7 +401,14 @@
+   // OnViewBoundsChanged does not get called.
+   // tab_overlay_widget size should only be set if we aren't drawing the
+   // vertical tabstrip.
+-  if (separate_tab_strip_ && !browser_view_->ShouldDrawVerticalTabStrip()) {
++  if (toolbar_index_) {
++    gfx::Size new_size(bounds.width(), tab_widget_height_);
++    browser_view_->tab_overlay_widget()->SetSize(new_size);
++    browser_view_->tab_overlay_view()->SetSize(new_size);
++    LayOutToolbarInTitlebar();
++    overlay_height_ += tab_widget_height_;
++  } else if (separate_tab_strip_ &&
++             !browser_view_->ShouldDrawVerticalTabStrip()) {
+     gfx::Size new_size(bounds.width(), tab_widget_height_);
+     browser_view_->tab_overlay_widget()->SetSize(new_size);
+     browser_view_->tab_overlay_view()->SetSize(new_size);
+@@ -467,7 +515,8 @@
+   // displayed in the titlebar.
+   views::View* anchor_view = bubble_dialog->GetAnchorView();
+   if (anchor_view && (browser_view_->top_container()->Contains(anchor_view) ||
+-                      browser_view_->tab_strip_view()->Contains(anchor_view))) {
++                      browser_view_->tab_strip_view()->Contains(anchor_view) ||
++                      browser_view_->toolbar()->Contains(anchor_view))) {
+     return true;
+   }
+ 
+diff --git a/chrome/browser/ui/views/frame/immersive_mode_overlay_views_mac.mm b/chrome/browser/ui/views/frame/immersive_mode_overlay_views_mac.mm
+index 7bd19414468e9062e51c55171652b0bda5cb117e..670350f3b77fb733748f3a9608125ca355827bee 100644
+--- a/chrome/browser/ui/views/frame/immersive_mode_overlay_views_mac.mm
++++ b/chrome/browser/ui/views/frame/immersive_mode_overlay_views_mac.mm
+@@ -14,6 +14,9 @@
+ #include "chrome/browser/themes/theme_service_factory.h"
+ #include "chrome/browser/ui/views/frame/browser_frame_view_mac.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/views/toolbar/compact_tabs_view.h"
++#include "ui/color/color_provider.h"
+ #include "chrome/browser/ui/web_modal/browser_window_modal_dialog_delegate.h"
+ #include "components/web_modal/web_contents_modal_dialog_host.h"
+ #include "ui/base/clipboard/clipboard_format_type.h"
+@@ -109,6 +112,12 @@
+ TabContainerOverlayViewMac::~TabContainerOverlayViewMac() = default;
+ 
+ void TabContainerOverlayViewMac::OnPaintBackground(gfx::Canvas* canvas) {
++  // With the tabs in the toolbar the titlebar holds the toolbar: the same
++  // color as in the window, not the frame's.
++  if (browser_view_->GetProperty(browser_fork::kCompactTabsKey)) {
++    canvas->DrawColor(GetColorProvider()->GetColor(kColorToolbar));
++    return;
++  }
+   SkColor frame_color =
+       browser_view_->browser_widget()->GetFrameView()->GetFrameColor(
+           BrowserFrameActiveState::kUseCurrent);

@@ -23,3 +23,4 @@ common/0011-contatore-del-fingerprinting-numeri-nel-pannello-del-sito-e.patch
 common/0012-anti-fingerprinting-valori-fissi-per-sito-su-canvas-audio-pl.patch
 common/0014-privacy-font-di-sistema-una-lingua-niente-do-not-track-impro.patch
 macos/0010-schede-nella-barra-con-barra-laterale-lucchetto-x-e-menu-del.patch
+macos/0011-a-schermo-intero-la-barra-nel-titolo-accanto-ai-semafori.patch
