@@ -1,0 +1,506 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 15:36:56 +0100
+Subject: [PATCH] mac: nome e colore dei gruppi, profilo collegato a Claude
+
+Fork-Patch: macos/0016-nome-e-colore-dei-gruppi-profilo-collegato-a-claude.patch
+
+diff --git a/chrome/browser/ui/views/profiles/avatar_toolbar_button.cc b/chrome/browser/ui/views/profiles/avatar_toolbar_button.cc
+index e350dfef4cebdb703b5f9429dac07fcd019a0b76..cd3bb92c91481c61c05510a23bda5df5e2b930c9 100644
+--- a/chrome/browser/ui/views/profiles/avatar_toolbar_button.cc
++++ b/chrome/browser/ui/views/profiles/avatar_toolbar_button.cc
+@@ -6,6 +6,15 @@
+ 
+ #include "chrome/browser/ui/views/profiles/profilo_panel_controller.h"
+ 
++#include "base/memory/weak_ptr.h"
++#include "base/strings/string_util.h"
++#include "content/public/browser/storage_partition.h"
++#include "mojo/public/cpp/bindings/receiver.h"
++#include "net/cookies/canonical_cookie.h"
++#include "net/cookies/cookie_change_dispatcher.h"
++#include "services/network/public/mojom/cookie_manager.mojom.h"
++#include "url/gurl.h"
++
+ #include "base/check.h"
+ #include "base/check_is_test.h"
+ #include "base/feature_list.h"
+@@ -36,6 +45,7 @@
+ #include "ui/color/color_provider_key.h"
+ #include "ui/compositor/layer.h"
+ #include "ui/gfx/canvas.h"
++#include "ui/gfx/color_utils.h"
+ #include "ui/gfx/image/canvas_image_source.h"
+ #include "ui/gfx/image/image.h"
+ #include "ui/gfx/scoped_animation_duration_scale_mode.h"
+@@ -89,6 +99,48 @@ class PersonIconSource : public gfx::CanvasImageSource {
+ };
+ 
+ 
++// The asterisk of Claude, on the button of a profile signed in to Claude.
++class ClaudeMarkSource : public gfx::CanvasImageSource {
++ public:
++  ClaudeMarkSource(int size, SkColor color)
++      : gfx::CanvasImageSource(gfx::Size(size, size)),
++        size_(size),
++        color_(color) {}
++
++  void Draw(gfx::Canvas* canvas) override {
++    const float unit = size_ / 16.f;
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setColor(color_);
++    flags.setStyle(cc::PaintFlags::kStroke_Style);
++    flags.setStrokeCap(cc::PaintFlags::kRound_Cap);
++    flags.setStrokeWidth(1.9f * unit);
++    const auto line = [&](float x1, float y1, float x2, float y2) {
++      canvas->DrawLine(gfx::PointF(x1 * unit, y1 * unit),
++                       gfx::PointF(x2 * unit, y2 * unit), flags);
++    };
++    line(8, 1.6f, 8, 14.4f);
++    line(1.6f, 8, 14.4f, 8);
++    line(3.5f, 3.5f, 12.5f, 12.5f);
++    line(12.5f, 3.5f, 3.5f, 12.5f);
++  }
++
++ private:
++  const int size_;
++  const SkColor color_;
++};
++
++// The clay of the boards and the color on it, on a light and a dark toolbar.
++SkColor ClayFill(bool dark) {
++  return dark ? SkColorSetRGB(0xe0, 0x88, 0x6b) : SkColorSetRGB(0xa9, 0x50, 0x2f);
++}
++SkColor OnClay(bool dark) {
++  return dark ? SkColorSetRGB(0x2b, 0x13, 0x0b) : SK_ColorWHITE;
++}
++
++constexpr char kClaudeUrl[] = "https://claude.ai/";
++constexpr char kClaudeSessionCookie[] = "sessionKey";
++
+ constexpr int kChromeRefreshImageLabelPadding = 6;
+ 
+ // Value used to enlarge the AvatarIcon to accommodate for DIP scaling.
+@@ -96,6 +148,53 @@ constexpr int kAvatarIconEnlargement = 1;
+ 
+ }  // namespace
+ 
++// Watches the cookie of the session of claude.ai, in the profile only: nothing
++// goes out.
++class AvatarToolbarButton::ClaudeSession
++    : public network::mojom::CookieChangeListener {
++ public:
++  ClaudeSession(Profile* profile, base::RepeatingCallback<void(bool)> callback)
++      : profile_(profile), callback_(std::move(callback)) {
++    CookieManager()->AddCookieChangeListener(
++        GURL(kClaudeUrl), kClaudeSessionCookie,
++        receiver_.BindNewPipeAndPassRemote());
++    Check();
++  }
++
++  // network::mojom::CookieChangeListener:
++  void OnCookieChange(const net::CookieChangeInfo& change) override {
++    Check();
++  }
++
++ private:
++  network::mojom::CookieManager* CookieManager() {
++    return profile_->GetDefaultStoragePartition()
++        ->GetCookieManagerForBrowserProcess();
++  }
++
++  void Check() {
++    CookieManager()->GetAllCookies(base::BindOnce(&ClaudeSession::OnCookies,
++                                                  weak_factory_.GetWeakPtr()));
++  }
++
++  void OnCookies(const net::CookieList& cookies) {
++    bool signed_in = false;
++    for (const net::CanonicalCookie& cookie : cookies) {
++      if (cookie.Name() == kClaudeSessionCookie &&
++          base::EndsWith(cookie.Domain(), "claude.ai")) {
++        signed_in = true;
++        break;
++      }
++    }
++    callback_.Run(signed_in);
++  }
++
++  const raw_ptr<Profile> profile_;
++  const base::RepeatingCallback<void(bool)> callback_;
++  mojo::Receiver<network::mojom::CookieChangeListener> receiver_{this};
++  base::WeakPtrFactory<ClaudeSession> weak_factory_{this};
++};
++
+ AvatarToolbarButton::AvatarToolbarButton(BrowserWindowInterface* browser)
+     : ToolbarButton(base::BindRepeating(&AvatarToolbarButton::ButtonPressed,
+                                         base::Unretained(this),
+@@ -107,6 +206,10 @@ AvatarToolbarButton::AvatarToolbarButton(BrowserWindowInterface* browser)
+   if (!browser->GetProfile()->IsOffTheRecord() &&
+       !browser->GetProfile()->IsGuestSession()) {
+     profilo_panel_ = std::make_unique<ProfiloPanelController>(browser);
++    claude_session_ = std::make_unique<ClaudeSession>(
++        browser->GetProfile(),
++        base::BindRepeating(&AvatarToolbarButton::OnClaudeSessionChanged,
++                            base::Unretained(this)));
+   }
+ #if BUILDFLAG(IS_CHROMEOS)
+   // On CrOS this button should only show as badging for Incognito, Guest and
+@@ -149,6 +252,15 @@ AvatarToolbarButton::AvatarToolbarButton(BrowserWindowInterface* browser)
+ 
+ AvatarToolbarButton::~AvatarToolbarButton() = default;
+ 
++void AvatarToolbarButton::OnClaudeSessionChanged(bool signed_in) {
++  if (signed_in == claude_signed_in_) {
++    return;
++  }
++  claude_signed_in_ = signed_in;
++  UpdateIcon();
++  UpdateText();
++}
++
+ void AvatarToolbarButton::UpdateIcon() {
+   // If the widget is not set yet, the button doesn't have access to the theme
+   // provider to set colors. Defer updating until AddedToWidget(). This may get
+@@ -165,11 +277,17 @@ void AvatarToolbarButton::UpdateIcon() {
+   auto [icon, icon_type] = state_provider->GetAvatarIcon(
+       icon_size, GetForegroundColor(ButtonState::STATE_NORMAL),
+       *color_provider);
+-  // Finché il profilo non ha una foto sua, l'omino delle tavole.
++  // Finché il profilo non ha una foto sua, l'omino delle tavole; collegato a
++  // Claude, l'asterisco sul colore di Claude.
+   if (profilo_panel_ && icon_type == AvatarIconType::kPlaceholder) {
+     icon = ui::ImageModel::FromImageSkia(
+-        gfx::CanvasImageSource::MakeImageSkia<PersonIconSource>(
+-            kPersonIconSize, GetForegroundColor(ButtonState::STATE_NORMAL)));
++        claude_signed_in_
++            ? gfx::CanvasImageSource::MakeImageSkia<ClaudeMarkSource>(
++                  15, OnClay(color_utils::IsDark(
++                          color_provider->GetColor(kColorToolbar))))
++            : gfx::CanvasImageSource::MakeImageSkia<PersonIconSource>(
++                  kPersonIconSize,
++                  GetForegroundColor(ButtonState::STATE_NORMAL)));
+   }
+ 
+   SetImageModel(ButtonState::STATE_NORMAL, icon);
+@@ -310,14 +428,26 @@ void AvatarToolbarButton::UpdateText() {
+   CHECK(color_provider);
+ 
+ #if BUILDFLAG(IS_MAC)
+-  // Only the round icon, never a text next to it.
+-  SetHighlight(std::u16string(), std::nullopt);
++  // Only the round icon, never a text next to it: on the clay of the boards
++  // while the profile is signed in to Claude.
++  SetHighlight(std::u16string(),
++               claude_signed_in_
++                   ? std::optional<SkColor>(ClayFill(color_utils::IsDark(
++                         color_provider->GetColor(kColorToolbar))))
++                   : std::nullopt);
+ #else
+   AnimateTextChange(state_provider, color_provider);
+ #endif
+ 
+   SetTooltipText(state_provider->GetAvatarTooltipText());
+   UpdateAccessibilityLabel();
++  if (profilo_panel_) {
++    const std::u16string name = claude_signed_in_
++                                    ? u"Profilo: account Claude collegato"
++                                    : u"Profilo: accedi con Claude";
++    SetTooltipText(name);
++    GetViewAccessibility().SetName(name);
++  }
+   // Update the layout insets after `SetHighlight()` since
+   // text might be updated by setting the highlight.
+   UpdateLayoutInsets();
+diff --git a/chrome/browser/ui/views/profiles/avatar_toolbar_button.h b/chrome/browser/ui/views/profiles/avatar_toolbar_button.h
+index 2ff4437cdc6baf250355739a403bc8db73bf0cbd..37ee0d1f6b53beb2d70c318980e6429bada7e305 100644
+--- a/chrome/browser/ui/views/profiles/avatar_toolbar_button.h
++++ b/chrome/browser/ui/views/profiles/avatar_toolbar_button.h
+@@ -101,6 +101,13 @@ class AvatarToolbarButton : public ToolbarButton,
+  private:
+   std::unique_ptr<ProfiloPanelController> profilo_panel_;
+ 
++  // The account Claude of the profile, from the local cookie of claude.ai: the
++  // button turns to the color of Claude while it is signed in.
++  class ClaudeSession;
++  std::unique_ptr<ClaudeSession> claude_session_;
++  bool claude_signed_in_ = false;
++  void OnClaudeSessionChanged(bool signed_in);
++
+ #if BUILDFLAG(IS_MAC)
+   // ToolbarButton:
+   int GetRoundedCornerRadius() const override;
+diff --git a/chrome/browser/ui/views/tabs/tab_strip.cc b/chrome/browser/ui/views/tabs/tab_strip.cc
+index d9928110d93f06d53f1d5e98ce882aa35b4d54f6..5935d73f2c6396531bc9343c537a7daa65007772 100644
+--- a/chrome/browser/ui/views/tabs/tab_strip.cc
++++ b/chrome/browser/ui/views/tabs/tab_strip.cc
+@@ -1420,6 +1420,11 @@ void TabStrip::OnGroupCreated(const tab_groups::TabGroupId& group) {
+ }
+ 
+ void TabStrip::OnGroupEditorOpened(const tab_groups::TabGroupId& group) {
++  // A tab strip that isn't drawn, as with the tabs in the toolbar, has no
++  // header to anchor the editor to: the view that shows the tabs opens it.
++  if (!IsDrawn()) {
++    return;
++  }
+   tab_container_->OnGroupEditorOpened(group);
+ }
+ 
+diff --git a/chrome/browser/ui/views/toolbar/claude_button.cc b/chrome/browser/ui/views/toolbar/claude_button.cc
+index 07eeaef6e8abbcbff12096e933c9b6a8dee03d33..0ab1e5a7324ffc312be0dd1a7b1a395818263458 100644
+--- a/chrome/browser/ui/views/toolbar/claude_button.cc
++++ b/chrome/browser/ui/views/toolbar/claude_button.cc
+@@ -29,6 +29,9 @@ ClaudeButton::~ClaudeButton() = default;
+ void ClaudeButton::SetIconOnly() {
+   SetText(std::u16string());
+   SetHorizontalAlignment(gfx::ALIGN_CENTER);
++  // Without its text the button keeps its name, for VoiceOver and the tooltip.
++  GetViewAccessibility().SetName(u"Claude");
++  SetTooltipText(u"Claude");
+ }
+ 
+ void ClaudeButton::UpdateIcon() {
+diff --git a/chrome/browser/ui/views/toolbar/compact_tabs_view.cc b/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
+index 151ab1f5dc3beb8207154fe3bab6fb10399f909f..7831bd85dfd9de2fb4d7d695d7d27e7432a047b3 100644
+--- a/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
++++ b/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
+@@ -7,6 +7,7 @@
+ 
+ #include "base/functional/bind.h"
+ #include "base/strings/string_number_conversions.h"
++#include "base/task/sequenced_task_runner.h"
+ #include "cc/paint/paint_flags.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+@@ -15,6 +16,7 @@
+ #include "chrome/browser/ui/side_panel/side_panel_enums.h"
+ #include "chrome/browser/ui/side_panel/side_panel_ui.h"
+ #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
++#include "chrome/browser/ui/views/tabs/groups/tab_group_editor_bubble_view.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+ #include "ui/compositor/layer.h"
+@@ -37,6 +39,7 @@
+ #include "components/tab_groups/tab_group_id.h"
+ #include "components/tab_groups/tab_group_visual_data.h"
+ #include "components/tabs/public/tab_group.h"
++#include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/web_contents.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/base/models/image_model.h"
+@@ -74,6 +77,31 @@ constexpr int kMinTitleWidth = 40;
+ // How far below the toolbar a dragged tab goes to its own window.
+ constexpr int kDetachDistance = 40;
+ 
++// A command of the menu of a tab.
++void RunTabCommand(tabs::TabHandle handle, int command_id) {
++  tabs::TabInterface* tab = handle.Get();
++  if (!tab || !tab->GetBrowserWindowInterface()) {
++    return;
++  }
++  TabStripModel* model = tab->GetBrowserWindowInterface()->GetTabStripModel();
++  const int index = model->GetIndexOfTab(tab);
++  if (index == TabStripModel::kNoTab) {
++    return;
++  }
++  switch (command_id) {
++    // A new group, with its editor under its label to name it.
++    case TabStripModel::CommandAddToNewGroup:
++      model->OpenTabGroupEditor(model->AddToNewGroup({index}));
++      return;
++    case TabStripModel::CommandRemoveFromGroup:
++      model->RemoveFromGroup({index});
++      return;
++    default:
++      model->ExecuteContextMenuCommand(
++          index, static_cast<TabStripModel::ContextMenuCommand>(command_id));
++  }
++}
++
+ // The group, if it still exists.
+ const TabGroup* GroupOf(
+     const TabStripModel* model,
+@@ -197,20 +225,12 @@ class CompactTabChip : public views::LabelButton,
+     if (!model_->ContainsIndex(index_)) {
+       return;
+     }
+-    // Straight to the model: the command of Chromium opens the editor of the
+-    // group on the tab strip, which this window doesn't show.
+-    if (command_id == TabStripModel::CommandAddToNewGroup) {
+-      model_->AddToNewGroup({index_});
+-      return;
+-    }
+-    if (command_id == TabStripModel::CommandRemoveFromGroup) {
+-      model_->RemoveFromGroup({index_});
+-      return;
+-    }
+-    {
+-      model_->ExecuteContextMenuCommand(
+-          index_, static_cast<TabStripModel::ContextMenuCommand>(command_id));
+-    }
++    // After the menu, on the tab: the command can rebuild the row, chip
++    // included.
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(&RunTabCommand,
++                                  model_->GetTabAtIndex(index_)->GetHandle(),
++                                  command_id));
+   }
+ 
+   // views::View:
+@@ -403,15 +423,19 @@ class CompactTabChip : public views::LabelButton,
+ };
+ 
+ // The label of a group of tabs, in its color, before its first tab: a click
+-// closes or opens the group; closed, it says how many tabs it holds.
+-class CompactGroupHeader : public views::LabelButton {
++// closes or opens the group; closed, it says how many tabs it holds. The
++// right click opens the editor of Chromium: name, color, and the rest.
++class CompactGroupHeader : public views::LabelButton,
++                           public views::ContextMenuController {
+   METADATA_HEADER(CompactGroupHeader, views::LabelButton)
+ 
+  public:
+-  explicit CompactGroupHeader(TabStripModel* model)
++  CompactGroupHeader(BrowserWindowInterface* browser, TabStripModel* model)
+       : views::LabelButton(base::BindRepeating(&CompactGroupHeader::OnPressed,
+                                                base::Unretained(this))),
++        browser_(browser),
+         model_(model) {
++    set_context_menu_controller(this);
+     SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, 10)));
+     SetMinSize(gfx::Size(kChipHeight, kChipHeight));
+     SetMaxSize(gfx::Size(kChipMaxWidth, kChipHeight));
+@@ -435,12 +459,36 @@ class CompactGroupHeader : public views::LabelButton {
+     const std::u16string name =
+         (visuals->title().empty() ? u"Gruppo di schede" : visuals->title()) +
+         (visuals->is_collapsed() ? u", chiuso: clic per aprirlo"
+-                                 : u", aperto: clic per chiuderlo");
++                                 : u", aperto: clic per chiuderlo") +
++        u"; tasto destro per modificarlo";
+     SetTooltipText(name);
+     GetViewAccessibility().SetName(name);
+     UpdateColors();
+   }
+ 
++  const std::optional<tab_groups::TabGroupId>& group() const {
++    return group_;
++  }
++
++  // The editor of Chromium, under the label.
++  void ShowEditor() {
++    if ((editor_ && editor_->IsVisible()) || !group_ ||
++        !GroupOf(model_, group_)) {
++      return;
++    }
++    editor_ = TabGroupEditorBubbleView::Show(
++        browser_, *group_, /*anchor_view=*/this, /*anchor_rect=*/std::nullopt,
++        /*stop_context_menu_propagation=*/false);
++  }
++
++  // views::ContextMenuController:
++  void ShowContextMenuForViewImpl(
++      views::View* source,
++      const gfx::Point& point,
++      ui::mojom::MenuSourceType source_type) override {
++    ShowEditor();
++  }
++
+   // views::View:
+   gfx::Size GetMinimumSize() const override {
+     return gfx::Size(kChipHeight, kChipHeight);
+@@ -492,8 +540,10 @@ class CompactGroupHeader : public views::LabelButton {
+                                                 visuals.color(), collapse));
+   }
+ 
++  const raw_ptr<BrowserWindowInterface> browser_;
+   const raw_ptr<TabStripModel> model_;
+   std::optional<tab_groups::TabGroupId> group_;
++  std::unique_ptr<views::Widget> editor_;
+ };
+ 
+ BEGIN_METADATA(CompactGroupHeader)
+@@ -690,8 +740,8 @@ void CompactTabsSpacer::OnPaint(gfx::Canvas* canvas) {}
+ BEGIN_METADATA(CompactTabsSpacer)
+ END_METADATA
+ 
+-CompactTabsView::CompactTabsView(TabStripModel* model, Side side)
+-    : model_(model), side_(side) {
++CompactTabsView::CompactTabsView(BrowserWindowInterface* browser, Side side)
++    : browser_(browser), model_(browser->GetTabStripModel()), side_(side) {
+   SetProperty(views::kMarginsKey, gfx::Insets::VH(0, kChipGap));
+   overflow_ = AddChildView(std::make_unique<CompactOverflowChip>(
+       model_, base::BindRepeating(
+@@ -842,6 +892,19 @@ void CompactTabsView::OnTabChangedAt(tabs::TabInterface* tab,
+ 
+ void CompactTabsView::OnTabGroupChanged(const TabGroupChange& change) {
+   Update();
++  // A new group, from the menu of a tab or from the Tab menu of the Mac: its
++  // editor opens under its label, as on the tab strip.
++  if (change.type != TabGroupChange::kEditorOpened || !GetWidget()) {
++    return;
++  }
++  GetWidget()->LayoutRootViewIfNecessary();
++  for (views::View* item : Items()) {
++    auto* header = views::AsViewClass<CompactGroupHeader>(item);
++    if (header && header->group() == change.group && header->IsDrawn()) {
++      header->ShowEditor();
++      return;
++    }
++  }
+ }
+ 
+ void CompactTabsView::Update() {
+@@ -899,7 +962,8 @@ void CompactTabsView::Update() {
+       RemoveChildViewT(view);
+     }
+     if (header) {
+-      AddChildViewAt(std::make_unique<CompactGroupHeader>(model_), i + 1)
++      AddChildViewAt(std::make_unique<CompactGroupHeader>(browser_, model_),
++                     i + 1)
+           ->SetGroup(*entries[i].header);
+     } else {
+       AddChildViewAt(std::make_unique<CompactTabChip>(model_), i + 1)
+diff --git a/chrome/browser/ui/views/toolbar/compact_tabs_view.h b/chrome/browser/ui/views/toolbar/compact_tabs_view.h
+index 56134d0b85bfc2da3e0aa9064cf0ed4edbf6dcf9..e24175cd19ec1a265a00ecadfea1871bad4d8f84 100644
+--- a/chrome/browser/ui/views/toolbar/compact_tabs_view.h
++++ b/chrome/browser/ui/views/toolbar/compact_tabs_view.h
+@@ -61,7 +61,7 @@ class CompactTabsView : public views::View, public TabStripModelObserver {
+  public:
+   enum class Side { kBeforeActive, kAfterActive };
+ 
+-  CompactTabsView(TabStripModel* model, Side side);
++  CompactTabsView(BrowserWindowInterface* browser, Side side);
+   CompactTabsView(const CompactTabsView&) = delete;
+   CompactTabsView& operator=(const CompactTabsView&) = delete;
+   ~CompactTabsView() override;
+@@ -88,6 +88,7 @@ class CompactTabsView : public views::View, public TabStripModelObserver {
+   // The tabs and labels of the row; the "+N" chip is always the first child.
+   std::vector<views::View*> Items() const;
+ 
++  const raw_ptr<BrowserWindowInterface> browser_;
+   const raw_ptr<TabStripModel> model_;
+   const Side side_;
+   raw_ptr<views::View> overflow_ = nullptr;
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index 8ebb5ef5a19c922dc3a4b3427b7957d145500571..a704af8d25204f3654bb69bd4b43e6a7388c1c57 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -531,7 +531,7 @@ void ToolbarView::Init() {
+     AddChildViewAt(browser_fork::CreateSidebarButton(browser_), 0);
+     AddChildView(std::make_unique<CompactTabsSpacer>());
+     AddChildView(std::make_unique<CompactTabsView>(
+-        browser_->tab_strip_model(), CompactTabsView::Side::kBeforeActive));
++        browser_, CompactTabsView::Side::kBeforeActive));
+   }
+ #endif
+ 
+@@ -545,7 +545,7 @@ void ToolbarView::Init() {
+ #if BUILDFLAG(IS_MAC)
+   if (compact_tabs) {
+     AddChildView(std::make_unique<CompactTabsView>(
+-        browser_->tab_strip_model(), CompactTabsView::Side::kAfterActive));
++        browser_, CompactTabsView::Side::kAfterActive));
+     auto new_tab = std::make_unique<ToolbarButton>(
+         base::BindRepeating(callback, browser_, IDC_NEW_TAB));
+     new_tab->SetVectorIcons(kAddIcon, kAddIcon);

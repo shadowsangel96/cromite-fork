@@ -1,0 +1,75 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 15:36:56 +0100
+Subject: [PATCH] Pannello di Claude: descrizione sotto il titolo
+
+Fork-Patch: common/0017-pannello-di-claude-descrizione-sotto-il-titolo.patch
+
+diff --git a/chrome/browser/ui/views/side_panel/claude_side_panel.cc b/chrome/browser/ui/views/side_panel/claude_side_panel.cc
+index 3c6309cbcc9a4e1bf001ee91fabe76726d2abaa6..31a7148a4b825dd0e37967701fe007ab769bd094 100644
+--- a/chrome/browser/ui/views/side_panel/claude_side_panel.cc
++++ b/chrome/browser/ui/views/side_panel/claude_side_panel.cc
+@@ -47,6 +47,7 @@
+ #include "ui/views/background.h"
+ #include "ui/views/controls/button/button.h"
+ #include "ui/views/controls/image_view.h"
++#include "ui/views/border.h"
+ #include "ui/views/controls/label.h"
+ #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
+ #include "ui/views/controls/webview/webview.h"
+@@ -280,6 +281,19 @@ class ClaudePanelHeader : public views::BoxLayoutView {
+         },
+         browser_)));
+ 
++    // What each view is, in the words of the boards. Only what exists: the
++    // functions on the API come with their buttons.
++    description_ = AddChildView(std::make_unique<views::Label>(
++        page_selected
++            ? u"Chat e \"Fallo tu\": Claude in Chrome con il tuo "
++              u"abbonamento claude.ai."
++            : u"claude.ai con il tuo account: chat, progetti e artifact come "
++              u"nell'app."));
++    description_->SetMultiLine(true);
++    description_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
++    description_->SetFontList(gfx::FontList().DeriveWithSizeDelta(
++        12 - gfx::FontList().GetFontSize()));
++
+     segments_ = AddChildView(std::make_unique<views::BoxLayoutView>());
+     segments_->SetInsideBorderInsets(gfx::Insets(3));
+     segments_->SetFlexForView(
+@@ -297,8 +311,16 @@ class ClaudePanelHeader : public views::BoxLayoutView {
+   // Like the stock header, it draws on top of the border of the panel.
+   void Layout(PassKey) override {
+     LayoutSuperclass<views::BoxLayoutView>(this);
+-    const gfx::Rect contents = parent()->GetContentsBounds();
+-    const int height = GetPreferredSize().height();
++    gfx::Rect contents = parent()->GetContentsBounds();
++    // The description wraps to the width of the panel, and the panel keeps
++    // room for the header in its border: it follows the header's height.
++    const int height = GetHeightForWidth(contents.width());
++    gfx::Insets insets = parent()->GetInsets();
++    if (insets.top() != height) {
++      insets.set_top(height);
++      parent()->SetBorder(views::CreateEmptyBorder(insets));
++      contents = parent()->GetContentsBounds();
++    }
+     SetBoundsRect(
+         gfx::Rect(contents.x(), contents.y() - height, contents.width(), height));
+   }
+@@ -310,6 +332,8 @@ class ClaudePanelHeader : public views::BoxLayoutView {
+         CreateClaudeIcon(22, GetClaudeColor(dark))));
+     title_->SetEnabledColor(dark ? SkColorSetRGB(245, 245, 247)
+                                  : SkColorSetRGB(29, 29, 31));
++    description_->SetEnabledColor(dark ? SkColorSetRGB(152, 152, 157)
++                                       : SkColorSetRGB(110, 110, 115));
+     segments_->SetBackground(views::CreateRoundedRectBackground(
+         dark ? SkColorSetA(SK_ColorWHITE, 26) : SkColorSetA(SK_ColorBLACK, 18),
+         12));
+@@ -319,6 +343,7 @@ class ClaudePanelHeader : public views::BoxLayoutView {
+   raw_ptr<BrowserWindowInterface> browser_;
+   raw_ptr<views::ImageView> icon_ = nullptr;
+   raw_ptr<views::Label> title_ = nullptr;
++  raw_ptr<views::Label> description_ = nullptr;
+   raw_ptr<views::BoxLayoutView> segments_ = nullptr;
+ };
+ 

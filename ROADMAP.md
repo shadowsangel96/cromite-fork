@@ -31,8 +31,10 @@ aggiornamenti di Cromite come tutto il resto.
   nel colore del gruppo prima della sua prima scheda (cerchio se il gruppo non ha nome), bordo dello
   stesso colore sulle schede del gruppo, clic sull'etichetta per chiudere o aprire il gruppo (chiuso
   mostra quante schede ha), "Aggiungi scheda a nuovo gruppo" e "Rimuovi dal gruppo" nel menu. Le
-  tavole non disegnano i gruppi: è una scelta nostra. Mancano il nome e il colore del gruppo da
-  scegliere e il gruppo per la scheda attiva. Con la finestra stretta la barra divide lo spazio in
+  tavole non disegnano i gruppi: è una scelta nostra. Il tasto destro sull'etichetta apre l'editor di
+  Chromium (nome, colore, nuova scheda nel gruppo, sposta in una nuova finestra, chiudi, separa,
+  elimina), che si apre da solo anche quando nasce un gruppo; la scheda attiva va in un gruppo dal
+  menu "Scheda > Aggiungi scheda a nuovo gruppo" del Mac. Con la finestra stretta la barra divide lo spazio in
   quest'ordine: i pulsanti, l'indirizzo al minimo, le icone delle schede, i pulsanti che possono
   andare nel menu ">>" e il testo della pillola della VPN, l'indirizzo fino alla sua larghezza
   piena, poi i titoli delle schede (prima quelle vicine all'indirizzo). Le schede che non ci stanno
@@ -44,9 +46,11 @@ aggiornamenti di Cromite come tutto il resto.
   profilo con l'omino e pannello "Accedi con Claude". Nella pagina `chrome://proxy` c'è l'elenco
   "Claude non entra in questi siti": vale per le schede nuove e dopo un riavvio, mentre una scheda già
   aperta su quel sito va chiusa, perché il suo processo tiene l'elenco vecchio (causa da chiarire).
-  Mancano le funzioni a consumo (puntatore magico, cerchia e cerca)
-  e quello che dipende dalla sync; il pulsante del profilo diventerà arancione da collegato dopo il
-  primo accesso vero, che deve dire come riconoscerlo.
+  Sotto il titolo la descrizione della tavola, con quello che esiste davvero. Il pulsante del profilo
+  diventa la capsula color argilla con l'asterisco quando il profilo ha il cookie di sessione di
+  claude.ai (`sessionKey`, letto in locale e seguito quando cambia), come nella tavola. Mancano le
+  funzioni a consumo (puntatore magico, cerchia e cerca) con i loro pulsanti e il chip del modello,
+  che arrivano con la voce 14, e quello che dipende dalla sync.
 - uBlock Origin integrato: la release ufficiale, verificata con lo sha256 e indicata in
   `overlay/chrome/browser/resources/ublock/fork-ublock.json`, gira come componente interno. Non sta tra
   le estensioni. Pulsante con il contatore nella barra e pannello "Blocco contenuti" come nella tavola,
