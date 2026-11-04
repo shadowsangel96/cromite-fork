@@ -1,8 +1,7 @@
 # Roadmap
 
-Ordine deciso: prima si finisce l'interfaccia Mac come negli schizzi, poi la voce 3 (privacy e
-pannello), i redirect (12b), uBlock al posto dell'adblock (12), nome e traduzioni (12c), poi
-Windows. Ordine indicativo per il resto. Ogni voce diventa una o più patch in `patches/` (titolo del commit con
+Ordine deciso: interfaccia Mac come negli schizzi e voce 3 (privacy e pannello) sono fatte; adesso
+i redirect (12b), poi uBlock al posto dell'adblock (12), nome e traduzioni (12c), poi Windows. Ordine indicativo per il resto. Ogni voce diventa una o più patch in `patches/` (titolo del commit con
 `win:`, `mac:` o `ios:` per quelle di una sola piattaforma), quindi sopravvive agli
 aggiornamenti di Cromite come tutto il resto.
 
@@ -66,15 +65,23 @@ aggiornamenti di Cromite come tutto il resto.
   tranne il letterboxing, tolto per la protezione del viewport di Cromite (dettagli nella voce 2).
 - Anti-fingerprinting per sito: canvas, audio, plugin, numero di processori e WebGL consentito
   danno valori fissi dentro un sito e diversi tra siti (dettagli nella voce 2). Cover Your Tracks
-  dice "your browser has a randomized fingerprint", provato due volte sulla build Mac.
+  dice "your browser has a randomized fingerprint" circa 4 volte su 5 sulla build Mac: confronta tra
+  due siti audio, canvas, WebGL, plugin e numero di processori e vuole almeno 4 valori diversi.
+  WebGL è bloccato (uguale ovunque), quindi devono cambiare tutti gli altri, e il numero di
+  processori (da 4 a 8) coincide tra due siti una volta su 5. Su un computer con 4 processori il
+  numero non cambia mai e il test dice sempre "unique".
 - Contatore del fingerprinting: numero sullo scudo, numeri per riga, totale e "Mostra tutte e 15 le
   categorie", come nella tavola. Conta le letture che Blink registra già (i contatori d'uso che
   arrivano al browser con le metriche della pagina): ogni API una volta per frame, si azzera a ogni
   pagina nuova e sale anche a pannello aperto. Una richiesta di WebGL rifiutata si conta come quella
   accettata. Nel totale entrano solo le letture a cui il browser risponde con una protezione: fuso
   orario, Storage e Permessi restano "Consentito" (valori veri), WebRTC è "Limitato" (niente indirizzi
-  locali), Batteria "Uniformato" (valori fissi). eval e Referrer non si possono contare senza toccare i
-  contatori di Blink: "Non contata". Schermo e ClientRects li leggono quasi tutti i siti per
+  locali), Batteria "Uniformato" (valori fissi), WebGL "Randomizzato" sui siti dove è consentito.
+  eval e Referrer Blink non li conta: li contiamo noi, una volta per pagina, con un messaggio al
+  browser (non con i contatori d'uso, che avrebbero ricompilato quasi tutto Blink). eval resta
+  "Consentito" (le regole CSP del sito decidono come prima, provato con e senza regole);
+  `document.referrer` è "Limitato" perché Cromite non manda il Referrer quando si arriva da un altro
+  sito. Non contano gli eval dei worker e delle estensioni. Schermo e ClientRects li leggono quasi tutti i siti per
   l'impaginazione, quindi il numero sullo scudo è raramente zero. Contano anche le letture fatte dentro
   un iframe vuoto (about:blank o srcdoc), come fa browserleaks.com/canvas: Blink non le manda al
   browser, quindi le contiamo anche nella pagina che le contiene. Il pannello mostra l'immagine vera
@@ -268,16 +275,11 @@ tutti:
 Licenza: brave-core è MPL-2.0, compatibile con la GPL-3.0 di Cromite; i file portati mantengono
 la loro intestazione MPL.
 
-## 3. Privacy e pannello "Fingerprinting": quello che resta (da fare tutto)
+## 3. Privacy e pannello "Fingerprinting": fatto
 
-Elenco per categoria, numeri, contatore sullo scudo e impronta nuova a ogni cancellazione di un
-sito sono fatti (vedi "Fatto" e la voce 2). Restano, tutti richiesti:
-
-- **eval e Referrer:** Blink non ha contatori d'uso per questi due; aggiungerli vuol dire cambiare
-  `web_feature.mojom`, che ricompila quasi tutto Blink (alcune ore sul Mac): build da lanciare di
-  notte.
-- Gli stati delle righe seguono le protezioni: quando arriva la randomizzazione (voce 2), fuso
-  orario e WebGL consentito cambiano scritta.
+Elenco per categoria, numeri, contatore sullo scudo, impronta nuova a ogni cancellazione di un sito,
+contatori di eval e Referrer e stati delle righe che seguono le protezioni sono fatti (vedi "Fatto" e
+la voce 2). Il fuso orario resta "Consentito": il browser non lo cambia.
 
 ## 4. Traduzioni italiane dove mancano
 

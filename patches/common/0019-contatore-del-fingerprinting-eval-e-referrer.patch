@@ -1,0 +1,273 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 16:40:50 +0100
+Subject: [PATCH] Contatore del fingerprinting: eval e Referrer
+
+Fork-Patch: common/0019-contatore-del-fingerprinting-eval-e-referrer.patch
+
+diff --git a/chrome/browser/fork/fingerprinting_counter.cc b/chrome/browser/fork/fingerprinting_counter.cc
+index 4c64c1c4e96ea97093c85da85b33803d88c2918e..572eded400f3cca967ab3e9df605e529fbc387ad 100644
+--- a/chrome/browser/fork/fingerprinting_counter.cc
++++ b/chrome/browser/fork/fingerprinting_counter.cc
+@@ -53,12 +53,16 @@ constexpr Category kCategories[] = {
+     {"Storage", FingerprintingAnswer::kAllowed},
+     {"Permessi", FingerprintingAnswer::kAllowed},
+     {"Batteria", FingerprintingAnswer::kUniform},
+-    {"eval", FingerprintingAnswer::kNotCounted},
+-    {"Referrer", FingerprintingAnswer::kNotCounted},
++    // Code from strings stays allowed; the referrer goes only within a site,
++    // as Cromite removes it on the navigations between sites.
++    {"eval", FingerprintingAnswer::kAllowed},
++    {"Referrer", FingerprintingAnswer::kLimited},
+ };
+ static_assert(std::size(kCategories) == FingerprintingCounter::kCategoryCount);
+ 
+ constexpr size_t kWebGL = 1;
++constexpr size_t kEval = 13;
++constexpr size_t kReferrer = 14;
+ 
+ // The APIs that tell a device apart, as the use counters of Blink name them.
+ std::optional<size_t> CategoryOf(WebFeature feature) {
+@@ -192,6 +196,12 @@ class FarblingHostImpl : public blink::mojom::FarblingHost {
+       : frame_(frame) {}
+ 
+   // blink::mojom::FarblingHost:
++  void ReportRead(blink::mojom::FingerprintingRead read) override {
++    FingerprintingCounter::RecordScriptRead(
++        content::RenderFrameHost::FromID(frame_),
++        read == blink::mojom::FingerprintingRead::kEval);
++  }
++
+   void GetSeed(GetSeedCallback callback) override {
+     content::RenderFrameHost* frame = content::RenderFrameHost::FromID(frame_);
+     std::move(callback).Run(frame ? FarblingSeedForFrame(frame)
+@@ -241,6 +251,21 @@ void FingerprintingCounter::RecordFeatures(
+   }
+ }
+ 
++// static
++void FingerprintingCounter::RecordScriptRead(
++    content::RenderFrameHost* render_frame_host,
++    bool eval) {
++  if (!render_frame_host) {
++    return;
++  }
++  content::Page& page = render_frame_host->GetOutermostMainFrame()->GetPage();
++  ++GetOrCreateForPage(page)->counts_[eval ? kEval : kReferrer];
++  if (page.IsPrimary()) {
++    GetCallbacks().Notify(
++        content::WebContents::FromRenderFrameHost(render_frame_host));
++  }
++}
++
+ // static
+ std::vector<FingerprintingRow> FingerprintingCounter::GetRows(
+     content::WebContents* contents) {
+diff --git a/chrome/browser/fork/fingerprinting_counter.h b/chrome/browser/fork/fingerprinting_counter.h
+index 0400707bf4ff8add9893e3fd9e0398cd86e687c5..4f0cb8b26ffe9c1034910f4b0e12fbf2453b4fb0 100644
+--- a/chrome/browser/fork/fingerprinting_counter.h
++++ b/chrome/browser/fork/fingerprinting_counter.h
+@@ -60,6 +60,11 @@ class FingerprintingCounter
+       content::RenderFrameHost* render_frame_host,
+       const std::vector<blink::UseCounterFeature>& features);
+ 
++  // A read the renderer counts itself: code made from a string (`eval`) or the
++  // referrer, once per document.
++  static void RecordScriptRead(content::RenderFrameHost* render_frame_host,
++                               bool eval);
++
+   // The categories of the page shown in the tab, in the order of the boards.
+   static std::vector<FingerprintingRow> GetRows(content::WebContents* contents);
+ 
+diff --git a/third_party/blink/public/mojom/fork/farbling_preview.mojom b/third_party/blink/public/mojom/fork/farbling_preview.mojom
+index f1125f14986c5b0932cd1449fb9949dcdaafa92b..ed0a6fa0070b0e54b6c00dd306330e0d796fe044 100644
+--- a/third_party/blink/public/mojom/fork/farbling_preview.mojom
++++ b/third_party/blink/public/mojom/fork/farbling_preview.mojom
+@@ -1,5 +1,13 @@
+ module blink.mojom;
+ 
++// What a page reads that Blink has no use counter for.
++enum FingerprintingRead {
++  // Code made from a string: eval() and new Function().
++  kEval,
++  // document.referrer.
++  kReferrer,
++};
++
+ // The noise against fingerprinting of a page, between its renderer and the
+ // browser.
+ interface FarblingHost {
+@@ -12,4 +20,7 @@ interface FarblingHost {
+   // noise: the protections panel shows what the site really received. A small
+   // PNG, at most twice a second.
+   ReportImage(bool webgl, array<uint8> png);
++
++  // The page read one of these, for the protections panel: once per document.
++  ReportRead(FingerprintingRead read);
+ };
+diff --git a/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc b/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc
+index 98678602b7ec0263e51dfcfda29264b7d75854e9..60b0017f39cdb20de4af05d2ab05ae86f3f75713 100644
+--- a/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc
++++ b/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc
+@@ -279,7 +279,11 @@ void LocalWindowProxy::Initialize() {
+   if (evaluate_csp_for_eval) {
+     ContentSecurityPolicy* csp =
+         GetFrame()->DomWindow()->GetContentSecurityPolicyForCurrentWorld();
+-    context->AllowCodeGenerationFromStrings(!csp->ShouldCheckEval());
++    // The main world always asks the code generation callback, which counts
++    // the code made from strings for the protections panel; its check of the
++    // CSP still decides, as without it.
++    context->AllowCodeGenerationFromStrings(!world_->IsMainWorld() &&
++                                            !csp->ShouldCheckEval());
+     context->SetErrorMessageForCodeGenerationFromStrings(
+         V8String(GetIsolate(), csp->EvalDisabledErrorMessage()));
+     context->SetErrorMessageForWasmCodeGeneration(
+diff --git a/third_party/blink/renderer/bindings/core/v8/script_controller.cc b/third_party/blink/renderer/bindings/core/v8/script_controller.cc
+index 2893df5c47e957486750d8d5b038c102567e3c10..186ba03c38fc944fe3cb5d1bc29c910b133e9e4e 100644
+--- a/third_party/blink/renderer/bindings/core/v8/script_controller.cc
++++ b/third_party/blink/renderer/bindings/core/v8/script_controller.cc
+@@ -169,7 +169,9 @@ void ScriptController::SetEvalForWorld(DOMWrapperWorld& world,
+   if (v8_context.IsEmpty())
+     return;
+ 
+-  v8_context->AllowCodeGenerationFromStrings(allow_eval);
++  // The main world always asks the code generation callback: see
++  // LocalWindowProxy.
++  v8_context->AllowCodeGenerationFromStrings(allow_eval && !world.IsMainWorld());
+   if (allow_eval)
+     return;
+ 
+diff --git a/third_party/blink/renderer/bindings/core/v8/v8_initializer.cc b/third_party/blink/renderer/bindings/core/v8/v8_initializer.cc
+index a3cbee6e96dfc0805c17a1561ec8c354498a52cb..a18aa77c006f2ec13293fb5a75d13de0c7faeec5 100644
+--- a/third_party/blink/renderer/bindings/core/v8/v8_initializer.cc
++++ b/third_party/blink/renderer/bindings/core/v8/v8_initializer.cc
+@@ -66,6 +66,7 @@
+ #include "third_party/blink/renderer/bindings/core/v8/v8_wasm_response_extensions.h"
+ #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
+ #include "third_party/blink/renderer/core/dom/dom_exception.h"
++#include "third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.h"
+ #include "third_party/blink/renderer/core/dom/events/event_dispatch_forbidden_scope.h"
+ #include "third_party/blink/renderer/core/events/error_event.h"
+ #include "third_party/blink/renderer/core/execution_context/agent.h"
+@@ -581,6 +582,9 @@ V8Initializer::CodeGenerationCheckCallbackInMainThread(
+   // See also: Discussion on crrev.com/c/7207201.
+   CHECK(ToExecutionContext(context), base::NotFatalUntil::M150);
+ 
++  // Code made from a string counts in the protections panel.
++  CountForkRead(ToExecutionContext(context), ForkRead::kEval);
++
+   // The TC39 "Dynamic Code Brand Check" feature is currently behind a flag.
+   if (!RuntimeEnabledFeatures::TrustedTypesUseCodeLikeEnabled())
+     is_code_like = false;
+diff --git a/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.cc b/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.cc
+index afb7490a6d4c73a1d127b2ca2aab3e3712416ccf..f1b4e74a4c0a9b1cedd165f01bc347db977f047f 100644
+--- a/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.cc
++++ b/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.cc
+@@ -18,6 +18,8 @@
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
++#include "third_party/blink/renderer/platform/supplementable.h"
+ #include "third_party/blink/renderer/platform/fork_farbling.h"
+ #include "third_party/blink/renderer/platform/network/blink_schemeful_site.h"
+ #include "third_party/blink/renderer/platform/storage/blink_storage_key.h"
+@@ -98,8 +100,55 @@ bool SeedFromBrowser(LocalDOMWindow* window, uint64_t* seed) {
+   return host->GetSeed(seed);
+ }
+ 
++// What the page already told the browser it read.
++class ForkReads final : public GarbageCollected<ForkReads>,
++                        public Supplement<LocalDOMWindow> {
++ public:
++  static const char kSupplementName[];
++
++  static ForkReads& From(LocalDOMWindow& window) {
++    ForkReads* reads = Supplement<LocalDOMWindow>::From<ForkReads>(window);
++    if (!reads) {
++      reads = MakeGarbageCollected<ForkReads>(window);
++      Supplement<LocalDOMWindow>::ProvideTo(window, reads);
++    }
++    return *reads;
++  }
++
++  explicit ForkReads(LocalDOMWindow& window)
++      : Supplement<LocalDOMWindow>(window) {}
++
++  void Trace(Visitor* visitor) const override {
++    Supplement<LocalDOMWindow>::Trace(visitor);
++  }
++
++  bool eval = false;
++  bool referrer = false;
++};
++
++const char ForkReads::kSupplementName[] = "ForkReads";
++
+ }  // namespace
+ 
++void CountForkRead(ExecutionContext* context, ForkRead read) {
++  auto* window = DynamicTo<LocalDOMWindow>(context);
++  if (!window || !window->GetFrame()) {
++    return;
++  }
++  ForkReads& reads = ForkReads::From(*window);
++  bool& counted = read == ForkRead::kEval ? reads.eval : reads.referrer;
++  if (counted) {
++    return;
++  }
++  counted = true;
++  mojo::Remote<mojom::blink::FarblingHost> host;
++  window->GetFrame()->GetBrowserInterfaceBroker().GetInterface(
++      host.BindNewPipeAndPassReceiver());
++  host->ReportRead(read == ForkRead::kEval
++                       ? mojom::blink::FingerprintingRead::kEval
++                       : mojom::blink::FingerprintingRead::kReferrer);
++}
++
+ uint64_t FarblingSeed(ExecutionContext* context) {
+   if (!context) {
+     static const uint64_t seed = base::RandUint64();
+diff --git a/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.h b/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.h
+index ce890b8add4915c7780fb311566dafc3a1eb91f0..035e42b3e8bf481134009ec16df461ffc58c8154 100644
+--- a/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.h
++++ b/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.h
+@@ -15,6 +15,11 @@ class ExecutionContext;
+ // page. Kept in the canvas noise token of the context.
+ CORE_EXPORT uint64_t FarblingSeed(ExecutionContext* context);
+ 
++// What a page reads that Blink has no use counter for: the protections panel
++// counts it, once per document.
++enum class ForkRead { kEval, kReferrer };
++CORE_EXPORT void CountForkRead(ExecutionContext* context, ForkRead read);
++
+ // Lets the platform find the seed of the running script.
+ void InstallFarblingSeedProvider();
+ 
+diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink/renderer/core/dom/document.cc
+index 1eddd728811d8768e99d02013a5260ec1bf4939a..724227c0847414cb6ad737ee42540ef6db4bdbf0 100644
+--- a/third_party/blink/renderer/core/dom/document.cc
++++ b/third_party/blink/renderer/core/dom/document.cc
+@@ -28,6 +28,9 @@
+  */
+ 
+ #include "third_party/blink/renderer/core/dom/document.h"
++#include "third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.h"
++#include "v8/include/v8-context.h"
++#include "v8/include/v8-isolate.h"
+ 
+ #include <algorithm>
+ #include <memory>
+@@ -6869,6 +6872,12 @@ const base::Uuid& Document::base_auction_nonce() {
+ }
+ 
+ const AtomicString& Document::referrer() const {
++  // A script of the page reading it counts in the protections panel.
++  if (v8::Isolate* isolate = v8::Isolate::TryGetCurrent();
++      isolate && isolate->InContext() && domWindow() &&
++      ExecutionContext::From(isolate->GetCurrentContext()) == domWindow()) {
++    CountForkRead(domWindow(), ForkRead::kReferrer);
++  }
+   if (Loader())
+     return Loader()->GetReferrer();
+   return g_null_atom;
