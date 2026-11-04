@@ -1,0 +1,683 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 11:45:42 +0100
+Subject: [PATCH] mac: schede nella barra anche con la finestra stretta
+
+Fork-Patch: macos/0014-schede-nella-barra-anche-con-la-finestra-stretta.patch
+
+diff --git a/chrome/browser/ui/views/toolbar/compact_tabs_view.cc b/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
+index a80746f07072c9ac630d9cbcb878ef8112d7fd42..151ab1f5dc3beb8207154fe3bab6fb10399f909f 100644
+--- a/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
++++ b/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
+@@ -67,7 +67,10 @@ constexpr int kChipMinWidth = 36;
+ constexpr int kChipGap = 8;
+ // After every button of the toolbar, which would otherwise go in the overflow
+ // menu to make room for the tabs; only the empty space comes later.
+-constexpr int kTabsFlexOrder = 1900;
++// The "+N" chip of the tabs that don't fit.
++constexpr int kOverflowWidth = 40;
++// Below this room for the title, a chip shows only its icon.
++constexpr int kMinTitleWidth = 40;
+ // How far below the toolbar a dragged tab goes to its own window.
+ constexpr int kDetachDistance = 40;
+ 
+@@ -145,6 +148,8 @@ class CompactTabChip : public views::LabelButton,
+     UpdateCloseIcon();
+   }
+ 
++  int index() const { return index_; }
++
+   // views::ContextMenuController:
+   void ShowContextMenuForViewImpl(
+       views::View* source,
+@@ -340,8 +345,6 @@ class CompactTabChip : public views::LabelButton,
+     DestroyLayer();
+   }
+ 
+-  int index() const { return index_; }
+-
+   // The index the tab takes: as many tabs as have their middle before `x`.
+   int DropIndex(views::View* toolbar, int x) const {
+     int before = 0;
+@@ -556,15 +559,115 @@ END_METADATA
+ BEGIN_METADATA(CompactTabChip)
+ END_METADATA
+ 
+-gfx::Size SmallestUntilBounded(int chips,
+-                               const views::View* view,
+-                               const views::SizeBounds& bounds) {
+-  const int width =
+-      bounds.width().is_bounded()
+-          ? std::min(bounds.width().value(), view->GetPreferredSize().width())
+-          : chips * kChipMinWidth + std::max(chips - 1, 0) * kChipGap;
+-  return gfx::Size(width, kChipHeight);
+-}
++// The tabs that don't fit in the row: the chip says how many, its menu lists
++// them.
++class CompactOverflowChip : public views::LabelButton,
++                            public ui::SimpleMenuModel::Delegate {
++  METADATA_HEADER(CompactOverflowChip, views::LabelButton)
++
++ public:
++  CompactOverflowChip(TabStripModel* model,
++                      base::RepeatingCallback<std::vector<int>()> hidden)
++      : views::LabelButton(base::BindRepeating(&CompactOverflowChip::OnPressed,
++                                               base::Unretained(this))),
++        model_(model),
++        hidden_(std::move(hidden)) {
++    SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, 8)));
++    SetHorizontalAlignment(gfx::ALIGN_CENTER);
++    SetMinSize(gfx::Size(kOverflowWidth, kChipHeight));
++    SetMaxSize(gfx::Size(kOverflowWidth, kChipHeight));
++  }
++
++  void SetCount(int count) {
++    if (count == count_) {
++      return;
++    }
++    count_ = count;
++    SetText(u"+" + base::NumberToString16(count));
++    const std::u16string name =
++        count == 1 ? u"Un'altra scheda"
++                   : u"Altre " + base::NumberToString16(count) + u" schede";
++    SetTooltipText(name);
++    GetViewAccessibility().SetName(name);
++  }
++
++  // views::View:
++  gfx::Size CalculatePreferredSize(
++      const views::SizeBounds& available_size) const override {
++    return gfx::Size(kOverflowWidth, kChipHeight);
++  }
++
++  void OnThemeChanged() override {
++    views::LabelButton::OnThemeChanged();
++    UpdateColors();
++  }
++
++  void StateChanged(ButtonState old_state) override {
++    views::LabelButton::StateChanged(old_state);
++    UpdateColors();
++  }
++
++  // ui::SimpleMenuModel::Delegate:
++  void ExecuteCommand(int command_id, int event_flags) override {
++    if (model_->ContainsIndex(command_id)) {
++      model_->ActivateTabAt(
++          command_id, TabStripUserGestureDetails(
++                          TabStripUserGestureDetails::GestureType::kMouse));
++    }
++  }
++
++ private:
++  void UpdateColors() {
++    if (!GetColorProvider()) {
++      return;
++    }
++    const bool dark =
++        color_utils::IsDark(GetColorProvider()->GetColor(kColorToolbar));
++    const bool hovered = GetState() != ButtonState::STATE_NORMAL;
++    SetBackground(views::CreateRoundedRectBackground(
++        dark ? SkColorSetA(SK_ColorWHITE, hovered ? 0x2e : 0x1a)
++             : SkColorSetA(SK_ColorBLACK, hovered ? 0x1f : 0x12),
++        kChipHeight / 2));
++    const SkColor text = dark ? SkColorSetRGB(0xf5, 0xf5, 0xf7)
++                              : SkColorSetRGB(0x1d, 0x1d, 0x1f);
++    SetTextColor(ButtonState::STATE_NORMAL, text);
++    SetTextColor(ButtonState::STATE_HOVERED, text);
++    SetTextColor(ButtonState::STATE_PRESSED, text);
++  }
++
++  void OnPressed(const ui::Event& event) {
++    menu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
++    for (int index : hidden_.Run()) {
++      if (!model_->ContainsIndex(index)) {
++        continue;
++      }
++      content::WebContents* contents = model_->GetWebContentsAt(index);
++      const gfx::Image favicon = favicon::TabFaviconFromWebContents(contents);
++      menu_model_->AddItemWithIcon(
++          index,
++          contents->GetTitle().empty() ? u"Scheda" : contents->GetTitle(),
++          ui::ImageModel::FromImage(
++              favicon.IsEmpty() ? favicon::GetDefaultFavicon() : favicon));
++    }
++    if (!menu_model_->GetItemCount()) {
++      return;
++    }
++    menu_runner_ = std::make_unique<views::MenuRunner>(
++        menu_model_.get(), views::MenuRunner::NO_FLAGS);
++    menu_runner_->RunMenuAt(GetWidget(), nullptr, GetAnchorBoundsInScreen(),
++                            views::MenuAnchorPosition::kTopLeft,
++                            ui::mojom::MenuSourceType::kMouse);
++  }
++
++  const raw_ptr<TabStripModel> model_;
++  const base::RepeatingCallback<std::vector<int>()> hidden_;
++  int count_ = -1;
++  std::unique_ptr<ui::SimpleMenuModel> menu_model_;
++  std::unique_ptr<views::MenuRunner> menu_runner_;
++};
++
++BEGIN_METADATA(CompactOverflowChip)
++END_METADATA
+ 
+ }  // namespace
+ 
+@@ -589,16 +692,140 @@ END_METADATA
+ 
+ CompactTabsView::CompactTabsView(TabStripModel* model, Side side)
+     : model_(model), side_(side) {
+-  auto* const layout = SetLayoutManager(std::make_unique<views::FlexLayout>());
+-  layout->SetOrientation(views::LayoutOrientation::kHorizontal)
+-      .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
+-      .SetCollapseMargins(true)
+-      .SetDefault(views::kMarginsKey, gfx::Insets::VH(0, kChipGap / 2));
+   SetProperty(views::kMarginsKey, gfx::Insets::VH(0, kChipGap));
++  overflow_ = AddChildView(std::make_unique<CompactOverflowChip>(
++      model_, base::BindRepeating(
++                  [](const CompactTabsView* view) { return view->hidden_; },
++                  base::Unretained(this))));
++  overflow_->SetVisible(false);
+   model_->AddObserver(this);
+   Update();
+ }
+ 
++std::vector<views::View*> CompactTabsView::Items() const {
++  std::vector<views::View*> items;
++  for (views::View* child : children()) {
++    if (child != overflow_) {
++      items.push_back(child);
++    }
++  }
++  return items;
++}
++
++int CompactTabsView::IconRowWidth() const {
++  const std::vector<views::View*> items = Items();
++  if (!GetVisible() || items.empty()) {
++    return 0;
++  }
++  int width = 0;
++  for (views::View* item : items) {
++    width += item->GetMinimumSize().width();
++  }
++  return width + (static_cast<int>(items.size()) - 1) * kChipGap;
++}
++
++gfx::Size CompactTabsView::CalculatePreferredSize(
++    const views::SizeBounds& available_size) const {
++  const std::vector<views::View*> items = Items();
++  int width = 0;
++  for (views::View* item : items) {
++    width += std::clamp(item->GetPreferredSize().width(),
++                        item->GetMinimumSize().width(), kChipMaxWidth);
++  }
++  width += std::max(static_cast<int>(items.size()) - 1, 0) * kChipGap;
++  return gfx::Size(width, kChipHeight);
++}
++
++void CompactTabsView::Layout(PassKey) {
++  const std::vector<views::View*> items = Items();
++  const int count = static_cast<int>(items.size());
++  std::vector<int> min(count);
++  std::vector<int> preferred(count);
++  for (int i = 0; i < count; ++i) {
++    min[i] = items[i]->GetMinimumSize().width();
++    preferred[i] =
++        std::clamp(items[i]->GetPreferredSize().width(), min[i], kChipMaxWidth);
++  }
++  // The width of the items from `first` to `last`, at their smallest, with
++  // or without the "+N" chip.
++  const auto smallest = [&](int first, int last, bool with_overflow) {
++    int width = with_overflow ? kOverflowWidth : 0;
++    for (int i = first; i < last; ++i) {
++      width += min[i];
++    }
++    const int pieces = last - first + (with_overflow ? 1 : 0);
++    return width + std::max(pieces - 1, 0) * kChipGap;
++  };
++
++  // When even the icons don't fit, the tabs farthest from the address go in
++  // the "+N" chip.
++  const int available = width();
++  int first = 0;
++  int last = count;
++  const bool overflow = count > 0 && smallest(0, count, false) > available;
++  if (overflow) {
++    while (last > first && smallest(first, last, true) > available) {
++      if (side_ == Side::kBeforeActive) {
++        ++first;
++      } else {
++        --last;
++      }
++    }
++  }
++
++  // The rest goes to the titles, nearest to the address first: as many tabs
++  // as can show a few letters get an equal part, the others stay icons.
++  std::vector<int> grow(count, 0);
++  int extra = std::max(available - smallest(first, last, overflow), 0);
++  std::vector<int> nearest;
++  for (int k = 0; k < last - first; ++k) {
++    const int i = side_ == Side::kBeforeActive ? last - 1 - k : first + k;
++    if (preferred[i] > min[i]) {
++      nearest.push_back(i);
++    }
++  }
++  const int titled =
++      std::min(static_cast<int>(nearest.size()), extra / kMinTitleWidth);
++  for (int k = 0; k < titled; ++k) {
++    const int i = nearest[k];
++    grow[i] = std::min(preferred[i] - min[i], extra / (titled - k));
++    extra -= grow[i];
++  }
++
++  // The row stays against the address when it doesn't fill its room.
++  int used = smallest(first, last, overflow);
++  for (int g : grow) {
++    used += g;
++  }
++  hidden_.clear();
++  const int y = (height() - kChipHeight) / 2;
++  int x = side_ == Side::kBeforeActive ? std::max(available - used, 0) : 0;
++  const bool show_overflow = overflow && available >= kOverflowWidth;
++  if (show_overflow && side_ == Side::kBeforeActive) {
++    overflow_->SetBounds(x, y, kOverflowWidth, kChipHeight);
++    x += kOverflowWidth + kChipGap;
++  }
++  for (int i = 0; i < count; ++i) {
++    const bool shown = i >= first && i < last;
++    if (!shown) {
++      if (auto* tab = views::AsViewClass<CompactTabChip>(items[i])) {
++        hidden_.push_back(tab->index());
++      }
++      items[i]->SetVisible(false);
++      continue;
++    }
++    items[i]->SetVisible(true);
++    items[i]->SetBounds(x, y, min[i] + grow[i], kChipHeight);
++    x += min[i] + grow[i] + kChipGap;
++  }
++  if (show_overflow && side_ == Side::kAfterActive) {
++    overflow_->SetBounds(x, y, kOverflowWidth, kChipHeight);
++  }
++  static_cast<CompactOverflowChip*>(overflow_.get())
++      ->SetCount(static_cast<int>(hidden_.size()));
++  overflow_->SetVisible(show_overflow && !hidden_.empty());
++}
++
+ CompactTabsView::~CompactTabsView() = default;
+ 
+ void CompactTabsView::OnTabStripModelChanged(
+@@ -653,9 +880,11 @@ void CompactTabsView::Update() {
+   }
+ 
+   // The views already there stay where they are, so a menu open or a drag
+-  // under way isn't cut when a title changes.
++  // under way isn't cut when a title changes. The "+N" chip is the first
++  // child, so the item `i` is the child `i + 1`.
+   for (size_t i = 0; i < entries.size(); ++i) {
+-    views::View* view = i < children().size() ? children()[i] : nullptr;
++    const std::vector<views::View*> items = Items();
++    views::View* view = i < items.size() ? items[i] : nullptr;
+     const bool header = entries[i].header.has_value();
+     if (view && (header ? views::IsViewClass<CompactGroupHeader>(view)
+                         : views::IsViewClass<CompactTabChip>(view))) {
+@@ -670,27 +899,19 @@ void CompactTabsView::Update() {
+       RemoveChildViewT(view);
+     }
+     if (header) {
+-      AddChildViewAt(std::make_unique<CompactGroupHeader>(model_), i)
++      AddChildViewAt(std::make_unique<CompactGroupHeader>(model_), i + 1)
+           ->SetGroup(*entries[i].header);
+     } else {
+-      AddChildViewAt(std::make_unique<CompactTabChip>(model_), i)
++      AddChildViewAt(std::make_unique<CompactTabChip>(model_), i + 1)
+           ->SetTab(entries[i].index);
+     }
+   }
+-  while (children().size() > entries.size()) {
+-    RemoveChildViewT(children().back());
++  for (std::vector<views::View*> items = Items(); items.size() > entries.size();
++       items = Items()) {
++    RemoveChildViewT(items.back());
+   }
+-  const size_t wanted = entries.size();
+-  // The two sides share the space by tab: the toolbar takes from each what is
+-  // over its smallest size, in proportion to the weight.
+-  SetProperty(
+-      views::kFlexBehaviorKey,
+-      views::FlexSpecification(base::BindRepeating(&SmallestUntilBounded,
+-                                                    static_cast<int>(wanted)))
+-          .WithOrder(kTabsFlexOrder)
+-          .WithWeight(std::max(static_cast<int>(wanted), 1)));
+-  SetVisible(wanted > 0);
+-  InvalidateLayout();
++  SetVisible(!entries.empty());
++  PreferredSizeChanged();
+ }
+ 
+ BEGIN_METADATA(CompactTabsView)
+diff --git a/chrome/browser/ui/views/toolbar/compact_tabs_view.h b/chrome/browser/ui/views/toolbar/compact_tabs_view.h
+index ca908f8c692c5b762ad423668d8b29127e8da535..56134d0b85bfc2da3e0aa9064cf0ed4edbf6dcf9 100644
+--- a/chrome/browser/ui/views/toolbar/compact_tabs_view.h
++++ b/chrome/browser/ui/views/toolbar/compact_tabs_view.h
+@@ -9,6 +9,7 @@
+ #include "ui/views/view.h"
+ 
+ #include <memory>
++#include <vector>
+ 
+ class BrowserWindowInterface;
+ class TabStripModel;
+@@ -22,6 +23,10 @@ extern const ui::ClassProperty<bool>* const kCompactTabsKey;
+ // The height of the row of the boards, which also places the window buttons.
+ inline constexpr int kCompactTabsToolbarHeight = 52;
+ 
++// The order of the address and of the tabs on its sides in the toolbar, which
++// gives them their widths: before the buttons that can go in the ">>" menu.
++inline constexpr int kCompactTabsFlexOrder = 1001;
++
+ // Set on the lock inside the field, which the location bar places just before
+ // the site in the middle.
+ extern const ui::ClassProperty<bool>* const kCompactLockKey;
+@@ -69,11 +74,25 @@ class CompactTabsView : public views::View, public TabStripModelObserver {
+                       TabChangeType change_type) override;
+   void OnTabGroupChanged(const TabGroupChange& change) override;
+ 
++  // The room the row needs to show every tab as an icon, without its margins.
++  int IconRowWidth() const;
++
++  // views::View:
++  gfx::Size CalculatePreferredSize(
++      const views::SizeBounds& available_size) const override;
++  void Layout(PassKey) override;
++
+  private:
+   void Update();
+ 
++  // The tabs and labels of the row; the "+N" chip is always the first child.
++  std::vector<views::View*> Items() const;
++
+   const raw_ptr<TabStripModel> model_;
+   const Side side_;
++  raw_ptr<views::View> overflow_ = nullptr;
++  // The tabs that don't fit, farthest from the address, in the "+N" menu.
++  std::vector<int> hidden_;
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_TOOLBAR_COMPACT_TABS_VIEW_H_
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index 1fc98d3c210faa145d1efa5e71d6cc0fc6dc6714..8ebb5ef5a19c922dc3a4b3427b7957d145500571 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -1676,6 +1676,110 @@ views::View* ToolbarView::GetDefaultFocusableChild() {
+   return location_bar_view_;
+ }
+ 
++#if BUILDFLAG(IS_MAC)
++ToolbarView::CompactRow ToolbarView::ComputeCompactRow() const {
++  constexpr int kAddressMin = 180;
++  constexpr int kAddressMax = 460;
++
++  // The room of the row: the toolbar without its margins and the buttons
++  // that always stay. The ones that can go in the ">>" menu come later.
++  const int default_margin =
++      GetLayoutConstant(LayoutConstant::kToolbarIconDefaultMargin);
++  const auto margin = [default_margin](const views::View* child) {
++    const gfx::Insets* insets = child->GetProperty(views::kMarginsKey);
++    return insets ? (insets->left() + insets->right()) / 2 : default_margin;
++  };
++  int free = width() - layout_manager_->interior_margin().width();
++  int optional = 0;
++  int icons = 0;
++  int full = 0;
++  CompactRow row;
++  for (const views::View* child : children()) {
++    if (!child->GetVisible() || views::IsViewClass<CompactTabsSpacer>(child)) {
++      continue;
++    }
++    free -= margin(child);
++    if (child == location_bar_view_) {
++      continue;
++    }
++    if (const auto* tabs = views::AsViewClass<CompactTabsView>(child)) {
++      icons += tabs->IconRowWidth();
++      full += std::max(tabs->IconRowWidth(), tabs->GetPreferredSize().width());
++      continue;
++    }
++    if (const auto* pill = views::AsViewClass<VpnStatusButton>(child)) {
++      free -= pill->GetMinimumSize().width();
++      row.pill_text = pill->GetFullWidth() - pill->GetMinimumSize().width();
++      optional += row.pill_text;
++    } else if (child->GetProperty(views::kFlexBehaviorKey)) {
++      optional += child->GetPreferredSize().width();
++    } else {
++      free -= child->GetPreferredSize().width();
++    }
++  }
++
++  // In turn: the address at its smallest, the icons of the tabs (or as many
++  // as fit, the others in their "+N" chip), the buttons that can go in the
++  // ">>" menu and the text of the pill, the address up to its widest, then
++  // the titles of the tabs.
++  free -= kAddressMin;
++  row.tabs = std::clamp(free, 0, icons);
++  free -= row.tabs;
++  row.pill_full = free >= row.pill_text;
++  free = std::max(free - optional, 0);
++  const int grow = std::min(free, kAddressMax - kAddressMin);
++  row.address = kAddressMin + grow;
++  row.tabs += std::min(free - grow, full - icons);
++  row.icons = icons;
++  row.full = full;
++  return row;
++}
++
++gfx::Size ToolbarView::CompactRowRule(const views::View* view,
++                                      const views::SizeBounds& bounds) const {
++  const int height = view->GetPreferredSize().height();
++  const CompactRow row = ComputeCompactRow();
++  const bool unbounded = !bounds.width().is_bounded();
++
++  if (view == location_bar_view_) {
++    return gfx::Size(unbounded ? row.address
++                               : std::max(std::min(row.address, 180),
++                                          std::min(bounds.width().value(),
++                                                   row.address)),
++                     height);
++  }
++
++  if (const auto* pill = views::AsViewClass<VpnStatusButton>(view)) {
++    const int full = pill->GetFullWidth();
++    return gfx::Size(
++        row.pill_full && (unbounded || bounds.width().value() >= full)
++            ? full
++            : pill->GetMinimumSize().width(),
++        height);
++  }
++
++  // The tabs come after the address and the pill, with what is really left:
++  // their part of it, by the room they need.
++  const auto* tabs = views::AsViewClass<CompactTabsView>(view);
++  if (!tabs || unbounded) {
++    return gfx::Size(view->GetPreferredSize().width(), height);
++  }
++  const int icons = tabs->IconRowWidth();
++  const int full = std::max(icons, tabs->GetPreferredSize().width());
++  int width = 0;
++  if (row.icons && row.tabs <= row.icons) {
++    width = row.tabs * icons / row.icons;
++  } else if (row.icons) {
++    width = icons + (row.full > row.icons ? (row.tabs - row.icons) *
++                                                (full - icons) /
++                                                (row.full - row.icons)
++                                          : 0);
++  }
++  return gfx::Size(std::min(bounds.width().value(), std::max(width, icons)),
++                   height);
++}
++#endif  // BUILDFLAG(IS_MAC)
++
+ void ToolbarView::InitLayout() {
+   const int default_margin =
+       GetLayoutConstant(LayoutConstant::kToolbarIconDefaultMargin);
+@@ -1732,21 +1836,27 @@ void ToolbarView::InitLayout() {
+                                     location_bar_flex_rule);
+ #if BUILDFLAG(IS_MAC)
+     if (browser_view_->GetProperty(browser_fork::kCompactTabsKey)) {
+-      // As wide as in the boards, and first to get space.
++      // The address, the pill of the VPN and the tabs on the sides of the
++      // address get their widths from one share of the room: the address
++      // first, then the pill, then the tabs with what is really left.
++      const views::FlexSpecification compact_rule = views::FlexSpecification(
++          base::BindRepeating(&ToolbarView::CompactRowRule,
++                              base::Unretained(this)));
+       location_bar_view_->SetProperty(
+           views::kFlexBehaviorKey,
+-          views::FlexSpecification(
+-              base::BindRepeating([](const views::View* view,
+-                                     const views::SizeBounds& bounds) {
+-                constexpr int kMinWidth = 200;
+-                constexpr int kMaxWidth = 460;
+-                const int width =
+-                    bounds.width().is_bounded()
+-                        ? std::clamp(bounds.width().value(), kMinWidth, kMaxWidth)
+-                        : kMaxWidth;
+-                return gfx::Size(width, view->GetPreferredSize().height());
+-              }))
+-              .WithOrder(1));
++          compact_rule.WithOrder(browser_fork::kCompactTabsFlexOrder));
++      for (views::View* child : children()) {
++        if (views::IsViewClass<VpnStatusButton>(child)) {
++          child->SetProperty(
++              views::kFlexBehaviorKey,
++              compact_rule.WithOrder(browser_fork::kCompactTabsFlexOrder + 1));
++        }
++        if (views::IsViewClass<CompactTabsView>(child)) {
++          child->SetProperty(
++              views::kFlexBehaviorKey,
++              compact_rule.WithOrder(browser_fork::kCompactTabsFlexOrder + 3));
++        }
++      }
+     }
+ #endif
+     location_bar_view_->SetProperty(views::kMarginsKey,
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.h b/chrome/browser/ui/views/toolbar/toolbar_view.h
+index 08a30ebfb2e060d0b66d8445dc9f3a4ec67ebd21..fdf80590ea7fdc0ce901c0a5d179c3fc46a89302 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.h
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.h
+@@ -378,6 +378,22 @@ class ToolbarView : public views::AccessiblePaneView,
+   // view hierarchy.
+ #if BUILDFLAG(IS_MAC)
+   void ShareCurrentPage();
++  // With the tabs in the toolbar: how the room the buttons leave is shared
++  // among the address, the text of the pill of the VPN and the tabs.
++  struct CompactRow {
++    int address = 0;
++    bool pill_full = false;
++    int pill_text = 0;
++    // The room of the tabs of both sides, with their icons and their whole
++    // titles.
++    int tabs = 0;
++    int icons = 0;
++    int full = 0;
++  };
++  CompactRow ComputeCompactRow() const;
++  // The width of the address, of the pill, or of the tabs on one side.
++  gfx::Size CompactRowRule(const views::View* view,
++                           const views::SizeBounds& bounds) const;
+   raw_ptr<ToolbarButton> share_button_ = nullptr;
+   raw_ptr<ClaudeButton> claude_button_ = nullptr;
+ #endif
+diff --git a/chrome/browser/ui/views/toolbar/vpn_status_button.cc b/chrome/browser/ui/views/toolbar/vpn_status_button.cc
+index ccc00f8aa837c01907245bc6c18809896e45ae30..24cee9c7e9373fb73f4105a8916e28fcacbd8649 100644
+--- a/chrome/browser/ui/views/toolbar/vpn_status_button.cc
++++ b/chrome/browser/ui/views/toolbar/vpn_status_button.cc
+@@ -16,6 +16,7 @@
+ #include "ui/gfx/color_utils.h"
+ #include "ui/gfx/font.h"
+ #include "ui/gfx/font_list.h"
++#include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/controls/label.h"
+ #include "url/gurl.h"
+ 
+@@ -112,8 +113,38 @@ void VpnStatusButton::OnRouteChanged() {
+       SetTooltipText(u"Connessione diretta: i siti vedono l'IP di casa.");
+       break;
+   }
+-  SetHighlight(label, PillColor(route, color_utils::IsDark(colors->GetColor(
+-                                           kColorToolbar))));
++  full_label_ = label;
++  color_ = PillColor(route,
++                     color_utils::IsDark(colors->GetColor(kColorToolbar)));
++  // The widths of the button with each text, from its insets and its label:
++  // the button itself grows to a new text with an animation.
++  SetHighlight(u"●", color_);
++  dot_width_ = GetInsets().width() + this->label()->GetPreferredSize().width() + 4;
++  SetHighlight(full_label_, color_);
++  full_width_ = GetInsets().width() + this->label()->GetPreferredSize().width() + 4;
++  ShowLabel();
++}
++
++gfx::Size VpnStatusButton::GetMinimumSize() const {
++  return gfx::Size(dot_width_, ToolbarButton::GetMinimumSize().height());
++}
++
++void VpnStatusButton::OnBoundsChanged(const gfx::Rect& previous_bounds) {
++  ToolbarButton::OnBoundsChanged(previous_bounds);
++  const bool dot_only = width() > 0 && width() < full_width_;
++  if (dot_only != dot_only_) {
++    dot_only_ = dot_only;
++    ShowLabel();
++  }
++}
++
++void VpnStatusButton::ShowLabel() {
++  if (full_label_.empty()) {
++    return;
++  }
++  SetHighlight(dot_only_ ? u"●" : full_label_, color_);
++  // The name stays the whole text, also when only the dot shows.
++  GetViewAccessibility().SetName(full_label_.substr(2));
+ }
+ 
+ void VpnStatusButton::OnPressed() {
+diff --git a/chrome/browser/ui/views/toolbar/vpn_status_button.h b/chrome/browser/ui/views/toolbar/vpn_status_button.h
+index 5240ece47c720636ac1a1b7f64c456e8730f8e54..37f23397ec47817d56484aa76bb03f64745cbd89 100644
+--- a/chrome/browser/ui/views/toolbar/vpn_status_button.h
++++ b/chrome/browser/ui/views/toolbar/vpn_status_button.h
+@@ -24,9 +24,20 @@ class VpnStatusButton : public ToolbarButton,
+   VpnStatusButton& operator=(const VpnStatusButton&) = delete;
+   ~VpnStatusButton() override;
+ 
++  // The width with the whole text, which the pill takes when the toolbar has
++  // room; with less it shows only its dot, which keeps the color of the route.
++  int GetFullWidth() const { return full_width_; }
++
++  // views::View:
++  gfx::Size GetMinimumSize() const override;
++
+  private:
+   // views::View:
+   void OnThemeChanged() override;
++  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
++
++  // The whole text or the dot, as the width allows.
++  void ShowLabel();
+ 
+   // ToolbarButton:
+   bool ShouldBlendHighlightColor() const override;
+@@ -40,6 +51,11 @@ class VpnStatusButton : public ToolbarButton,
+ 
+   raw_ptr<BrowserWindowInterface> browser_;
+   PrefChangeRegistrar proxy_pref_;
++  std::u16string full_label_;
++  SkColor color_ = SK_ColorTRANSPARENT;
++  int full_width_ = 0;
++  int dot_width_ = 0;
++  bool dot_only_ = false;
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_TOOLBAR_VPN_STATUS_BUTTON_H_

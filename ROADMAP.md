@@ -32,8 +32,13 @@ aggiornamenti di Cromite come tutto il resto.
   stesso colore sulle schede del gruppo, clic sull'etichetta per chiudere o aprire il gruppo (chiuso
   mostra quante schede ha), "Aggiungi scheda a nuovo gruppo" e "Rimuovi dal gruppo" nel menu. Le
   tavole non disegnano i gruppi: è una scelta nostra. Mancano il nome e il colore del gruppo da
-  scegliere e il gruppo per la scheda attiva. Da sistemare: con la finestra molto stretta, le schede
-  spariscono del tutto.
+  scegliere e il gruppo per la scheda attiva. Con la finestra stretta la barra divide lo spazio in
+  quest'ordine: i pulsanti, l'indirizzo al minimo, le icone delle schede, i pulsanti che possono
+  andare nel menu ">>" e il testo della pillola della VPN, l'indirizzo fino alla sua larghezza
+  piena, poi i titoli delle schede (prima quelle vicine all'indirizzo). Le schede che non ci stanno
+  vanno nella capsula "+N", il cui menu le elenca; la pillola della VPN resta col solo pallino
+  colorato. Il calcolo stima i margini, quindi a volte una o due icone in più vanno in "+N". Solo
+  alla larghezza minima della finestra le schede non hanno posto.
 - Claude nella barra: pulsante e pannello laterale come nella tavola, con "Questa pagina" (Claude in
   Chrome, che il browser installa dal Chrome Web Store) e "Le tue chat" (claude.ai). Pulsante del
   profilo con l'omino e pannello "Accedi con Claude". Nella pagina `chrome://proxy` c'è l'elenco
