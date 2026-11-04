@@ -62,8 +62,11 @@ aggiornamenti di Cromite come tutto il resto.
   orario, Storage e Permessi restano "Consentito" (valori veri), WebRTC è "Limitato" (niente indirizzi
   locali), Batteria "Uniformato" (valori fissi). eval e Referrer non si possono contare senza toccare i
   contatori di Blink: "Non contata". Schermo e ClientRects li leggono quasi tutti i siti per
-  l'impaginazione, quindi il numero sullo scudo è raramente zero. Manca l'anteprima vera di quello che
-  il sito ha disegnato ("Cosa ha ricevuto il sito"): il pannello mostra un esempio.
+  l'impaginazione, quindi il numero sullo scudo è raramente zero. Contano anche le letture fatte dentro
+  un iframe vuoto (about:blank o srcdoc), come fa browserleaks.com/canvas: Blink non le manda al
+  browser, quindi le contiamo anche nella pagina che le contiene. Il pannello mostra l'immagine vera
+  che il sito ha ricevuto, già col rumore (canvas da toDataURL, toBlob e getImageData; WebGL da
+  readPixels), al massimo due volte al secondo; finché il sito non legge dice "Nessuna lettura".
 - VPN: pillola nella barra con le scritte e i colori degli schizzi, siti che escono diretti, riserva
   in memoria che finisce da sola (chiusura, 24 ore, server di nuovo su), pagina di errore propria,
   finestrella di conferma e barra rossa come nella tavola Stati.
@@ -258,12 +261,9 @@ richiesti:
   mandato al renderer a ogni navigazione (come il token di Brave, che vive nelle impostazioni del
   sito). I siti da ricordare tengono la loro impronta.
 
-- **Canvas e WebGL:** l'anteprima vera dell'immagine che il sito ha disegnato per ricavare
-  l'impronta, al posto dell'esempio di adesso ("Cosa ha ricevuto il sito" nella tavola). Serve
-  Blink: copiare la tela al momento della lettura e mandarla al browser.
 - **eval e Referrer:** Blink non ha contatori d'uso per questi due; aggiungerli vuol dire cambiare
   `web_feature.mojom`, che ricompila quasi tutto Blink (alcune ore sul Mac): build da lanciare di
-  notte, insieme all'anteprima vera qui sopra.
+  notte.
 - Gli stati delle righe seguono le protezioni: quando arriva la randomizzazione (voce 2), fuso
   orario e WebGL consentito cambiano scritta.
 

@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 08:08:30 +0100
+Subject: [PATCH] Contatore del fingerprinting: conta anche le letture negli
+ iframe vuoti
+
+Fork-Patch: common/0015-contatore-del-fingerprinting-conta-anche-le-letture-negli-if.patch
+
+diff --git a/third_party/blink/renderer/core/frame/use_counter_impl.cc b/third_party/blink/renderer/core/frame/use_counter_impl.cc
+index 63edd3353dad404eedb1b4220836558a6bb51fdf..0197dcdaa35da82fd88bfa4298d8e73866c69523 100644
+--- a/third_party/blink/renderer/core/frame/use_counter_impl.cc
++++ b/third_party/blink/renderer/core/frame/use_counter_impl.cc
+@@ -237,6 +237,19 @@ void UseCounterImpl::Count(const UseCounterFeature& feature,
+       TraceMeasurement(feature);
+   }
+ 
++  // What an about:blank or srcdoc frame uses never reaches the browser, and
++  // an empty frame filled by its page never commits: the page that holds it
++  // counts it too, so the protections panel sees what the site really reads.
++  if (feature.type() == mojom::blink::UseCounterFeatureType::kWebFeature &&
++      source_frame->GetDocument()) {
++    const KURL& url = source_frame->GetDocument()->Url();
++    auto* parent = DynamicTo<LocalFrame>(source_frame->Tree().Parent());
++    if ((url.IsAboutBlankUrl() || url.IsAboutSrcdocUrl()) && parent &&
++        parent->GetDocument()) {
++      parent->GetDocument()->CountUse(static_cast<WebFeature>(feature.value()));
++    }
++  }
++
+   MaybeEmitWebDXFeatureTraceEvent(feature, source_frame);
+ }
+ 

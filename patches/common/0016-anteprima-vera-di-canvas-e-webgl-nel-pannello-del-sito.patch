@@ -1,0 +1,529 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 08:30:29 +0100
+Subject: [PATCH] Anteprima vera di canvas e WebGL nel pannello del sito
+
+Fork-Patch: common/0016-anteprima-vera-di-canvas-e-webgl-nel-pannello-del-sito.patch
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 5efc95fbdf5f4286f64198a0133dcfddcd43eb23..acd0c386514d59bd89b642958a4759479eac3706 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -928,6 +928,7 @@ source_set("core") {
+ 
+   deps = [
+     ":active_use_util",
++    "//third_party/blink/public/mojom:farbling_preview_mojo_bindings",
+     ":after_startup_task_utils",
+     ":bad_message",
+     ":browser_about_handler",
+diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
+index 547d96a968bd9b7db11065c15f760054afcbd2b5..b764ec34ee426a06d1173a78ce0ad51edd865062 100644
+--- a/chrome/browser/chrome_browser_interface_binders.cc
++++ b/chrome/browser/chrome_browser_interface_binders.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/chrome_browser_interface_binders.h"
++#include "chrome/browser/fork/fingerprinting_counter.h"
++#include "third_party/blink/public/mojom/fork/farbling_preview.mojom.h"
+ 
+ #include <utility>
+ 
+@@ -465,6 +467,8 @@ void PopulateChromeFrameBinders(
+     map->Add<geic::mojom::GeicApi>(&geic::BindGeicApi);
+   }
+   map->Add<image_annotation::mojom::Annotator>(&BindImageAnnotator);
++  map->Add<blink::mojom::FarblingPreviewHost>(
++      &browser_fork::BindFarblingPreviewHost);
+ 
+   map->Add<blink::mojom::ScriptToolHost>(
+       &actor::ActorScriptToolReceiver::Create);
+diff --git a/chrome/browser/fork/fingerprinting_counter.cc b/chrome/browser/fork/fingerprinting_counter.cc
+index 70c1b00482745b0a3a0306dd7eba6727945d5332..e0e1bef6d9b66d2cd1e90e283fcc450ee136e7f0 100644
+--- a/chrome/browser/fork/fingerprinting_counter.cc
++++ b/chrome/browser/fork/fingerprinting_counter.cc
+@@ -1,8 +1,10 @@
+ #include "chrome/browser/fork/fingerprinting_counter.h"
+ 
++#include <algorithm>
+ #include <iterator>
+ #include <optional>
+ 
++#include "base/base64.h"
+ #include "base/no_destructor.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "components/content_settings/core/browser/host_content_settings_map.h"
+@@ -12,6 +14,8 @@
+ #include "content/public/browser/page.h"
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/web_contents.h"
++#include "mojo/public/cpp/bindings/self_owned_receiver.h"
++#include "third_party/blink/public/mojom/fork/farbling_preview.mojom.h"
+ #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-shared.h"
+ #include "third_party/blink/public/mojom/use_counter/use_counter_feature.mojom-shared.h"
+ #include "url/gurl.h"
+@@ -180,6 +184,21 @@ class FingerprintingObserver
+   }
+ };
+ 
++class FarblingPreviewHostImpl : public blink::mojom::FarblingPreviewHost {
++ public:
++  explicit FarblingPreviewHostImpl(content::GlobalRenderFrameHostId frame)
++      : frame_(frame) {}
++
++  // blink::mojom::FarblingPreviewHost:
++  void ReportImage(bool webgl, const std::vector<uint8_t>& png) override {
++    FingerprintingCounter::SetPreview(content::RenderFrameHost::FromID(frame_),
++                                      webgl, png);
++  }
++
++ private:
++  const content::GlobalRenderFrameHostId frame_;
++};
++
+ }  // namespace
+ 
+ FingerprintingCounter::FingerprintingCounter(content::Page& page)
+@@ -243,6 +262,41 @@ int FingerprintingCounter::GetBlocked(content::WebContents* contents) {
+   return blocked;
+ }
+ 
++// static
++std::string FingerprintingCounter::GetPreview(content::WebContents* contents,
++                                              bool webgl) {
++  FingerprintingCounter* counter =
++      contents ? GetForPage(contents->GetPrimaryPage()) : nullptr;
++  if (!counter) {
++    return std::string();
++  }
++  return webgl ? counter->webgl_preview_ : counter->canvas_preview_;
++}
++
++// static
++void FingerprintingCounter::SetPreview(
++    content::RenderFrameHost* render_frame_host,
++    bool webgl,
++    const std::vector<uint8_t>& png) {
++  // A small PNG, nothing else: it comes from the page's process.
++  static constexpr uint8_t kSignature[] = {0x89, 'P', 'N', 'G',
++                                           '\r', '\n', 0x1a, '\n'};
++  if (!render_frame_host || png.size() > 256 * 1024 ||
++      png.size() < sizeof(kSignature) ||
++      !std::equal(std::begin(kSignature), std::end(kSignature),
++                  png.begin())) {
++    return;
++  }
++  content::Page& page = render_frame_host->GetOutermostMainFrame()->GetPage();
++  FingerprintingCounter* counter = GetOrCreateForPage(page);
++  (webgl ? counter->webgl_preview_ : counter->canvas_preview_) =
++      "data:image/png;base64," + base::Base64Encode(png);
++  if (page.IsPrimary()) {
++    GetCallbacks().Notify(
++        content::WebContents::FromRenderFrameHost(render_frame_host));
++  }
++}
++
+ // static
+ base::CallbackListSubscription FingerprintingCounter::RegisterChangedCallback(
+     base::RepeatingCallback<void(content::WebContents*)> callback) {
+@@ -254,6 +308,14 @@ CreateFingerprintingObserver() {
+   return std::make_unique<FingerprintingObserver>();
+ }
+ 
++void BindFarblingPreviewHost(
++    content::RenderFrameHost* render_frame_host,
++    mojo::PendingReceiver<blink::mojom::FarblingPreviewHost> receiver) {
++  mojo::MakeSelfOwnedReceiver(std::make_unique<FarblingPreviewHostImpl>(
++                                  render_frame_host->GetGlobalId()),
++                              std::move(receiver));
++}
++
+ PAGE_USER_DATA_KEY_IMPL(FingerprintingCounter);
+ 
+ }  // namespace browser_fork
+diff --git a/chrome/browser/fork/fingerprinting_counter.h b/chrome/browser/fork/fingerprinting_counter.h
+index f3e724dbc52e9b3c7bc654115a8aae0dc05323ce..13f1e7a8ddb15fc3b77553904b0bb7eb8c1a6f3b 100644
+--- a/chrome/browser/fork/fingerprinting_counter.h
++++ b/chrome/browser/fork/fingerprinting_counter.h
+@@ -3,11 +3,14 @@
+ 
+ #include <array>
+ #include <memory>
++#include <string>
+ #include <vector>
+ 
+ #include "base/callback_list.h"
+ #include "base/functional/callback.h"
+ #include "content/public/browser/page_user_data.h"
++#include "mojo/public/cpp/bindings/pending_receiver.h"
++#include "third_party/blink/public/mojom/fork/farbling_preview.mojom-forward.h"
+ #include "third_party/blink/public/common/use_counter/use_counter_feature.h"
+ 
+ namespace content {
+@@ -64,6 +67,15 @@ class FingerprintingCounter
+   // shield.
+   static int GetBlocked(content::WebContents* contents);
+ 
++  // The last image the page shown in the tab read from a canvas or from
++  // WebGL, with the noise, as a data: URL; empty when it read none.
++  static std::string GetPreview(content::WebContents* contents, bool webgl);
++
++  // An image a frame of the page read, from the renderer.
++  static void SetPreview(content::RenderFrameHost* render_frame_host,
++                         bool webgl,
++                         const std::vector<uint8_t>& png);
++
+   // Called when the counts of the page shown in a tab change.
+   static base::CallbackListSubscription RegisterChangedCallback(
+       base::RepeatingCallback<void(content::WebContents*)> callback);
+@@ -74,6 +86,8 @@ class FingerprintingCounter
+   explicit FingerprintingCounter(content::Page& page);
+ 
+   std::array<int, kCategoryCount> counts_ = {};
++  std::string canvas_preview_;
++  std::string webgl_preview_;
+ 
+   PAGE_USER_DATA_KEY_DECL();
+ };
+@@ -82,6 +96,11 @@ class FingerprintingCounter
+ std::unique_ptr<page_load_metrics::PageLoadMetricsObserver>
+ CreateFingerprintingObserver();
+ 
++// The renderer sends there the images the sites read.
++void BindFarblingPreviewHost(
++    content::RenderFrameHost* render_frame_host,
++    mojo::PendingReceiver<blink::mojom::FarblingPreviewHost> receiver);
++
+ }  // namespace browser_fork
+ 
+ #endif  // CHROME_BROWSER_FORK_FINGERPRINTING_COUNTER_H_
+diff --git a/chrome/browser/resources/site_panel.html b/chrome/browser/resources/site_panel.html
+index 484b3dc89177b3b0d001661990cca8d12559e849..d160db7d28ff9a288b5e131bfd08c82278055996 100644
+--- a/chrome/browser/resources/site_panel.html
++++ b/chrome/browser/resources/site_panel.html
+@@ -60,6 +60,9 @@ h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--sub); }
+ figure { margin: 0; }
+ .preview { height: 64px; border-radius: 8px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--sep); background: var(--canvas-bg); }
+ .preview.blocked { background: repeating-linear-gradient(135deg, var(--stripe-a) 0 7px, var(--stripe-b) 7px 14px); display: flex; align-items: center; justify-content: center; }
++.preview img { display: block; width: 100%; height: 100%; object-fit: contain; }
++.preview:not(.blocked) span { display: flex; height: 100%; align-items: center; justify-content: center; color: var(--sub); font-size: 11px; }
++.preview img:not([src]), .preview img[src] + span { display: none; }
+ .preview.blocked span { padding: 3px 9px; border-radius: 9px; background: var(--chip-solid); color: var(--red); font-size: 11px; font-weight: 700; }
+ figcaption { margin-top: 4px; font-size: 11px; color: var(--sub); }
+ #webgl { margin-top: 8px; width: 100%; min-height: 28px; padding: 0 10px; border: 0; border-radius: 10px; background: var(--field); color: var(--accent); font-size: 12px; font-weight: 600; }
+@@ -88,16 +91,16 @@ figcaption { margin-top: 4px; font-size: 11px; color: var(--sub); }
+     <h3>Come risponde il browser</h3>
+     <div class="previews">
+       <figure>
+-        <div class="preview"><svg width="100%" height="64" viewBox="0 0 160 64" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><rect x="96" y="6" width="56" height="18" fill="#ff6600"></rect><text x="6" y="30" font-family="Arial, sans-serif" font-size="11" fill="#006699">Cwm fjordbank glyphs</text><text x="9" y="46" font-family="Arial, sans-serif" font-size="11" fill="rgba(102,204,0,0.75)">vext quiz</text><rect x="23" y="12" width="2" height="2" fill="#d22"></rect><rect x="61" y="51" width="2" height="2" fill="#2a2"></rect><rect x="118" y="38" width="2" height="2" fill="#22d"></rect><rect x="140" y="53" width="2" height="2" fill="#d2d"></rect><rect x="78" y="17" width="2" height="2" fill="#2dd"></rect><rect x="44" y="57" width="2" height="2" fill="#dd2"></rect><rect x="103" y="49" width="2" height="2" fill="#d22"></rect></svg></div>
+-        <figcaption>Canvas · con rumore diverso per sito</figcaption>
++        <div class="preview" id="canvas-preview"><img alt=""><span>Nessuna lettura</span></div>
++        <figcaption>Canvas · come l'ha ricevuto il sito</figcaption>
+       </figure>
+       <figure id="webgl-off">
+         <div class="preview blocked"><span>WebGL bloccato</span></div>
+         <figcaption>WebGL · nessuna immagine</figcaption>
+       </figure>
+       <figure id="webgl-on" hidden>
+-        <div class="preview"><svg width="100%" height="64" viewBox="0 0 160 64" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><polygon points="80,6 142,58 18,58" fill="#2f6fd6" opacity="0.85"></polygon><polygon points="80,6 111,32 49,32" fill="#e8a33a" opacity="0.85"></polygon><polygon points="49,32 80,58 18,58" fill="#3fa36b" opacity="0.8"></polygon></svg></div>
+-        <figcaption>WebGL · rumore e GPU generica</figcaption>
++        <div class="preview" id="webgl-preview"><img alt=""><span>Nessuna lettura</span></div>
++        <figcaption>WebGL · come l'ha ricevuto il sito</figcaption>
+       </figure>
+     </div>
+     <button id="webgl"></button>
+diff --git a/chrome/browser/resources/site_panel.js b/chrome/browser/resources/site_panel.js
+index f21c5f02c9ea2492353b6abcf2b2a9e21d860827..4a743a4b458cca5085bb305ca593d8d5069ffb50 100644
+--- a/chrome/browser/resources/site_panel.js
++++ b/chrome/browser/resources/site_panel.js
+@@ -62,6 +62,16 @@ window.SitePanel = (function() {
+     $('route').className = s.route;
+     $('route-text').textContent = routeText(s);
+     showFingerprinting(s);
++    // What the site received, with the noise; nothing until it reads.
++    for (const [id, src] of [['canvas-preview', s.canvasPreview],
++                             ['webgl-preview', s.webglPreview]]) {
++      const img = $(id).querySelector('img');
++      if (src) {
++        img.src = src;
++      } else {
++        img.removeAttribute('src');
++      }
++    }
+     $('webgl-on').hidden = !s.webgl;
+     $('webgl-off').hidden = s.webgl;
+     $('webgl').classList.toggle('on', s.webgl);
+diff --git a/chrome/browser/ui/webui/site_panel_ui.cc b/chrome/browser/ui/webui/site_panel_ui.cc
+index f93675b23e474cdf025c5e659213f284cb7b1ebb..344220611cea936c572ce90fe1f0768180f44caf 100644
+--- a/chrome/browser/ui/webui/site_panel_ui.cc
++++ b/chrome/browser/ui/webui/site_panel_ui.cc
+@@ -202,6 +202,10 @@ class SitePanelHandler : public content::WebUIMessageHandler {
+     state.Set("fp", std::move(rows));
+     state.Set("fpBlocked",
+               browser_fork::FingerprintingCounter::GetBlocked(contents));
++    state.Set("canvasPreview", browser_fork::FingerprintingCounter::GetPreview(
++                                   contents, /*webgl=*/false));
++    state.Set("webglPreview", browser_fork::FingerprintingCounter::GetPreview(
++                                  contents, /*webgl=*/true));
+     return state;
+   }
+ 
+diff --git a/third_party/blink/public/mojom/BUILD.gn b/third_party/blink/public/mojom/BUILD.gn
+index f51eea19325bc025500f04c577e14b6ae7457b0c..e71d54102a44385bb1ec7b5ad9d0ba922826aae4 100644
+--- a/third_party/blink/public/mojom/BUILD.gn
++++ b/third_party/blink/public/mojom/BUILD.gn
+@@ -1733,6 +1733,15 @@ mojom("embedded_frame_sink_mojo_bindings") {
+   export_header_blink = "third_party/blink/public/platform/web_common.h"
+ }
+ 
++# The image a site read with the noise, for the protections panel.
++mojom("farbling_preview_mojo_bindings") {
++  sources = [ "fork/farbling_preview.mojom" ]
++
++  export_class_attribute_blink = "PLATFORM_EXPORT"
++  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
++  export_header_blink = "third_party/blink/renderer/platform/platform_export.h"
++}
++
+ mojom("memory_usage_monitor_linux_mojo_bindings") {
+   visibility = [
+     "//content/browser",
+diff --git a/third_party/blink/public/mojom/fork/farbling_preview.mojom b/third_party/blink/public/mojom/fork/farbling_preview.mojom
+new file mode 100644
+index 0000000000000000000000000000000000000000..187266e2fa2c2740e4f062b8728b5824cf08a432
+--- /dev/null
++++ b/third_party/blink/public/mojom/fork/farbling_preview.mojom
+@@ -0,0 +1,8 @@
++module blink.mojom;
++
++// The image a site read from a canvas or from WebGL, already with the noise
++// against fingerprinting: the protections panel shows what the site really
++// received. A small PNG, at most twice a second.
++interface FarblingPreviewHost {
++  ReportImage(bool webgl, array<uint8> png);
++};
+diff --git a/third_party/blink/renderer/core/BUILD.gn b/third_party/blink/renderer/core/BUILD.gn
+index 8969a71c827f03bfa1b472b2ec30f8b5c6726c1f..877ba6d3edb00542dc21e3d4579cefa8db16b0d9 100644
+--- a/third_party/blink/renderer/core/BUILD.gn
++++ b/third_party/blink/renderer/core/BUILD.gn
+@@ -187,6 +187,7 @@ source_set("prerequisites") {
+     "//services/service_manager/public/cpp",
+     "//skia",
+     "//third_party/blink/public/mojom:color_scheme_mojo_bindings",
++    "//third_party/blink/public/mojom:farbling_preview_mojo_bindings_blink",
+     "//third_party/blink/public/mojom:mojom_core_blink",
+     "//third_party/blink/renderer/bindings/core/v8:generated",
+     "//third_party/blink/renderer/core/animation:buildflags",
+diff --git a/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.cc b/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.cc
+index 4c5af5f0dd6da9932762f5b8b13fd2425ee0c1af..4ff4c1c92cf0b899220f58796bacac8d72451904 100644
+--- a/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.cc
++++ b/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.cc
+@@ -11,9 +11,13 @@
+ #include "base/rand_util.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "crypto/hmac.h"
++#include "mojo/public/cpp/bindings/remote.h"
++#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
++#include "third_party/blink/public/mojom/fork/farbling_preview.mojom-blink.h"
+ #include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/core/frame/local_frame.h"
+ #include "third_party/blink/renderer/platform/fork_farbling.h"
+ #include "third_party/blink/renderer/platform/network/blink_schemeful_site.h"
+ #include "third_party/blink/renderer/platform/storage/blink_storage_key.h"
+@@ -65,6 +69,23 @@ uint64_t SeedOfRunningScript() {
+   return FarblingSeed(ExecutionContext::From(isolate->GetCurrentContext()));
+ }
+ 
++// To the browser, for the panel of the page whose script read the image.
++void SendPreviewOfRunningScript(bool webgl, base::span<const uint8_t> png) {
++  v8::Isolate* isolate = v8::Isolate::TryGetCurrent();
++  if (!isolate || !isolate->InContext()) {
++    return;
++  }
++  auto* window = DynamicTo<LocalDOMWindow>(
++      ExecutionContext::From(isolate->GetCurrentContext()));
++  if (!window || !window->GetFrame()) {
++    return;
++  }
++  mojo::Remote<mojom::blink::FarblingPreviewHost> host;
++  window->GetFrame()->GetBrowserInterfaceBroker().GetInterface(
++      host.BindNewPipeAndPassReceiver());
++  host->ReportImage(webgl, Vector<uint8_t>(png));
++}
++
+ }  // namespace
+ 
+ uint64_t FarblingSeed(ExecutionContext* context) {
+@@ -86,6 +107,7 @@ uint64_t FarblingSeed(ExecutionContext* context) {
+ 
+ void InstallFarblingSeedProvider() {
+   SetFarblingSeedProvider(&SeedOfRunningScript);
++  SetFarblingPreviewSink(&SendPreviewOfRunningScript);
+ }
+ 
+ }  // namespace blink
+diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+index 6e4557c372cb230ee6abee6b1d1a558045b0b35e..fb2210451adedbb9504c3025f846d2c3959f921f 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -165,6 +165,7 @@
+ #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
+ #include "third_party/blink/renderer/platform/wtf/text/string_utf8_adaptor.h"
+ #include "third_party/skia/include/core/SkColorType.h"
++#include "third_party/skia/include/core/SkPixmap.h"
+ #include "third_party/skia/include/core/SkImage.h"
+ #include "third_party/skia/include/gpu/ganesh/GrTypes.h"
+ #include "ui/gfx/geometry/size.h"
+@@ -5472,6 +5473,14 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
+       const uint64_t pixel = random.Below(size / 4);
+       bytes[pixel * 4 + random.Below(3)] ^= 1;
+     }
++    // What the site received, for the protections panel.
++    if (size == static_cast<size_t>(width) * height * 4) {
++      ReportFarbledImage(
++          SkPixmap(SkImageInfo::Make(width, height, kRGBA_8888_SkColorType,
++                                     kUnpremul_SkAlphaType),
++                   data, static_cast<size_t>(width) * 4),
++          /*webgl=*/true, /*flip_y=*/true);
++    }
+   }
+ }
+ 
+diff --git a/third_party/blink/renderer/platform/fork_farbling.cc b/third_party/blink/renderer/platform/fork_farbling.cc
+index 88628d4849339360cbbf71ea118e88f150575ff9..d7eb73882763aa5c02acaf3de76eee610a6a525f 100644
+--- a/third_party/blink/renderer/platform/fork_farbling.cc
++++ b/third_party/blink/renderer/platform/fork_farbling.cc
+@@ -1,14 +1,28 @@
+ #include "third_party/blink/renderer/platform/fork_farbling.h"
+ 
++#include <algorithm>
+ #include <atomic>
+ 
+ #include "base/rand_util.h"
++#include "base/time/time.h"
++#include "third_party/blink/renderer/platform/image-encoders/image_encoder.h"
++#include "third_party/blink/renderer/platform/wtf/vector.h"
++#include "third_party/blink/renderer/platform/wtf/wtf.h"
++#include "third_party/skia/include/core/SkBitmap.h"
++#include "third_party/skia/include/core/SkCanvas.h"
++#include "third_party/skia/include/core/SkImage.h"
++#include "third_party/skia/include/core/SkPixmap.h"
+ 
+ namespace blink {
+ 
+ namespace {
+ 
+ std::atomic<FarblingSeedProvider> g_provider{nullptr};
++std::atomic<FarblingPreviewSink> g_preview_sink{nullptr};
++
++// As big as the image of the panel.
++constexpr int kPreviewWidth = 320;
++constexpr int kPreviewHeight = 128;
+ 
+ constinit thread_local bool g_has_scoped_seed = false;
+ constinit thread_local uint64_t g_scoped_seed = 0;
+@@ -46,6 +60,55 @@ ScopedFarblingSeed::~ScopedFarblingSeed() {
+   g_scoped_seed = previous_seed_;
+ }
+ 
++void SetFarblingPreviewSink(FarblingPreviewSink sink) {
++  g_preview_sink.store(sink);
++}
++
++void ReportFarbledImage(const SkPixmap& pixmap, bool webgl, bool flip_y) {
++  FarblingPreviewSink sink = g_preview_sink.load();
++  if (!sink || !IsMainThread() || pixmap.width() < 8 || pixmap.height() < 8) {
++    return;
++  }
++  // Twice a second at most, so a page that reads in a loop doesn't pay for
++  // it.
++  static base::TimeTicks last_canvas;
++  static base::TimeTicks last_webgl;
++  base::TimeTicks& last = webgl ? last_webgl : last_canvas;
++  const base::TimeTicks now = base::TimeTicks::Now();
++  if (!last.is_null() && now - last < base::Milliseconds(500)) {
++    return;
++  }
++  last = now;
++
++  const double scale = std::min(
++      {1.0, static_cast<double>(kPreviewWidth) / pixmap.width(),
++       static_cast<double>(kPreviewHeight) / pixmap.height()});
++  const int width = std::max(1, static_cast<int>(pixmap.width() * scale));
++  const int height = std::max(1, static_cast<int>(pixmap.height() * scale));
++  SkBitmap bitmap;
++  if (!bitmap.tryAllocPixels(SkImageInfo::MakeN32Premul(width, height))) {
++    return;
++  }
++  sk_sp<SkImage> image = SkImages::RasterFromPixmapCopy(pixmap);
++  if (!image) {
++    return;
++  }
++  SkCanvas canvas(bitmap);
++  canvas.clear(SK_ColorTRANSPARENT);
++  if (flip_y) {
++    canvas.translate(0, height);
++    canvas.scale(1, -1);
++  }
++  canvas.drawImageRect(image, SkRect::MakeIWH(width, height),
++                       SkSamplingOptions(SkFilterMode::kLinear));
++  Vector<unsigned char> png;
++  if (!ImageEncoder::Encode(&png, bitmap.pixmap(),
++                            SkPngRustEncoder::CompressionLevel::kLow)) {
++    return;
++  }
++  sink(webgl, base::span(png));
++}
++
+ uint64_t FarblingHash(uint64_t seed, base::span<const uint8_t> data) {
+   // FNV-1a over the bytes, then mixed once more with the seed.
+   uint64_t hash = 0xcbf29ce484222325ull;
+diff --git a/third_party/blink/renderer/platform/fork_farbling.h b/third_party/blink/renderer/platform/fork_farbling.h
+index 2f7f4a64c2dd15a9a12b03d217aead943c6e5c92..06efe40e9df57d01b9630e8a1a222ee51b17a7a5 100644
+--- a/third_party/blink/renderer/platform/fork_farbling.h
++++ b/third_party/blink/renderer/platform/fork_farbling.h
+@@ -6,6 +6,8 @@
+ #include "base/containers/span.h"
+ #include "third_party/blink/renderer/platform/platform_export.h"
+ 
++class SkPixmap;
++
+ namespace blink {
+ 
+ // The noise against fingerprinting comes from a seed that is the same on a
+@@ -55,6 +57,18 @@ class FarblingRandom {
+   uint64_t state_;
+ };
+ 
++// The image a site read, already with the noise, so the protections panel can
++// show what the site really received: a small PNG, which core sends to the
++// browser.
++using FarblingPreviewSink = void (*)(bool webgl,
++                                     base::span<const uint8_t> png);
++PLATFORM_EXPORT void SetFarblingPreviewSink(FarblingPreviewSink sink);
++
++// After the noise of a read; `flip_y` for the rows of WebGL, bottom first.
++PLATFORM_EXPORT void ReportFarbledImage(const SkPixmap& pixmap,
++                                        bool webgl,
++                                        bool flip_y = false);
++
+ // Mixes `data` into `seed`: the same content on the same site gets the same
+ // noise.
+ PLATFORM_EXPORT uint64_t FarblingHash(uint64_t seed,
+diff --git a/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc b/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
+index 97cd95bae3621ab8bfeddfc31ee1290b518bdfa3..20a15fae828a108cc05f4783134d0b46a05ae674 100644
+--- a/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
++++ b/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
+@@ -260,6 +260,9 @@ void StaticBitmapImage::ShuffleSubchannelColorData(const SkPixmap& src_data,
+          return;
+     }
+   }
++
++  // What the site received, for the protections panel.
++  ReportFarbledImage(src_data, /*webgl=*/false);
+ }
+ 
+ #undef shuffleComponent
