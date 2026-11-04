@@ -1,0 +1,352 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 09:18:16 +0100
+Subject: [PATCH] mac: gruppi di schede nelle schede nella barra
+
+Fork-Patch: macos/0013-gruppi-di-schede-nelle-schede-nella-barra.patch
+
+diff --git a/chrome/browser/ui/views/toolbar/compact_tabs_view.cc b/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
+index e156efff2d02d78e39ff03d2f4700a04a9a835f2..a80746f07072c9ac630d9cbcb878ef8112d7fd42 100644
+--- a/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
++++ b/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
+@@ -1,9 +1,12 @@
+ #include "chrome/browser/ui/views/toolbar/compact_tabs_view.h"
+ 
+ #include <algorithm>
++#include <optional>
+ #include <string>
++#include <vector>
+ 
+ #include "base/functional/bind.h"
++#include "base/strings/string_number_conversions.h"
+ #include "cc/paint/paint_flags.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+@@ -26,8 +29,14 @@
+ #include "chrome/browser/favicon/favicon_utils.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/tabs/tab_enums.h"
++#include "chrome/browser/ui/tabs/tab_group_model.h"
++#include "chrome/browser/ui/tabs/tab_group_theme.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
++#include "components/tab_groups/tab_group_color.h"
++#include "components/tab_groups/tab_group_id.h"
++#include "components/tab_groups/tab_group_visual_data.h"
++#include "components/tabs/public/tab_group.h"
+ #include "content/public/browser/web_contents.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/base/models/image_model.h"
+@@ -36,6 +45,7 @@
+ #include "ui/gfx/color_utils.h"
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/background.h"
++#include "ui/views/border.h"
+ #include "ui/views/controls/button/label_button.h"
+ #include "ui/views/layout/flex_layout.h"
+ #include "ui/views/view_class_properties.h"
+@@ -61,6 +71,16 @@ constexpr int kTabsFlexOrder = 1900;
+ // How far below the toolbar a dragged tab goes to its own window.
+ constexpr int kDetachDistance = 40;
+ 
++// The group, if it still exists.
++const TabGroup* GroupOf(
++    const TabStripModel* model,
++    const std::optional<tab_groups::TabGroupId>& id) {
++  TabGroupModel* groups = model->group_model();
++  return id && groups && groups->ContainsTabGroup(*id)
++             ? groups->GetTabGroup(*id)
++             : nullptr;
++}
++
+ // The X of the boards, drawn where the icon of the site was.
+ class CloseImageSource : public gfx::CanvasImageSource {
+  public:
+@@ -120,6 +140,8 @@ class CompactTabChip : public views::LabelButton,
+     favicon_ = ui::ImageModel::FromImage(
+         favicon.IsEmpty() ? favicon::GetDefaultFavicon() : favicon);
+     SetImageModel(views::Button::STATE_NORMAL, favicon_);
++    group_ = model_->GetTabGroupForTab(index);
++    UpdateBackground();
+     UpdateCloseIcon();
+   }
+ 
+@@ -142,6 +164,17 @@ class CompactTabChip : public views::LabelButton,
+                                      IDS_TAB_CXMENU_CLOSETAB);
+     menu_model_->AddItemWithStringId(TabStripModel::CommandCloseOtherTabs,
+                                      IDS_TAB_CXMENU_CLOSEOTHERTABS);
++    if (model_->SupportsTabGroups()) {
++      menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
++      if (group_) {
++        menu_model_->AddItemWithStringId(TabStripModel::CommandRemoveFromGroup,
++                                         IDS_TAB_CXMENU_REMOVE_TAB_FROM_GROUP);
++      } else {
++        menu_model_->AddItem(TabStripModel::CommandAddToNewGroup,
++                             l10n_util::GetPluralStringFUTF16(
++                                 IDS_TAB_CXMENU_ADD_TAB_TO_NEW_GROUP, 1));
++      }
++    }
+     menu_runner_ = std::make_unique<views::MenuRunner>(
+         menu_model_.get(), views::MenuRunner::CONTEXT_MENU);
+     menu_runner_->RunMenuAt(GetWidget(), nullptr, gfx::Rect(point, gfx::Size()),
+@@ -156,7 +189,20 @@ class CompactTabChip : public views::LabelButton,
+   }
+ 
+   void ExecuteCommand(int command_id, int event_flags) override {
+-    if (model_->ContainsIndex(index_)) {
++    if (!model_->ContainsIndex(index_)) {
++      return;
++    }
++    // Straight to the model: the command of Chromium opens the editor of the
++    // group on the tab strip, which this window doesn't show.
++    if (command_id == TabStripModel::CommandAddToNewGroup) {
++      model_->AddToNewGroup({index_});
++      return;
++    }
++    if (command_id == TabStripModel::CommandRemoveFromGroup) {
++      model_->RemoveFromGroup({index_});
++      return;
++    }
++    {
+       model_->ExecuteContextMenuCommand(
+           index_, static_cast<TabStripModel::ContextMenuCommand>(command_id));
+     }
+@@ -257,6 +303,18 @@ class CompactTabChip : public views::LabelButton,
+         dark ? SkColorSetA(SK_ColorWHITE, hovered ? 0x2e : 0x1a)
+              : SkColorSetA(SK_ColorBLACK, hovered ? 0x1f : 0x12),
+         kChipHeight / 2));
++    // A tab of a group has its color around it.
++    const TabGroup* group = GroupOf(model_, group_);
++    if (group) {
++      SetBorder(views::CreatePaddedBorder(
++          views::CreateRoundedRectBorder(
++              2, kChipHeight / 2,
++              GetColorProvider()->GetColor(GetTabGroupTabStripColorId(
++                  group->visual_data()->color(), /*active_frame=*/true))),
++          gfx::Insets::VH(0, 8)));
++    } else {
++      SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, 10)));
++    }
+   }
+ 
+   // With the pointer on the tab, the X takes the place of the icon, as in
+@@ -296,7 +354,9 @@ class CompactTabChip : public views::LabelButton,
+     for (views::View* child : toolbar->children()) {
+       if (views::IsViewClass<CompactTabsView>(child)) {
+         for (views::View* chip : child->children()) {
+-          count(chip, static_cast<CompactTabChip*>(chip)->index());
++          if (auto* tab = views::AsViewClass<CompactTabChip>(chip)) {
++            count(tab, tab->index());
++          }
+         }
+       }
+     }
+@@ -331,6 +391,7 @@ class CompactTabChip : public views::LabelButton,
+ 
+   const raw_ptr<TabStripModel> model_;
+   int index_ = TabStripModel::kNoTab;
++  std::optional<tab_groups::TabGroupId> group_;
+   gfx::Point press_point_;
+   bool dragging_ = false;
+   ui::ImageModel favicon_;
+@@ -338,6 +399,103 @@ class CompactTabChip : public views::LabelButton,
+   std::unique_ptr<views::MenuRunner> menu_runner_;
+ };
+ 
++// The label of a group of tabs, in its color, before its first tab: a click
++// closes or opens the group; closed, it says how many tabs it holds.
++class CompactGroupHeader : public views::LabelButton {
++  METADATA_HEADER(CompactGroupHeader, views::LabelButton)
++
++ public:
++  explicit CompactGroupHeader(TabStripModel* model)
++      : views::LabelButton(base::BindRepeating(&CompactGroupHeader::OnPressed,
++                                               base::Unretained(this))),
++        model_(model) {
++    SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, 10)));
++    SetMinSize(gfx::Size(kChipHeight, kChipHeight));
++    SetMaxSize(gfx::Size(kChipMaxWidth, kChipHeight));
++    SetHorizontalAlignment(gfx::ALIGN_CENTER);
++  }
++
++  void SetGroup(const tab_groups::TabGroupId& group) {
++    group_ = group;
++    const TabGroup* tab_group = GroupOf(model_, group_);
++    if (!tab_group) {
++      return;
++    }
++    const tab_groups::TabGroupVisualData* visuals = tab_group->visual_data();
++    std::u16string text = visuals->title();
++    if (visuals->is_collapsed()) {
++      const std::u16string count =
++          base::NumberToString16(tab_group->tab_count());
++      text = text.empty() ? count : text + u" · " + count;
++    }
++    SetText(text);
++    const std::u16string name =
++        (visuals->title().empty() ? u"Gruppo di schede" : visuals->title()) +
++        (visuals->is_collapsed() ? u", chiuso: clic per aprirlo"
++                                 : u", aperto: clic per chiuderlo");
++    SetTooltipText(name);
++    GetViewAccessibility().SetName(name);
++    UpdateColors();
++  }
++
++  // views::View:
++  gfx::Size GetMinimumSize() const override {
++    return gfx::Size(kChipHeight, kChipHeight);
++  }
++
++  void OnThemeChanged() override {
++    views::LabelButton::OnThemeChanged();
++    UpdateColors();
++  }
++
++ private:
++  void UpdateColors() {
++    const TabGroup* tab_group = GroupOf(model_, group_);
++    if (!GetColorProvider() || !tab_group) {
++      return;
++    }
++    const SkColor color = GetColorProvider()->GetColor(
++        GetTabGroupTabStripColorId(tab_group->visual_data()->color(),
++                                   /*active_frame=*/true));
++    SetBackground(views::CreateRoundedRectBackground(color, kChipHeight / 2));
++    const SkColor text = color_utils::GetColorWithMaxContrast(color);
++    SetTextColor(ButtonState::STATE_NORMAL, text);
++    SetTextColor(ButtonState::STATE_HOVERED, text);
++    SetTextColor(ButtonState::STATE_PRESSED, text);
++  }
++
++  void OnPressed() {
++    const TabGroup* tab_group = GroupOf(model_, group_);
++    if (!tab_group) {
++      return;
++    }
++    tab_groups::TabGroupVisualData visuals = *tab_group->visual_data();
++    const bool collapse = !visuals.is_collapsed();
++    // The tab shown can't stay in a closed group: as in Chromium, the first
++    // tab outside the group takes its place, and with none the group stays.
++    if (collapse && model_->GetTabGroupForTab(model_->active_index()) ==
++                        group_) {
++      const gfx::Range tabs = tab_group->ListTabs();
++      const int next = static_cast<int>(tabs.end()) < model_->count()
++                           ? static_cast<int>(tabs.end())
++                           : static_cast<int>(tabs.start()) - 1;
++      if (next < 0) {
++        return;
++      }
++      model_->ActivateTabAt(next);
++    }
++    model_->ChangeTabGroupVisuals(
++        *group_, tab_groups::TabGroupVisualData(visuals.title(),
++                                                visuals.color(), collapse));
++  }
++
++  const raw_ptr<TabStripModel> model_;
++  std::optional<tab_groups::TabGroupId> group_;
++};
++
++BEGIN_METADATA(CompactGroupHeader)
++END_METADATA
++
+ // The icon of the boards: a window with the sidebar on the left.
+ class SidebarImageSource : public gfx::CanvasImageSource {
+  public:
+@@ -455,24 +613,74 @@ void CompactTabsView::OnTabChangedAt(tabs::TabInterface* tab,
+   Update();
+ }
+ 
++void CompactTabsView::OnTabGroupChanged(const TabGroupChange& change) {
++  Update();
++}
++
+ void CompactTabsView::Update() {
+   const int active = model_->active_index();
+   const int first = side_ == Side::kBeforeActive ? 0 : active + 1;
+   const int last =
+       side_ == Side::kBeforeActive ? std::max(active, 0) : model_->count();
+-  const size_t wanted = active == TabStripModel::kNoTab
+-                            ? 0
+-                            : static_cast<size_t>(std::max(last - first, 0));
+-  while (children().size() > wanted) {
+-    RemoveChildViewT(children().back());
++
++  // The row: a label before the first tab of each group, and no tabs of the
++  // closed groups. A group that starts with the address has its label at the
++  // end of the tabs before it.
++  struct Entry {
++    int index;
++    std::optional<tab_groups::TabGroupId> header;
++  };
++  std::vector<Entry> entries;
++  if (active != TabStripModel::kNoTab) {
++    const auto starts_group = [&](int i) {
++      const std::optional<tab_groups::TabGroupId> group =
++          model_->GetTabGroupForTab(i);
++      return group && (i == 0 || model_->GetTabGroupForTab(i - 1) != group);
++    };
++    for (int i = first; i < last; ++i) {
++      const std::optional<tab_groups::TabGroupId> group =
++          model_->GetTabGroupForTab(i);
++      if (starts_group(i)) {
++        entries.push_back({i, group});
++      }
++      if (!group || !model_->IsGroupCollapsed(*group)) {
++        entries.push_back({i, std::nullopt});
++      }
++    }
++    if (side_ == Side::kBeforeActive && starts_group(active)) {
++      entries.push_back({active, model_->GetTabGroupForTab(active)});
++    }
+   }
+-  while (children().size() < wanted) {
+-    AddChildView(std::make_unique<CompactTabChip>(model_));
++
++  // The views already there stay where they are, so a menu open or a drag
++  // under way isn't cut when a title changes.
++  for (size_t i = 0; i < entries.size(); ++i) {
++    views::View* view = i < children().size() ? children()[i] : nullptr;
++    const bool header = entries[i].header.has_value();
++    if (view && (header ? views::IsViewClass<CompactGroupHeader>(view)
++                        : views::IsViewClass<CompactTabChip>(view))) {
++      if (header) {
++        static_cast<CompactGroupHeader*>(view)->SetGroup(*entries[i].header);
++      } else {
++        static_cast<CompactTabChip*>(view)->SetTab(entries[i].index);
++      }
++      continue;
++    }
++    if (view) {
++      RemoveChildViewT(view);
++    }
++    if (header) {
++      AddChildViewAt(std::make_unique<CompactGroupHeader>(model_), i)
++          ->SetGroup(*entries[i].header);
++    } else {
++      AddChildViewAt(std::make_unique<CompactTabChip>(model_), i)
++          ->SetTab(entries[i].index);
++    }
+   }
+-  for (size_t i = 0; i < wanted; ++i) {
+-    static_cast<CompactTabChip*>(children()[i])
+-        ->SetTab(first + static_cast<int>(i));
++  while (children().size() > entries.size()) {
++    RemoveChildViewT(children().back());
+   }
++  const size_t wanted = entries.size();
+   // The two sides share the space by tab: the toolbar takes from each what is
+   // over its smallest size, in proportion to the weight.
+   SetProperty(
+diff --git a/chrome/browser/ui/views/toolbar/compact_tabs_view.h b/chrome/browser/ui/views/toolbar/compact_tabs_view.h
+index 42a7aacb35ada5d17189e9f743a945c731f0520d..ca908f8c692c5b762ad423668d8b29127e8da535 100644
+--- a/chrome/browser/ui/views/toolbar/compact_tabs_view.h
++++ b/chrome/browser/ui/views/toolbar/compact_tabs_view.h
+@@ -67,6 +67,7 @@ class CompactTabsView : public views::View, public TabStripModelObserver {
+                               const TabStripSelectionChange& selection) override;
+   void OnTabChangedAt(tabs::TabInterface* tab,
+                       TabChangeType change_type) override;
++  void OnTabGroupChanged(const TabGroupChange& change) override;
+ 
+  private:
+   void Update();

@@ -27,3 +27,4 @@ macos/0011-a-schermo-intero-la-barra-nel-titolo-accanto-ai-semafori.patch
 macos/0012-schede-nella-barra-trascinabili-anche-in-una-finestra-nuova.patch
 common/0015-contatore-del-fingerprinting-conta-anche-le-letture-negli-if.patch
 common/0016-anteprima-vera-di-canvas-e-webgl-nel-pannello-del-sito.patch
+macos/0013-gruppi-di-schede-nelle-schede-nella-barra.patch
