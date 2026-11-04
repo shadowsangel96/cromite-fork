@@ -31,3 +31,4 @@ macos/0013-gruppi-di-schede-nelle-schede-nella-barra.patch
 macos/0014-schede-nella-barra-anche-con-la-finestra-stretta.patch
 macos/0016-nome-e-colore-dei-gruppi-profilo-collegato-a-claude.patch
 common/0017-pannello-di-claude-descrizione-sotto-il-titolo.patch
+common/0018-impronta-nuova-quando-i-cookie-temporanei-cancellano-un-sito.patch

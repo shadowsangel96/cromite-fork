@@ -191,9 +191,13 @@ impercettibile ma diversi per ogni sito, così due visite non danno la stessa im
   a ogni impaginazione, anche fuori dagli script, e il testo cambierebbe font tra un disegno e
   l'altro; con l'elenco fisso tutti i Mac sembrano uguali. Su Windows filtra già Cromite.
 - **Impronta nuova** (fatto) dopo un riavvio e dopo "Cancella dati di navigazione" con i cookie di
-  tutti i siti: la chiave del profilo si rinnova e il processo di riserva si scarta. Non succede
-  quando i cookie temporanei cancellano un sito solo: servirebbe un seme per sito mandato a ogni
-  navigazione.
+  tutti i siti: la chiave del profilo si rinnova e il processo di riserva si scarta. E anche quando i
+  cookie temporanei cancellano un sito solo (fatto): il browser tiene in memoria quante volte ha
+  cancellato ogni sito e lo mette nel seme; la pagina chiede il suo seme al browser una volta per
+  documento (chiamata sincrona sul canale `FarblingHost`), e il browser lo calcola dal sito della
+  pagina che chiede, non da quello che dichiara. I siti da ricordare e quelli ancora aperti tengono la
+  loro impronta. I worker, che non hanno una pagina, la ricavano ancora dalla chiave del profilo: dopo
+  una cancellazione il loro rumore resta quello di prima fino al riavvio.
 - **Lingue** (fatto): `ReduceAcceptLanguage` acceso, i siti ricevono solo la prima lingua
   nell'header e in `navigator.languages`.
 - **Do Not Track spento** di base (Cromite lo accende): lo mandano ormai pochi browser e rende più
@@ -266,13 +270,8 @@ la loro intestazione MPL.
 
 ## 3. Privacy e pannello "Fingerprinting": quello che resta (da fare tutto)
 
-Elenco per categoria, numeri e contatore sullo scudo sono fatti (vedi "Fatto"). Restano, tutti
-richiesti:
-
-- **Impronta nuova anche quando i cookie temporanei cancellano un sito solo**, non solo dopo un
-  riavvio o "Cancella dati di navigazione": un seme per sito, rinnovato a ogni cancellazione e
-  mandato al renderer a ogni navigazione (come il token di Brave, che vive nelle impostazioni del
-  sito). I siti da ricordare tengono la loro impronta.
+Elenco per categoria, numeri, contatore sullo scudo e impronta nuova a ogni cancellazione di un
+sito sono fatti (vedi "Fatto" e la voce 2). Restano, tutti richiesti:
 
 - **eval e Referrer:** Blink non ha contatori d'uso per questi due; aggiungerli vuol dire cambiare
   `web_feature.mojom`, che ricompila quasi tutto Blink (alcune ore sul Mac): build da lanciare di

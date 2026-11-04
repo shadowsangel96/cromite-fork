@@ -1,0 +1,309 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 16:06:59 +0100
+Subject: [PATCH] Impronta nuova quando i cookie temporanei cancellano un sito
+
+Fork-Patch: common/0018-impronta-nuova-quando-i-cookie-temporanei-cancellano-un-sito.patch
+
+diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
+index b764ec34ee426a06d1173a78ce0ad51edd865062..88b43370ee52ab4fc33322de1c35046b6400d306 100644
+--- a/chrome/browser/chrome_browser_interface_binders.cc
++++ b/chrome/browser/chrome_browser_interface_binders.cc
+@@ -467,8 +467,7 @@ void PopulateChromeFrameBinders(
+     map->Add<geic::mojom::GeicApi>(&geic::BindGeicApi);
+   }
+   map->Add<image_annotation::mojom::Annotator>(&BindImageAnnotator);
+-  map->Add<blink::mojom::FarblingPreviewHost>(
+-      &browser_fork::BindFarblingPreviewHost);
++  map->Add<blink::mojom::FarblingHost>(&browser_fork::BindFarblingHost);
+ 
+   map->Add<blink::mojom::ScriptToolHost>(
+       &actor::ActorScriptToolReceiver::Create);
+diff --git a/chrome/browser/fork/farbling_key.cc b/chrome/browser/fork/farbling_key.cc
+index 61928f20cc3c1466368a29ee7eb28cbccb28c4c2..7d07673722f3d1d06fa66be4f02570eaeac90839 100644
+--- a/chrome/browser/fork/farbling_key.cc
++++ b/chrome/browser/fork/farbling_key.cc
+@@ -1,11 +1,20 @@
+ #include "chrome/browser/fork/farbling_key.h"
+ 
++#include <map>
+ #include <memory>
++#include <vector>
+ 
++#include "base/containers/span.h"
++#include "base/numerics/byte_conversions.h"
+ #include "base/rand_util.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/supports_user_data.h"
++#include "chrome/browser/fork/temporary_site_data_service.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "content/public/browser/browser_context.h"
++#include "content/public/browser/render_frame_host.h"
++#include "crypto/hmac.h"
++#include "third_party/blink/public/common/storage_key/storage_key.h"
+ #include "content/public/browser/spare_render_process_host_manager.h"
+ 
+ namespace browser_fork {
+@@ -14,13 +23,13 @@ namespace {
+ 
+ struct FarblingKeyData : public base::SupportsUserData::Data {
+   std::string key = base::HexEncode(base::RandBytesAsVector(32));
++  // How many times the temporary cookies deleted each site, in memory only.
++  std::map<std::string, int> generations;
+ };
+ 
+ constexpr char kFarblingKeyUserDataKey[] = "fork_farbling_key";
+ 
+-}  // namespace
+-
+-const std::string& GetFarblingKey(Profile* profile) {
++FarblingKeyData* GetData(Profile* profile) {
+   auto* data = static_cast<FarblingKeyData*>(
+       profile->GetUserData(kFarblingKeyUserDataKey));
+   if (!data) {
+@@ -28,7 +37,44 @@ const std::string& GetFarblingKey(Profile* profile) {
+     data = owned.get();
+     profile->SetUserData(kFarblingKeyUserDataKey, std::move(owned));
+   }
+-  return data->key;
++  return data;
++}
++
++}  // namespace
++
++const std::string& GetFarblingKey(Profile* profile) {
++  return GetData(profile)->key;
++}
++
++uint64_t FarblingSeedForFrame(content::RenderFrameHost* frame) {
++  Profile* profile = Profile::FromBrowserContext(frame->GetBrowserContext());
++  FarblingKeyData* data = GetData(profile);
++  std::vector<uint8_t> key;
++  base::HexStringToBytes(data->key, &key);
++
++  // The same site as the renderer uses without the browser, for its workers:
++  // the top-level one, a credentialless frame apart. A site deleted by the
++  // temporary cookies adds how many times.
++  const blink::StorageKey& storage_key = frame->GetStorageKey();
++  std::string site = storage_key.top_level_site().Serialize();
++  if (storage_key.nonce()) {
++    site += " " + storage_key.nonce()->ToString();
++  }
++  const auto generation = data->generations.find(
++      TemporarySiteDataService::SiteForUrl(
++          storage_key.top_level_site().GetURL()));
++  if (generation != data->generations.end()) {
++    site += " #" + base::NumberToString(generation->second);
++  }
++  const auto mac =
++      crypto::hmac::SignSha256(base::span(key), base::as_byte_span(site));
++  return base::U64FromNativeEndian(base::span(mac).first<8>());
++}
++
++void RenewFarblingSeed(Profile* profile, const std::string& site) {
++  if (!site.empty()) {
++    ++GetData(profile)->generations[site];
++  }
+ }
+ 
+ void ResetFarblingKey(Profile* profile) {
+diff --git a/chrome/browser/fork/farbling_key.h b/chrome/browser/fork/farbling_key.h
+index 9a323c57fe83ebd67a824ced2a285d4c768d342e..2b65b3886c2d5156c0077140cea84e8aa17fbb6a 100644
+--- a/chrome/browser/fork/farbling_key.h
++++ b/chrome/browser/fork/farbling_key.h
+@@ -1,10 +1,15 @@
+ #ifndef CHROME_BROWSER_FORK_FARBLING_KEY_H_
+ #define CHROME_BROWSER_FORK_FARBLING_KEY_H_
+ 
++#include <cstdint>
+ #include <string>
+ 
+ class Profile;
+ 
++namespace content {
++class RenderFrameHost;
++}  // namespace content
++
+ namespace browser_fork {
+ 
+ // The key of the noise against fingerprinting: one for each profile, new at
+@@ -17,6 +22,15 @@ const std::string& GetFarblingKey(Profile* profile);
+ // on show a new fingerprint.
+ void ResetFarblingKey(Profile* profile);
+ 
++// The seed of the noise for a page: from the key of the profile and the site
++// at the top of the page, the same until the key changes or the temporary
++// cookies delete the site.
++uint64_t FarblingSeedForFrame(content::RenderFrameHost* frame);
++
++// The data of `site` (a registrable domain) are gone: its pages get a new
++// seed, so the site can't recognize the browser by its noise either.
++void RenewFarblingSeed(Profile* profile, const std::string& site);
++
+ }  // namespace browser_fork
+ 
+ #endif  // CHROME_BROWSER_FORK_FARBLING_KEY_H_
+diff --git a/chrome/browser/fork/fingerprinting_counter.cc b/chrome/browser/fork/fingerprinting_counter.cc
+index e0e1bef6d9b66d2cd1e90e283fcc450ee136e7f0..4c64c1c4e96ea97093c85da85b33803d88c2918e 100644
+--- a/chrome/browser/fork/fingerprinting_counter.cc
++++ b/chrome/browser/fork/fingerprinting_counter.cc
+@@ -6,6 +6,8 @@
+ 
+ #include "base/base64.h"
+ #include "base/no_destructor.h"
++#include "base/rand_util.h"
++#include "chrome/browser/fork/farbling_key.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "components/content_settings/core/browser/host_content_settings_map.h"
+ #include "components/content_settings/core/common/content_settings.h"
+@@ -184,12 +186,18 @@ class FingerprintingObserver
+   }
+ };
+ 
+-class FarblingPreviewHostImpl : public blink::mojom::FarblingPreviewHost {
++class FarblingHostImpl : public blink::mojom::FarblingHost {
+  public:
+-  explicit FarblingPreviewHostImpl(content::GlobalRenderFrameHostId frame)
++  explicit FarblingHostImpl(content::GlobalRenderFrameHostId frame)
+       : frame_(frame) {}
+ 
+-  // blink::mojom::FarblingPreviewHost:
++  // blink::mojom::FarblingHost:
++  void GetSeed(GetSeedCallback callback) override {
++    content::RenderFrameHost* frame = content::RenderFrameHost::FromID(frame_);
++    std::move(callback).Run(frame ? FarblingSeedForFrame(frame)
++                                  : base::RandUint64());
++  }
++
+   void ReportImage(bool webgl, const std::vector<uint8_t>& png) override {
+     FingerprintingCounter::SetPreview(content::RenderFrameHost::FromID(frame_),
+                                       webgl, png);
+@@ -308,10 +316,9 @@ CreateFingerprintingObserver() {
+   return std::make_unique<FingerprintingObserver>();
+ }
+ 
+-void BindFarblingPreviewHost(
+-    content::RenderFrameHost* render_frame_host,
+-    mojo::PendingReceiver<blink::mojom::FarblingPreviewHost> receiver) {
+-  mojo::MakeSelfOwnedReceiver(std::make_unique<FarblingPreviewHostImpl>(
++void BindFarblingHost(content::RenderFrameHost* render_frame_host,
++                      mojo::PendingReceiver<blink::mojom::FarblingHost> receiver) {
++  mojo::MakeSelfOwnedReceiver(std::make_unique<FarblingHostImpl>(
+                                   render_frame_host->GetGlobalId()),
+                               std::move(receiver));
+ }
+diff --git a/chrome/browser/fork/fingerprinting_counter.h b/chrome/browser/fork/fingerprinting_counter.h
+index 13f1e7a8ddb15fc3b77553904b0bb7eb8c1a6f3b..0400707bf4ff8add9893e3fd9e0398cd86e687c5 100644
+--- a/chrome/browser/fork/fingerprinting_counter.h
++++ b/chrome/browser/fork/fingerprinting_counter.h
+@@ -96,10 +96,9 @@ class FingerprintingCounter
+ std::unique_ptr<page_load_metrics::PageLoadMetricsObserver>
+ CreateFingerprintingObserver();
+ 
+-// The renderer sends there the images the sites read.
+-void BindFarblingPreviewHost(
+-    content::RenderFrameHost* render_frame_host,
+-    mojo::PendingReceiver<blink::mojom::FarblingPreviewHost> receiver);
++// The renderer asks there the seed of a page and sends the images it read.
++void BindFarblingHost(content::RenderFrameHost* render_frame_host,
++                      mojo::PendingReceiver<blink::mojom::FarblingHost> receiver);
+ 
+ }  // namespace browser_fork
+ 
+diff --git a/chrome/browser/fork/temporary_site_data_service.cc b/chrome/browser/fork/temporary_site_data_service.cc
+index 50b580d7e792d0c54b1cf16326acbb05dc2d8837..8d616865f8120d44145d1fba6fcfb47e13759a4f 100644
+--- a/chrome/browser/fork/temporary_site_data_service.cc
++++ b/chrome/browser/fork/temporary_site_data_service.cc
+@@ -1,5 +1,7 @@
+ #include "chrome/browser/fork/temporary_site_data_service.h"
+ 
++#include "chrome/browser/fork/farbling_key.h"
++
+ #include "chrome/browser/fork/claude_extension.h"
+ #include "chrome/browser/fork/compact_tabs.h"
+ 
+@@ -183,6 +185,8 @@ void TemporarySiteDataService::MaybeClear(const std::string& site) {
+ }
+ 
+ void TemporarySiteDataService::ClearSite(const std::string& site) {
++  // With its data goes the noise the site saw: its next pages get a new seed.
++  RenewFarblingSeed(profile_, site);
+   Remover* remover = profile_->GetBrowsingDataRemover();
+   auto filter = FilterBuilder::Create(FilterBuilder::Mode::kDelete);
+   filter->AddRegisterableDomain(site);
+diff --git a/third_party/blink/public/mojom/fork/farbling_preview.mojom b/third_party/blink/public/mojom/fork/farbling_preview.mojom
+index 187266e2fa2c2740e4f062b8728b5824cf08a432..f1125f14986c5b0932cd1449fb9949dcdaafa92b 100644
+--- a/third_party/blink/public/mojom/fork/farbling_preview.mojom
++++ b/third_party/blink/public/mojom/fork/farbling_preview.mojom
+@@ -1,8 +1,15 @@
+ module blink.mojom;
+ 
+-// The image a site read from a canvas or from WebGL, already with the noise
+-// against fingerprinting: the protections panel shows what the site really
+-// received. A small PNG, at most twice a second.
+-interface FarblingPreviewHost {
++// The noise against fingerprinting of a page, between its renderer and the
++// browser.
++interface FarblingHost {
++  // The seed of the page, the same on its site until the browser renews it: at
++  // a restart, with "Cancella dati", or when the temporary cookies delete the
++  // site. Asked once per document, when the page first reads something noisy.
++  [Sync] GetSeed() => (uint64 seed);
++
++  // The image the page read from a canvas or from WebGL, already with the
++  // noise: the protections panel shows what the site really received. A small
++  // PNG, at most twice a second.
+   ReportImage(bool webgl, array<uint8> png);
+ };
+diff --git a/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.cc b/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.cc
+index 4ff4c1c92cf0b899220f58796bacac8d72451904..afb7490a6d4c73a1d127b2ca2aab3e3712416ccf 100644
+--- a/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.cc
++++ b/third_party/blink/renderer/core/canvas_interventions/fork_farbling_seed.cc
+@@ -80,12 +80,24 @@ void SendPreviewOfRunningScript(bool webgl, base::span<const uint8_t> png) {
+   if (!window || !window->GetFrame()) {
+     return;
+   }
+-  mojo::Remote<mojom::blink::FarblingPreviewHost> host;
++  mojo::Remote<mojom::blink::FarblingHost> host;
+   window->GetFrame()->GetBrowserInterfaceBroker().GetInterface(
+       host.BindNewPipeAndPassReceiver());
+   host->ReportImage(webgl, Vector<uint8_t>(png));
+ }
+ 
++// The seed of a page comes from the browser, which renews it when the
++// temporary cookies delete the site.
++bool SeedFromBrowser(LocalDOMWindow* window, uint64_t* seed) {
++  if (!window->GetFrame()) {
++    return false;
++  }
++  mojo::Remote<mojom::blink::FarblingHost> host;
++  window->GetFrame()->GetBrowserInterfaceBroker().GetInterface(
++      host.BindNewPipeAndPassReceiver());
++  return host->GetSeed(seed);
++}
++
+ }  // namespace
+ 
+ uint64_t FarblingSeed(ExecutionContext* context) {
+@@ -96,11 +108,16 @@ uint64_t FarblingSeed(ExecutionContext* context) {
+   if (const std::optional<NoiseToken>& token = context->CanvasNoiseToken()) {
+     return token->Value();
+   }
+-  const std::string site = FarblingSite(context);
+-  const auto mac = crypto::hmac::SignSha256(base::span(FarblingKey()),
+-                                            base::as_byte_span(site));
+-  const uint64_t seed =
+-      base::U64FromNativeEndian(base::span(mac).first<8>());
++  // Once per document: a page asks the browser; what has no page, like a
++  // worker, derives it from the key of the profile and its site.
++  uint64_t seed = 0;
++  auto* window = DynamicTo<LocalDOMWindow>(context);
++  if (!window || !SeedFromBrowser(window, &seed)) {
++    const std::string site = FarblingSite(context);
++    const auto mac = crypto::hmac::SignSha256(base::span(FarblingKey()),
++                                              base::as_byte_span(site));
++    seed = base::U64FromNativeEndian(base::span(mac).first<8>());
++  }
+   context->SetCanvasNoiseToken(NoiseToken(seed));
+   return seed;
+ }
