@@ -1,0 +1,1662 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 11:34:12 +0100
+Subject: [PATCH] Redirect: YouTube sul proprio Invidious, Instagram su imginn,
+ TikTok su urlebird
+
+Fork-Patch: common/0020-redirect-youtube-sul-proprio-invidious-instagram-su-imginn-t.patch
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index acd0c386514d59bd89b642958a4759479eac3706..b92c2108042cbf517eca416d5bbc556e6fb8864c 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -846,6 +846,8 @@ source_set("core") {
+     "fork/personal_search.h",
+     "fork/personal_search_tab_helper.cc",
+     "fork/personal_search_tab_helper.h",
++    "fork/site_redirect.cc",
++    "fork/site_redirect.h",
+     "fork/temporary_site_data_service.cc",
+     "fork/temporary_site_data_service.h",
+     "fork/temporary_site_data_service_factory.cc",
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index 24b4f602f47ba8d87f037674cab925e6df5d19db..5d9b56cff69564913c1903d2aa393bbed261ee99 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/fork/vpn_status.h"
++#include "chrome/browser/fork/site_redirect.h"
+ #include "chrome/browser/chrome_content_browser_client.h"
+ 
+ #include <algorithm>
+@@ -6019,6 +6020,12 @@ ChromeContentBrowserClient::CreateURLLoaderThrottles(
+   ChromeNavigationUIData* chrome_navigation_ui_data =
+       static_cast<ChromeNavigationUIData*>(navigation_ui_data);
+ 
++  // First: only one throttle can move a request to another address.
++  if (auto redirect_throttle = browser_fork::MaybeCreateSiteRedirectThrottle(
++          request, browser_context, wc_getter, frame_tree_node_id)) {
++    result.push_back(std::move(redirect_throttle));
++  }
++
+ #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   if (auto safe_browsing_throttle = MaybeCreateSafeBrowsingURLLoaderThrottle(
+           request, browser_context, wc_getter, frame_tree_node_id,
+@@ -8620,6 +8627,42 @@ ChromeContentBrowserClient::GetAlternativeErrorPageOverrideInfo(
+       return info;
+     }
+   }
++  // The user's own Invidious answers neither at home nor through Tailscale:
++  // YouTube doesn't open by itself, the user chooses.
++  if (navigation_handle.IsInPrimaryMainFrame() &&
++      browser_fork::RespectfulService(
++          url, Profile::FromBrowserContext(browser_context)->GetPrefs()) ==
++          browser_fork::RedirectService::kYoutube) {
++    switch (error_code) {
++      case net::ERR_ADDRESS_UNREACHABLE:
++      case net::ERR_CONNECTION_FAILED:
++      case net::ERR_CONNECTION_REFUSED:
++      case net::ERR_CONNECTION_RESET:
++      case net::ERR_CONNECTION_TIMED_OUT:
++      case net::ERR_EMPTY_RESPONSE:
++      case net::ERR_INTERNET_DISCONNECTED:
++      case net::ERR_NETWORK_CHANGED:
++      case net::ERR_TIMED_OUT: {
++        auto info = content::mojom::AlternativeErrorPageOverrideInfo::New();
++        info->resource_id = IDR_NET_ERROR_HTML;
++        base::DictValue& params = info->alternative_error_page_params;
++        params.Set(error_page::kOverrideErrorPage, base::Value(true));
++        params.Set("iconClass", "icon-generic");
++        params.Set("errorCode", "");
++        params.SetByDottedPath("heading.msg", "Il tuo Invidious non risponde");
++        params.SetByDottedPath(
++            "summary.msg",
++            "Il browser ha provato l'indirizzo di casa e quello di Tailscale. "
++            "YouTube non si apre da solo: se vuoi, aprilo tu.");
++        params.SetByDottedPath("reloadButton.msg", "Riprova");
++        params.SetByDottedPath("reloadButton.reloadUrl", url.spec());
++        params.SetByDottedPath("vpnDirectButton.msg", "Apri su YouTube");
++        return info;
++      }
++      default:
++        break;
++    }
++  }
+   Profile* profile = Profile::FromBrowserContext(browser_context);
+   if (enterprise_net::IsEnterpriseProxyErrorHandlingEnabled() && profile) {
+     auto* error_service =
+diff --git a/chrome/browser/fork/site_redirect.cc b/chrome/browser/fork/site_redirect.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..341c554c242e405cd9385a64aa2ed9c578709dbf
+--- /dev/null
++++ b/chrome/browser/fork/site_redirect.cc
+@@ -0,0 +1,958 @@
++#include "chrome/browser/fork/site_redirect.h"
++
++#include <algorithm>
++#include <initializer_list>
++#include <string_view>
++#include <utility>
++#include <vector>
++
++#include "base/functional/bind.h"
++#include "base/functional/callback.h"
++#include "base/no_destructor.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_split.h"
++#include "base/strings/string_util.h"
++#include "base/task/sequenced_task_runner.h"
++#include "base/time/time.h"
++#include "base/values.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/net/system_network_context_manager.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/common/pref_names.h"
++#include "components/pref_registry/pref_registry_syncable.h"
++#include "components/prefs/pref_registry_simple.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/navigation_entry.h"
++#include "content/public/browser/navigation_handle.h"
++#include "content/public/browser/network_service_instance.h"
++#include "content/public/browser/web_contents.h"
++#include "net/base/load_flags.h"
++#include "net/base/net_errors.h"
++#include "net/base/url_util.h"
++#include "net/traffic_annotation/network_traffic_annotation.h"
++#include "net/url_request/redirect_info.h"
++#include "services/network/public/cpp/network_connection_tracker.h"
++#include "services/network/public/cpp/resource_request.h"
++#include "services/network/public/cpp/simple_url_loader.h"
++#include "services/network/public/mojom/fetch_api.mojom-shared.h"
++#include "third_party/blink/public/common/loader/url_loader_throttle.h"
++#include "ui/base/page_transition_types.h"
++#include "url/origin.h"
++
++namespace browser_fork {
++
++namespace {
++
++constexpr char kImginn[] = "https://imginn.com";
++constexpr char kUrlebird[] = "https://urlebird.com";
++
++// The answer of a server tells which address works now, for a while: a
++// change of network checks again sooner.
++constexpr base::TimeDelta kRecheckAfter = base::Minutes(10);
++constexpr base::TimeDelta kCheckTimeout = base::Seconds(3);
++
++// The internal firewall of Cromite drops any request whose tag isn't in
++// services/firewall/tools/rules.xml: this one asks the user's own server
++// whether it's there, like the check of the VPN, so it uses the same tag.
++constexpr net::NetworkTrafficAnnotationTag kInvidiousCheckAnnotation =
++    net::DefineNetworkTrafficAnnotation("proxy_config_settings", R"(
++      semantics {
++        sender: "Site redirects"
++        description: "Asks the user's own Invidious which of its addresses answers."
++        trigger: "A page of YouTube opens, the network changes, or the user saves the addresses."
++        data: "None."
++        destination: OTHER
++      }
++      policy {
++        cookies_allowed: NO
++        setting: "chrome://proxy, Siti che tracciano."
++        policy_exception_justification: "Not implemented."
++      })");
++
++bool HostIn(const GURL& url, std::initializer_list<std::string_view> hosts) {
++  for (std::string_view host : hosts) {
++    if (url.host() == host) {
++      return true;
++    }
++  }
++  return false;
++}
++
++bool AllCharsIn(std::string_view text, std::string_view extra) {
++  for (char c : text) {
++    if (!base::IsAsciiAlphaNumeric(c) && extra.find(c) == std::string_view::npos) {
++      return false;
++    }
++  }
++  return true;
++}
++
++bool IsVideoId(std::string_view id) {
++  return id.size() == 11 && AllCharsIn(id, "_-");
++}
++
++bool IsInstagramUser(std::string_view user) {
++  static constexpr std::string_view kReserved[] = {
++      "about",   "accounts", "api",     "ar",      "challenge", "developer",
++      "direct",  "emails",   "explore", "graphql", "legal",     "lite",
++      "nametag", "oauth",    "p",       "privacy", "qr",        "reel",
++      "reels",   "session",  "static",  "stories", "terms",     "tv",
++      "web"};
++  return !user.empty() && user.size() <= 30 && AllCharsIn(user, "._") &&
++         !std::ranges::contains(kReserved, user);
++}
++
++bool IsInstagramCode(std::string_view code) {
++  return code.size() >= 5 && code.size() <= 48 && AllCharsIn(code, "_-");
++}
++
++bool IsTiktokUser(std::string_view user) {
++  return !user.empty() && user.size() <= 32 && AllCharsIn(user, "._");
++}
++
++std::vector<std::string> PathParts(const GURL& url) {
++  return base::SplitString(url.path(), "/", base::TRIM_WHITESPACE,
++                           base::SPLIT_WANT_NONEMPTY);
++}
++
++// "server.local:3000/" -> "http://server.local:3000"
++std::string NormalizeAddress(const std::string& typed) {
++  std::string address;
++  base::TrimString(typed, " \t/", &address);
++  if (address.empty()) {
++    return std::string();
++  }
++  if (address.find("://") == std::string::npos) {
++    address = "http://" + address;
++  }
++  const GURL url(address);
++  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS() || !url.has_host()) {
++    return std::string();
++  }
++  return url::Origin::Create(url).Serialize();
++}
++
++std::string HomeAddress(const PrefService* prefs) {
++  return NormalizeAddress(prefs->GetString(kInvidiousHomePref));
++}
++
++std::string RemoteAddress(const PrefService* prefs) {
++  return NormalizeAddress(prefs->GetString(kInvidiousRemotePref));
++}
++
++bool IsInvidiousOrigin(const GURL& url, const PrefService* prefs) {
++  const std::string origin = url::Origin::Create(url).Serialize();
++  for (const std::string& address : {HomeAddress(prefs), RemoteAddress(prefs)}) {
++    if (!address.empty() && origin == address) {
++      return true;
++    }
++  }
++  return false;
++}
++
++// Which address of Invidious to use. Both are asked; the one at home wins if it
++// answers, so at home the videos don't go around through Tailscale. A server
++// counts only if it says it's Invidious: on another network the address of
++// home can be somebody else's device.
++class InvidiousLocator
++    : public network::NetworkConnectionTracker::NetworkConnectionObserver {
++ public:
++  enum class State { kUnknown, kChecking, kHome, kRemote, kNone };
++
++  static InvidiousLocator* Get() {
++    static base::NoDestructor<InvidiousLocator> locator;
++    return locator.get();
++  }
++
++  InvidiousLocator(const InvidiousLocator&) = delete;
++  InvidiousLocator& operator=(const InvidiousLocator&) = delete;
++
++  // The address to use now; empty when there's none. Asks again when the
++  // answer is old.
++  std::string Current(const PrefService* prefs) {
++    if (Update(prefs) || stale_ ||
++        base::TimeTicks::Now() - checked_at_ > kRecheckAfter) {
++      Check(base::OnceClosure());
++    }
++    return chosen_;
++  }
++
++  State state(const PrefService* prefs) {
++    Update(prefs);
++    return checking_ ? State::kChecking : state_;
++  }
++
++  void CheckNow(const PrefService* prefs, base::OnceClosure done) {
++    Update(prefs);
++    Check(std::move(done));
++  }
++
++ private:
++  friend class base::NoDestructor<InvidiousLocator>;
++
++  struct Probe {
++    std::string address;
++    std::unique_ptr<network::SimpleURLLoader> loader;
++    bool done = false;
++    bool answered = false;
++  };
++
++  InvidiousLocator() {
++    content::GetNetworkConnectionTracker()->AddNetworkConnectionObserver(this);
++  }
++  ~InvidiousLocator() override = default;
++
++  // network::NetworkConnectionTracker::NetworkConnectionObserver:
++  void OnConnectionChanged(net::NetworkChangeNotifier::ConnectionType) override {
++    stale_ = true;
++    if (!home_.empty() || !remote_.empty()) {
++      Check(base::OnceClosure());
++    }
++  }
++
++  // True when the addresses changed.
++  bool Update(const PrefService* prefs) {
++    std::string home = HomeAddress(prefs);
++    std::string remote = RemoteAddress(prefs);
++    if (home == home_ && remote == remote_) {
++      return false;
++    }
++    home_ = std::move(home);
++    remote_ = std::move(remote);
++    chosen_ = home_.empty() ? remote_ : home_;
++    state_ = State::kUnknown;
++    probes_.clear();
++    checking_ = false;
++    return true;
++  }
++
++  void Check(base::OnceClosure done) {
++    if (done) {
++      waiting_.push_back(std::move(done));
++    }
++    if (checking_) {
++      return;
++    }
++    if (home_.empty() && remote_.empty()) {
++      Finish();
++      return;
++    }
++    checking_ = true;
++    stale_ = false;
++    probes_.clear();
++    for (const std::string& address : {home_, remote_}) {
++      if (address.empty()) {
++        continue;
++      }
++      auto request = std::make_unique<network::ResourceRequest>();
++      request->url = GURL(address + "/api/v1/stats");
++      request->credentials_mode = network::mojom::CredentialsMode::kOmit;
++      request->load_flags = net::LOAD_DISABLE_CACHE | net::LOAD_BYPASS_CACHE;
++      auto probe = std::make_unique<Probe>();
++      probe->address = address;
++      probe->loader = network::SimpleURLLoader::Create(
++          std::move(request), kInvidiousCheckAnnotation);
++      probe->loader->SetTimeoutDuration(kCheckTimeout);
++      Probe* raw = probe.get();
++      probes_.push_back(std::move(probe));
++      // Home and Tailscale are out of the VPN anyway: the system context goes
++      // there directly.
++      raw->loader->DownloadToString(
++          g_browser_process->system_network_context_manager()
++              ->GetURLLoaderFactory(),
++          base::BindOnce(&InvidiousLocator::OnProbed, base::Unretained(this),
++                         raw),
++          4096);
++    }
++  }
++
++  void OnProbed(Probe* probe, std::optional<std::string> body) {
++    probe->done = true;
++    probe->answered = body && body->find("\"invidious\"") != std::string::npos;
++    probe->loader.reset();
++    for (const auto& other : probes_) {
++      if (!other->done) {
++        return;
++      }
++    }
++    std::string home_answered, remote_answered;
++    for (const auto& other : probes_) {
++      if (other->answered) {
++        (other->address == home_ ? home_answered : remote_answered) =
++            other->address;
++      }
++    }
++    if (!home_answered.empty()) {
++      chosen_ = home_answered;
++      state_ = State::kHome;
++    } else if (!remote_answered.empty()) {
++      chosen_ = remote_answered;
++      state_ = State::kRemote;
++    } else {
++      state_ = State::kNone;
++    }
++    checking_ = false;
++    checked_at_ = base::TimeTicks::Now();
++    probes_.clear();
++    Finish();
++  }
++
++  void Finish() {
++    std::vector<base::OnceClosure> waiting = std::move(waiting_);
++    for (base::OnceClosure& done : waiting) {
++      std::move(done).Run();
++    }
++  }
++
++  std::string home_;
++  std::string remote_;
++  std::string chosen_;
++  State state_ = State::kUnknown;
++  bool checking_ = false;
++  bool stale_ = true;
++  base::TimeTicks checked_at_;
++  std::vector<std::unique_ptr<Probe>> probes_;
++  std::vector<base::OnceClosure> waiting_;
++};
++
++GURL YoutubeTarget(const GURL& url, const std::string& base, bool main_frame) {
++  const std::string path(url.path());
++  const std::string query(url.query());
++  const std::string with_query = url.has_query() ? path + "?" + query : path;
++  const std::vector<std::string> parts = PathParts(url);
++
++  if (url.host() == "youtu.be") {
++    if (!main_frame || parts.size() != 1 || !IsVideoId(parts[0])) {
++      return GURL();
++    }
++    std::string target = base + "/watch?v=" + parts[0];
++    for (const char* key : {"t", "list"}) {
++      std::string value;
++      if (net::GetValueForKeyInQuery(url, key, &value) &&
++          AllCharsIn(value, "_-")) {
++        target += std::string("&") + key + "=" + value;
++      }
++    }
++    return GURL(target);
++  }
++  if (!parts.empty() && parts[0] == "embed" && parts.size() >= 2) {
++    return GURL(base + with_query);
++  }
++  if (!main_frame || url.DomainIs("youtube-nocookie.com")) {
++    return GURL();
++  }
++  if (parts.empty()) {
++    return GURL(base + "/");
++  }
++  const std::string& first = parts[0];
++  if ((first == "shorts" || first == "live") && parts.size() >= 2 &&
++      IsVideoId(parts[1])) {
++    return GURL(base + "/watch?v=" + parts[1]);
++  }
++  if (first == "watch" || first == "playlist" || first == "results" ||
++      first == "channel" || first == "c" || first == "user" ||
++      first == "hashtag" || base::StartsWith(first, "@") ||
++      (first == "feed" && parts.size() >= 2 && parts[1] == "trending")) {
++    return GURL(base + with_query);
++  }
++  return GURL();
++}
++
++GURL InstagramTarget(const GURL& url) {
++  const std::vector<std::string> parts = PathParts(url);
++  if (parts.empty()) {
++    return GURL(std::string(kImginn) + "/");
++  }
++  const std::string& first = parts[0];
++  if ((first == "p" || first == "reel" || first == "reels" || first == "tv") &&
++      parts.size() >= 2 && IsInstagramCode(parts[1])) {
++    return GURL(std::string(kImginn) + "/p/" + parts[1] + "/");
++  }
++  if (first == "stories" && parts.size() >= 2 && IsInstagramUser(parts[1])) {
++    return GURL(std::string(kImginn) + "/stories/" + parts[1] + "/");
++  }
++  if (!IsInstagramUser(first)) {
++    return GURL();
++  }
++  if (parts.size() >= 3 && (parts[1] == "p" || parts[1] == "reel") &&
++      IsInstagramCode(parts[2])) {
++    return GURL(std::string(kImginn) + "/p/" + parts[2] + "/");
++  }
++  if (parts.size() >= 2 && parts[1] == "tagged") {
++    return GURL(std::string(kImginn) + "/tagged/" + first + "/");
++  }
++  return GURL(std::string(kImginn) + "/" + first + "/");
++}
++
++// urlebird puts the words of the description in the address of a video, which
++// the link of TikTok doesn't have: a video opens the page of its author.
++GURL TiktokTarget(const GURL& url) {
++  if (HostIn(url, {"vm.tiktok.com", "vt.tiktok.com"})) {
++    return GURL();
++  }
++  const std::vector<std::string> parts = PathParts(url);
++  if (parts.empty()) {
++    return GURL(std::string(kUrlebird) + "/");
++  }
++  const std::string& first = parts[0];
++  if (first.size() > 1 && first[0] == '@' && IsTiktokUser(first.substr(1))) {
++    return GURL(std::string(kUrlebird) + "/user/" + first.substr(1) + "/");
++  }
++  if (first == "explore" || first == "foryou" || first == "trending") {
++    return GURL(std::string(kUrlebird) + "/trending/");
++  }
++  return GURL();
++}
++
++void LoadInTab(base::WeakPtr<content::WebContents> contents,
++               const GURL& url,
++               bool replace_current_entry) {
++  if (!contents) {
++    return;
++  }
++  content::NavigationController::LoadURLParams params(url);
++  params.transition_type = ui::PAGE_TRANSITION_LINK;
++  params.should_replace_current_entry = replace_current_entry;
++  contents->GetController().LoadURLWithParams(params);
++}
++
++PrefService* PrefsOf(content::BrowserContext* context) {
++  return context ? Profile::FromBrowserContext(context)->GetPrefs() : nullptr;
++}
++
++class SiteRedirectThrottle : public blink::URLLoaderThrottle {
++ public:
++  SiteRedirectThrottle(
++      GURL target,
++      bool main_frame,
++      base::RepeatingCallback<content::WebContents*()> wc_getter)
++      : target_(std::move(target)),
++        main_frame_(main_frame),
++        wc_getter_(std::move(wc_getter)) {}
++  ~SiteRedirectThrottle() override = default;
++
++  // blink::URLLoaderThrottle:
++  void WillStartRequest(network::ResourceRequest* request,
++                        bool* defer) override {
++    if (!target_.is_valid() || request->url == target_) {
++      return;
++    }
++    if (main_frame_) {
++      if (SiteRedirectTabHelper* helper = Helper()) {
++        helper->ExpectRespectful(request->url, target_);
++      }
++    }
++    request->url = target_;
++  }
++
++  // A short link, or a link through another site, that lands on a site that
++  // tracks: the loader can only move inside the same origin, so this one ends
++  // and the tab opens the respectful version.
++  void WillRedirectRequest(
++      net::RedirectInfo* redirect_info,
++      const network::mojom::URLResponseHead& response_head,
++      bool* defer,
++      network::HttpRequestHeadersUpdateParams* headers_update_params) override {
++    if (!main_frame_) {
++      return;
++    }
++    content::WebContents* contents = wc_getter_ ? wc_getter_.Run() : nullptr;
++    SiteRedirectTabHelper* helper =
++        contents ? SiteRedirectTabHelper::FromWebContents(contents) : nullptr;
++    if (!helper ||
++        helper->IsBypassed(SiteService(redirect_info->new_url))) {
++      return;
++    }
++    const GURL target =
++        RespectfulUrl(redirect_info->new_url,
++                      PrefsOf(contents->GetBrowserContext()), true);
++    if (!target.is_valid()) {
++      return;
++    }
++    helper->ExpectRespectful(redirect_info->new_url, target);
++    delegate_->CancelWithError(net::ERR_ABORTED);
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(&LoadInTab, contents->GetWeakPtr(), target,
++                                  /*replace_current_entry=*/false));
++  }
++
++ private:
++  SiteRedirectTabHelper* Helper() {
++    content::WebContents* contents = wc_getter_ ? wc_getter_.Run() : nullptr;
++    return contents ? SiteRedirectTabHelper::FromWebContents(contents)
++                    : nullptr;
++  }
++
++  const GURL target_;
++  const bool main_frame_;
++  const base::RepeatingCallback<content::WebContents*()> wc_getter_;
++};
++
++}  // namespace
++
++void RegisterSiteRedirectPrefs(user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterStringPref(kInvidiousHomePref, std::string());
++  registry->RegisterStringPref(kInvidiousRemotePref, std::string());
++  registry->RegisterBooleanPref(kRedirectYoutubePref, true);
++  registry->RegisterBooleanPref(kRedirectInstagramPref, true);
++  registry->RegisterBooleanPref(kRedirectTiktokPref, true);
++}
++
++void RegisterSiteRedirectLocalStatePrefs(PrefRegistrySimple* registry) {
++  registry->RegisterListPref(kInvidiousPublicAddressesPref);
++}
++
++void ApplyInvidiousAddressSpaceOverrides(PrefService* local_state) {
++  if (!local_state) {
++    return;
++  }
++  const base::ListValue& addresses =
++      local_state->GetList(kInvidiousPublicAddressesPref);
++  if (local_state->IsManagedPreference(
++          prefs::kManagedLocalNetworkAccessIpAddressSpaceOverrides)) {
++    return;
++  }
++  if (addresses.empty()) {
++    local_state->ClearPref(
++        prefs::kManagedLocalNetworkAccessIpAddressSpaceOverrides);
++  } else {
++    local_state->SetList(
++        prefs::kManagedLocalNetworkAccessIpAddressSpaceOverrides,
++        addresses.Clone());
++  }
++}
++
++const char* ServiceName(RedirectService service) {
++  switch (service) {
++    case RedirectService::kYoutube:
++      return "YouTube";
++    case RedirectService::kInstagram:
++      return "Instagram";
++    case RedirectService::kTiktok:
++      return "TikTok";
++    case RedirectService::kNone:
++      return "";
++  }
++}
++
++const char* RespectfulName(RedirectService service) {
++  switch (service) {
++    case RedirectService::kYoutube:
++      return "Invidious";
++    case RedirectService::kInstagram:
++      return "imginn";
++    case RedirectService::kTiktok:
++      return "urlebird";
++    case RedirectService::kNone:
++      return "";
++  }
++}
++
++RedirectService SiteService(const GURL& url) {
++  if (!url.SchemeIsHTTPOrHTTPS()) {
++    return RedirectService::kNone;
++  }
++  if (url.DomainIs("youtube.com") || url.DomainIs("youtu.be") ||
++      url.DomainIs("youtube-nocookie.com")) {
++    return RedirectService::kYoutube;
++  }
++  if (url.DomainIs("instagram.com")) {
++    return RedirectService::kInstagram;
++  }
++  if (url.DomainIs("tiktok.com")) {
++    return RedirectService::kTiktok;
++  }
++  return RedirectService::kNone;
++}
++
++RedirectService RespectfulService(const GURL& url, const PrefService* prefs) {
++  if (!url.SchemeIsHTTPOrHTTPS()) {
++    return RedirectService::kNone;
++  }
++  if (prefs && IsInvidiousOrigin(url, prefs)) {
++    return RedirectService::kYoutube;
++  }
++  if (HostIn(url, {"imginn.com", "www.imginn.com"})) {
++    return RedirectService::kInstagram;
++  }
++  if (HostIn(url, {"urlebird.com", "www.urlebird.com"})) {
++    return RedirectService::kTiktok;
++  }
++  return RedirectService::kNone;
++}
++
++bool IsRedirectOn(RedirectService service, const PrefService* prefs) {
++  if (!prefs) {
++    return false;
++  }
++  switch (service) {
++    case RedirectService::kYoutube:
++      return prefs->GetBoolean(kRedirectYoutubePref) &&
++             !(HomeAddress(prefs).empty() && RemoteAddress(prefs).empty());
++    case RedirectService::kInstagram:
++      return prefs->GetBoolean(kRedirectInstagramPref);
++    case RedirectService::kTiktok:
++      return prefs->GetBoolean(kRedirectTiktokPref);
++    case RedirectService::kNone:
++      return false;
++  }
++}
++
++GURL RespectfulUrl(const GURL& url, const PrefService* prefs, bool main_frame) {
++  if (!url.SchemeIsHTTPOrHTTPS() || !prefs) {
++    return GURL();
++  }
++  // The page of the cookies of YouTube, in Europe: the page asked for is in it.
++  if (main_frame && url.host() == "consent.youtube.com") {
++    std::string next;
++    if (net::GetValueForKeyInQuery(url, "continue", &next) &&
++        GURL(next).host() != "consent.youtube.com") {
++      return RespectfulUrl(GURL(next), prefs, main_frame);
++    }
++    return GURL();
++  }
++  if (HostIn(url, {"youtube.com", "www.youtube.com", "m.youtube.com",
++                   "youtu.be", "youtube-nocookie.com",
++                   "www.youtube-nocookie.com"})) {
++    if (!IsRedirectOn(RedirectService::kYoutube, prefs)) {
++      return GURL();
++    }
++    const std::string base = InvidiousLocator::Get()->Current(prefs);
++    return base.empty() ? GURL() : YoutubeTarget(url, base, main_frame);
++  }
++  // imginn and urlebird don't let other sites show their pages in a frame.
++  if (!main_frame) {
++    return GURL();
++  }
++  if (HostIn(url, {"instagram.com", "www.instagram.com", "m.instagram.com"})) {
++    return IsRedirectOn(RedirectService::kInstagram, prefs)
++               ? InstagramTarget(url)
++               : GURL();
++  }
++  if (HostIn(url, {"tiktok.com", "www.tiktok.com", "m.tiktok.com",
++                   "vm.tiktok.com", "vt.tiktok.com"})) {
++    return IsRedirectOn(RedirectService::kTiktok, prefs) ? TiktokTarget(url)
++                                                          : GURL();
++  }
++  return GURL();
++}
++
++GURL OriginalUrl(const GURL& url, const PrefService* prefs) {
++  std::vector<std::string> parts = PathParts(url);
++  switch (RespectfulService(url, prefs)) {
++    case RedirectService::kYoutube: {
++      const std::string path(url.path());
++      const std::string with_query =
++          url.has_query() ? path + "?" + std::string(url.query()) : path;
++      if (parts.empty()) {
++        return GURL("https://www.youtube.com/");
++      }
++      const std::string& first = parts[0];
++      if (first == "search") {
++        std::string terms;
++        net::GetValueForKeyInQuery(url, "q", &terms);
++        return net::AppendQueryParameter(
++            GURL("https://www.youtube.com/results"), "search_query", terms);
++      }
++      if (first == "watch" || first == "embed" || first == "playlist" ||
++          first == "channel" || first == "hashtag" ||
++          base::StartsWith(first, "@") || first == "feed") {
++        return GURL("https://www.youtube.com" + with_query);
++      }
++      return GURL("https://www.youtube.com/");
++    }
++    case RedirectService::kInstagram: {
++      if (parts.size() >= 2 && parts[0] == "p") {
++        return GURL("https://www.instagram.com/p/" + parts[1] + "/");
++      }
++      if (parts.size() >= 2 && parts[0] == "stories") {
++        return GURL("https://www.instagram.com/stories/" + parts[1] + "/");
++      }
++      if (parts.size() >= 2 && parts[0] == "tagged") {
++        return GURL("https://www.instagram.com/" + parts[1] + "/tagged/");
++      }
++      if (parts.size() == 1 && IsInstagramUser(parts[0])) {
++        return GURL("https://www.instagram.com/" + parts[0] + "/");
++      }
++      return GURL("https://www.instagram.com/");
++    }
++    case RedirectService::kTiktok: {
++      // urlebird.com/it/user/...: the language first.
++      if (!parts.empty() && parts[0].size() == 2) {
++        parts.erase(parts.begin());
++      }
++      if (parts.size() >= 2 && parts[0] == "user" && IsTiktokUser(parts[1])) {
++        return GURL("https://www.tiktok.com/@" + parts[1]);
++      }
++      if (!parts.empty() && parts[0] == "trending") {
++        return GURL("https://www.tiktok.com/explore");
++      }
++      return GURL("https://www.tiktok.com/");
++    }
++    case RedirectService::kNone:
++      return GURL();
++  }
++}
++
++std::string InvidiousReachability(const PrefService* prefs) {
++  switch (InvidiousLocator::Get()->state(prefs)) {
++    case InvidiousLocator::State::kUnknown:
++      return HomeAddress(prefs).empty() && RemoteAddress(prefs).empty()
++                 ? std::string()
++                 : "checking";
++    case InvidiousLocator::State::kChecking:
++      return "checking";
++    case InvidiousLocator::State::kHome:
++      return "home";
++    case InvidiousLocator::State::kRemote:
++      return "remote";
++    case InvidiousLocator::State::kNone:
++      return "none";
++  }
++}
++
++void SiteRedirectSettingsChanged(PrefService* prefs, base::OnceClosure done) {
++  std::vector<std::string> plain_http;
++  for (const std::string& address : {HomeAddress(prefs), RemoteAddress(prefs)}) {
++    const GURL url(address);
++    if (url.is_valid() && url.SchemeIs(url::kHttpScheme)) {
++      plain_http.push_back(address);
++      // HTTPS-only mode would stop the server: at home it has plain http, on
++      // an address no certificate can cover.
++      base::ListValue hosts = prefs->GetList(prefs::kHttpAllowlist).Clone();
++      if (!std::ranges::contains(hosts, base::Value(url.host()))) {
++        hosts.Append(std::string(url.host()));
++        prefs->SetList(prefs::kHttpAllowlist, std::move(hosts));
++      }
++    }
++  }
++  // The videos of YouTube inside other sites go to Invidious too: a secure page
++  // can hold the plain http of the user's own server only if the browser trusts
++  // it. Tailscale encrypts its part anyway.
++  // And a site on the internet can't show a frame from the network at home
++  // without asking (Local Network Access): only these two addresses count as
++  // public, the rest of the network at home stays protected. From the next
++  // start of the browser, see ApplyInvidiousAddressSpaceOverrides().
++  base::ListValue public_addresses;
++  for (const std::string& address : {HomeAddress(prefs), RemoteAddress(prefs)}) {
++    const GURL url(address);
++    if (url.is_valid() && url.HostIsIPAddress()) {
++      public_addresses.Append(std::string(url.host()) + ":" +
++                              base::NumberToString(url.EffectiveIntPort()) +
++                              "=public");
++    }
++  }
++  if (PrefService* local_state = g_browser_process->local_state()) {
++    if (plain_http.empty()) {
++      local_state->ClearPref(prefs::kUnsafelyTreatInsecureOriginAsSecure);
++    } else {
++      local_state->SetString(prefs::kUnsafelyTreatInsecureOriginAsSecure,
++                             base::JoinString(plain_http, ","));
++    }
++    local_state->SetList(kInvidiousPublicAddressesPref,
++                         std::move(public_addresses));
++  }
++  InvidiousLocator::Get()->CheckNow(prefs, std::move(done));
++}
++
++std::unique_ptr<blink::URLLoaderThrottle> MaybeCreateSiteRedirectThrottle(
++    const network::ResourceRequest& request,
++    content::BrowserContext* browser_context,
++    const base::RepeatingCallback<content::WebContents*()>& wc_getter,
++    content::FrameTreeNodeId frame_tree_node_id) {
++  const bool main_frame =
++      request.destination == network::mojom::RequestDestination::kDocument;
++  if (!main_frame &&
++      request.destination != network::mojom::RequestDestination::kIframe &&
++      request.destination != network::mojom::RequestDestination::kFrame) {
++    return nullptr;
++  }
++  PrefService* prefs = PrefsOf(browser_context);
++  content::WebContents* contents = wc_getter ? wc_getter.Run() : nullptr;
++  SiteRedirectTabHelper* helper =
++      contents ? SiteRedirectTabHelper::FromWebContents(contents) : nullptr;
++  if (!prefs || !helper) {
++    return nullptr;
++  }
++  const RedirectService service = SiteService(request.url);
++  GURL target;
++  if (service != RedirectService::kNone) {
++    // The original the user chose stays, also for the links inside it; and a
++    // link of the respectful version to its original ("Guarda su YouTube") is
++    // the user's choice too.
++    const bool from_respectful =
++        request.request_initiator &&
++        RespectfulService(request.request_initiator->GetURL(), prefs) ==
++            service;
++    if (main_frame && from_respectful) {
++      helper->Bypass(service);
++      return nullptr;
++    }
++    if (main_frame ? helper->IsBypassed(service)
++                   : SiteService(contents->GetLastCommittedURL()) == service) {
++      return nullptr;
++    }
++    target = RespectfulUrl(request.url, prefs, main_frame);
++  }
++  if (!target.is_valid() && !main_frame) {
++    return nullptr;
++  }
++  return std::make_unique<SiteRedirectThrottle>(std::move(target), main_frame,
++                                                wc_getter);
++}
++
++SiteRedirectTabHelper::SiteRedirectTabHelper(content::WebContents* web_contents)
++    : content::WebContentsObserver(web_contents),
++      content::WebContentsUserData<SiteRedirectTabHelper>(*web_contents) {
++  // The first tabs open with the browser: by the time YouTube opens, the browser
++  // knows which address of Invidious answers.
++  if (IsRedirectOn(RedirectService::kYoutube, prefs())) {
++    InvidiousLocator::Get()->Current(prefs());
++  }
++}
++
++SiteRedirectTabHelper::~SiteRedirectTabHelper() = default;
++
++void SiteRedirectTabHelper::Bypass(RedirectService service) {
++  bypass_ = service;
++}
++
++bool SiteRedirectTabHelper::IsBypassed(RedirectService service) const {
++  return service != RedirectService::kNone && bypass_ == service;
++}
++
++void SiteRedirectTabHelper::ExpectRespectful(const GURL& original,
++                                             const GURL& respectful) {
++  expected_original_ = original;
++  expected_respectful_ = respectful;
++}
++
++RedirectService SiteRedirectTabHelper::ShownRespectful() const {
++  return RespectfulService(web_contents()->GetLastCommittedURL(), prefs());
++}
++
++RedirectService SiteRedirectTabHelper::ShownOriginal() const {
++  return SiteService(web_contents()->GetLastCommittedURL());
++}
++
++void SiteRedirectTabHelper::OpenOriginal() {
++  const GURL url = web_contents()->GetLastCommittedURL();
++  const RedirectService service = RespectfulService(url, prefs());
++  if (service == RedirectService::kNone) {
++    return;
++  }
++  GURL original;
++  if (content::NavigationEntry* entry =
++          web_contents()->GetController().GetLastCommittedEntry()) {
++    if (auto it = originals_.find(entry->GetUniqueID());
++        it != originals_.end()) {
++      original = it->second;
++    }
++  }
++  if (!original.is_valid()) {
++    original = OriginalUrl(url, prefs());
++  }
++  bypass_ = service;
++  Load(original, /*replace_current_entry=*/false);
++}
++
++void SiteRedirectTabHelper::OpenRespectful() {
++  const GURL url = web_contents()->GetLastCommittedURL();
++  bypass_ = RedirectService::kNone;
++  GURL target = RespectfulUrl(url, prefs(), /*main_frame=*/true);
++  if (!target.is_valid()) {
++    return;
++  }
++  Load(target, /*replace_current_entry=*/false);
++}
++
++bool SiteRedirectTabHelper::OfferOriginal() {
++  if (ShownRespectful() != RedirectService::kYoutube) {
++    return false;
++  }
++  OpenOriginal();
++  return true;
++}
++
++void SiteRedirectTabHelper::DidFinishNavigation(
++    content::NavigationHandle* handle) {
++  if (!handle->IsInPrimaryMainFrame() || handle->IsSameDocument()) {
++    return;
++  }
++  const GURL url = handle->GetURL();
++  if (handle->HasCommitted() && SiteService(url) != bypass_) {
++    bypass_ = RedirectService::kNone;
++  }
++  if (handle->HasCommitted() && expected_respectful_.is_valid() &&
++      std::ranges::contains(handle->GetRedirectChain(), expected_respectful_)) {
++    if (content::NavigationEntry* entry =
++            web_contents()->GetController().GetLastCommittedEntry()) {
++      if (originals_.size() > 50) {
++        originals_.erase(originals_.begin());
++      }
++      originals_[entry->GetUniqueID()] = expected_original_;
++    }
++    expected_original_ = GURL();
++    expected_respectful_ = GURL();
++  }
++  // Invidious didn't answer at the address in use: ask both again, and if the
++  // other one answers open the page there.
++  if (handle->IsErrorPage() &&
++      RespectfulService(url, prefs()) == RedirectService::kYoutube) {
++    switch (handle->GetNetErrorCode()) {
++      case net::ERR_ADDRESS_UNREACHABLE:
++      case net::ERR_CONNECTION_FAILED:
++      case net::ERR_CONNECTION_REFUSED:
++      case net::ERR_CONNECTION_RESET:
++      case net::ERR_CONNECTION_TIMED_OUT:
++      case net::ERR_EMPTY_RESPONSE:
++      case net::ERR_NETWORK_CHANGED:
++      case net::ERR_TIMED_OUT:
++        InvidiousLocator::Get()->CheckNow(
++            prefs(), base::BindOnce(&SiteRedirectTabHelper::OnInvidiousChecked,
++                                    weak_factory_.GetWeakPtr(), url));
++        break;
++      default:
++        break;
++    }
++  }
++}
++
++void SiteRedirectTabHelper::OnInvidiousChecked(const GURL& failed_url) {
++  if (web_contents()->GetLastCommittedURL() != failed_url) {
++    return;
++  }
++  const InvidiousLocator::State state = InvidiousLocator::Get()->state(prefs());
++  if (state != InvidiousLocator::State::kHome &&
++      state != InvidiousLocator::State::kRemote) {
++    return;
++  }
++  const std::string base = InvidiousLocator::Get()->Current(prefs());
++  if (base.empty() || url::Origin::Create(failed_url).Serialize() == base) {
++    return;
++  }
++  const std::string path(failed_url.path());
++  Load(GURL(base + (failed_url.has_query()
++                        ? path + "?" + std::string(failed_url.query())
++                        : path)),
++       /*replace_current_entry=*/true);
++}
++
++PrefService* SiteRedirectTabHelper::prefs() const {
++  return PrefsOf(web_contents()->GetBrowserContext());
++}
++
++void SiteRedirectTabHelper::Load(const GURL& url, bool replace_current_entry) {
++  if (!url.is_valid()) {
++    return;
++  }
++  // Not from inside the callback of a navigation or of the panel.
++  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(&LoadInTab, web_contents()->GetWeakPtr(), url,
++                                replace_current_entry));
++}
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(SiteRedirectTabHelper);
++
++}  // namespace browser_fork
+diff --git a/chrome/browser/fork/site_redirect.h b/chrome/browser/fork/site_redirect.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..bd62bc8b6ba342c9603b50ce56c7b0f1c1452fbb
+--- /dev/null
++++ b/chrome/browser/fork/site_redirect.h
+@@ -0,0 +1,141 @@
++#ifndef CHROME_BROWSER_FORK_SITE_REDIRECT_H_
++#define CHROME_BROWSER_FORK_SITE_REDIRECT_H_
++
++#include <cstdint>
++#include <map>
++#include <memory>
++#include <optional>
++#include <string>
++
++#include "base/functional/callback_forward.h"
++#include "base/memory/weak_ptr.h"
++#include "content/public/browser/frame_tree_node_id.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "content/public/browser/web_contents_user_data.h"
++#include "url/gurl.h"
++
++class PrefRegistrySimple;
++class PrefService;
++
++namespace blink {
++class URLLoaderThrottle;
++}  // namespace blink
++
++namespace content {
++class BrowserContext;
++class WebContents;
++}  // namespace content
++
++namespace network {
++struct ResourceRequest;
++}  // namespace network
++
++namespace user_prefs {
++class PrefRegistrySyncable;
++}  // namespace user_prefs
++
++namespace browser_fork {
++
++// Sites that track open on a version that doesn't: YouTube on the user's own
++// Invidious, Instagram on imginn, TikTok on urlebird. Invidious has two
++// addresses, the one at home and the one through Tailscale; they stay out of
++// the repository, the user writes them in chrome://proxy.
++inline constexpr char kInvidiousHomePref[] = "fork.invidious_home";
++inline constexpr char kInvidiousRemotePref[] = "fork.invidious_remote";
++inline constexpr char kRedirectYoutubePref[] = "fork.redirect_youtube";
++inline constexpr char kRedirectInstagramPref[] = "fork.redirect_instagram";
++inline constexpr char kRedirectTiktokPref[] = "fork.redirect_tiktok";
++
++enum class RedirectService { kNone, kYoutube, kInstagram, kTiktok };
++
++void RegisterSiteRedirectPrefs(user_prefs::PrefRegistrySyncable* registry);
++
++// The addresses of Invidious that count as public for Local Network Access,
++// in Local State. They apply only when the browser starts: the network process
++// reads them then, and the browser must see the same as the network process,
++// or the pages of Invidious wait for a permission.
++inline constexpr char kInvidiousPublicAddressesPref[] =
++    "fork.invidious_public_addresses";
++void RegisterSiteRedirectLocalStatePrefs(PrefRegistrySimple* registry);
++// At the start of the browser, before the observer of the overrides.
++void ApplyInvidiousAddressSpaceOverrides(PrefService* local_state);
++
++// "YouTube", "Instagram", "TikTok".
++const char* ServiceName(RedirectService service);
++// "Invidious", "imginn", "urlebird".
++const char* RespectfulName(RedirectService service);
++// The service whose sites |url| is on, any page of them (youtube.com,
++// consent.youtube.com, ...).
++RedirectService SiteService(const GURL& url);
++// The service whose respectful version |url| is on.
++RedirectService RespectfulService(const GURL& url, const PrefService* prefs);
++bool IsRedirectOn(RedirectService service, const PrefService* prefs);
++// Where |url| goes when its service is on; empty when it stays as it is. A
++// frame inside a page only goes for the videos of YouTube.
++GURL RespectfulUrl(const GURL& url, const PrefService* prefs, bool main_frame);
++// The original page of a respectful one, as close as it can be told.
++GURL OriginalUrl(const GURL& url, const PrefService* prefs);
++
++// Which address of Invidious answers: "home", "remote", "none", "checking", or
++// empty when there's none to check.
++std::string InvidiousReachability(const PrefService* prefs);
++// The addresses or the switches changed: the allowlists for plain http and a
++// new check of the server. |done| runs when the check is over.
++void SiteRedirectSettingsChanged(PrefService* prefs, base::OnceClosure done);
++
++std::unique_ptr<blink::URLLoaderThrottle> MaybeCreateSiteRedirectThrottle(
++    const network::ResourceRequest& request,
++    content::BrowserContext* browser_context,
++    const base::RepeatingCallback<content::WebContents*()>& wc_getter,
++    content::FrameTreeNodeId frame_tree_node_id);
++
++// The original a tab asked for, and what the panel of the site shows.
++class SiteRedirectTabHelper
++    : public content::WebContentsObserver,
++      public content::WebContentsUserData<SiteRedirectTabHelper> {
++ public:
++  SiteRedirectTabHelper(const SiteRedirectTabHelper&) = delete;
++  SiteRedirectTabHelper& operator=(const SiteRedirectTabHelper&) = delete;
++  ~SiteRedirectTabHelper() override;
++
++  // The tab shows the original of |service| until it leaves its sites.
++  void Bypass(RedirectService service);
++  bool IsBypassed(RedirectService service) const;
++  // A navigation of this tab goes to |respectful| in place of |original|.
++  void ExpectRespectful(const GURL& original, const GURL& respectful);
++
++  // The page is the respectful version: the service, else kNone.
++  RedirectService ShownRespectful() const;
++  // The page is on the original sites of a service: the service, else kNone.
++  RedirectService ShownOriginal() const;
++  void OpenOriginal();
++  void OpenRespectful();
++  // The button of the error page when Invidious doesn't answer.
++  bool OfferOriginal();
++
++ private:
++  explicit SiteRedirectTabHelper(content::WebContents* web_contents);
++  friend class content::WebContentsUserData<SiteRedirectTabHelper>;
++
++  // content::WebContentsObserver:
++  void DidFinishNavigation(content::NavigationHandle* handle) override;
++
++  PrefService* prefs() const;
++  void Load(const GURL& url, bool replace_current_entry);
++  void OnInvidiousChecked(const GURL& failed_url);
++
++  RedirectService bypass_ = RedirectService::kNone;
++  GURL expected_original_;
++  GURL expected_respectful_;
++  // The original of the pages this tab opened on a respectful version, by
++  // entry of the history.
++  std::map<int, GURL> originals_;
++
++  base::WeakPtrFactory<SiteRedirectTabHelper> weak_factory_{this};
++
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++}  // namespace browser_fork
++
++#endif  // CHROME_BROWSER_FORK_SITE_REDIRECT_H_
+diff --git a/chrome/browser/global_features.cc b/chrome/browser/global_features.cc
+index 0b349d5149d03673f512037a70d17a26831861a1..62bcfe813b3d11e351787ba7c1e2527bce41119f 100644
+--- a/chrome/browser/global_features.cc
++++ b/chrome/browser/global_features.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/global_features.h"
+ 
++#include "chrome/browser/fork/site_redirect.h"
++
+ #include <memory>
+ #include <utility>
+ 
+@@ -155,6 +157,9 @@ void GlobalFeatures::PostBrowserProcessInit() {
+   }
+ #endif  // BUILDFLAG(ENABLE_DEVICE_BOUND_SESSIONS)
+ 
++  // The addresses of the user's Invidious saved during the last run.
++  browser_fork::ApplyInvidiousAddressSpaceOverrides(
++      g_browser_process->local_state());
+   ip_address_space_overrides_prefs_observer_ = std::make_unique<
+       local_network_access::IPAddressSpaceOverridesPrefsObserver>(
+       g_browser_process->local_state());
+diff --git a/chrome/browser/net/net_error_tab_helper.cc b/chrome/browser/net/net_error_tab_helper.cc
+index fdfb07907fbb3bfb7842440399fa50d9b8e91cf9..94c2fc1b9abcbe191c86f38ed6e1ddcafc34de0a 100644
+--- a/chrome/browser/net/net_error_tab_helper.cc
++++ b/chrome/browser/net/net_error_tab_helper.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "chrome/browser/net/net_error_tab_helper.h"
+ 
++#include "chrome/browser/fork/site_redirect.h"  // nogncheck
+ #include "chrome/browser/fork/vpn_tab_helper.h"  // nogncheck
+ 
+ #include "base/functional/bind.h"
+@@ -293,6 +294,15 @@ void NetErrorTabHelper::RunNetworkDiagnostics(const GURL& url) {
+   if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS())
+     return;
+ 
++  // On our page for an Invidious that doesn't answer this opens YouTube.
++  if (auto* redirect =
++          browser_fork::SiteRedirectTabHelper::FromWebContents(web_contents());
++      redirect &&
++      IsValidEasterEggTarget(network_diagnostics_receivers_.CurrentTargetFrame()) &&
++      redirect->OfferOriginal()) {
++    return;
++  }
++
+   // On our page for a VPN that doesn't answer this is the button of the reserve.
+   if (auto* vpn = browser_fork::VpnTabHelper::FromWebContents(web_contents());
+       vpn &&
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index d46792f586a409c0b4ee53d46652935c19055c66..6f9760e29a8da0bdf07383ed7d112e27564c4957 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -33,6 +33,7 @@
+ #include "chrome/browser/enterprise/reporting/prefs.h"
+ #include "chrome/browser/enterprise/util/managed_browser_utils.h"
+ #include "chrome/browser/external_protocol/external_protocol_handler.h"
++#include "chrome/browser/fork/site_redirect.h"
+ #include "chrome/browser/fork/temporary_site_data_service.h"
+ #include "chrome/browser/fork/vpn_status.h"
+ #include "chrome/browser/finds/core/finds_service.h"
+@@ -1434,6 +1435,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
+   // Call outs to individual subsystems that register Local State (browser-wide)
+   // prefs en masse. See RegisterProfilePrefs for per-profile prefs. Please
+   // keep this list alphabetized.
++  browser_fork::RegisterSiteRedirectLocalStatePrefs(registry);
+ #if BUILDFLAG(IS_ANDROID)
+   accessibility::AccessibilityPrefsController::RegisterLocalStatePrefs(
+       registry);
+@@ -1763,6 +1765,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+   AccessibilityLabelsService::RegisterProfilePrefs(registry);
+   browser_fork::TemporarySiteDataService::RegisterProfilePrefs(registry);
+   browser_fork::VpnStatus::RegisterProfilePrefs(registry);
++  browser_fork::RegisterSiteRedirectPrefs(registry);
+   AccessibilityUIMessageHandler::RegisterProfilePrefs(registry);
+   accessibility_annotator::prefs::RegisterProfilePrefs(registry);
+   AimEligibilityService::RegisterProfilePrefs(registry);
+diff --git a/chrome/browser/resources/proxy_config.html b/chrome/browser/resources/proxy_config.html
+index cb9b183ac5aeaf750eb6a34a8a57043159a8ec34..f5b9fb37bbca84a0eee8594154f1353a77411313 100644
+--- a/chrome/browser/resources/proxy_config.html
++++ b/chrome/browser/resources/proxy_config.html
+@@ -47,6 +47,24 @@
+         <button class="fork-inline" id="fork-search-off">Togli</button></p>
+       <p id="fork-search-status"></p>
+ 
++      <h2>Siti che tracciano</h2>
++      <p>Aprendo questi siti il browser va da solo alla loro versione che non ti traccia, anche dai
++        link condivisi. Dal pannello del sito (lo scudo nella barra degli indirizzi) torni
++        all'originale quando ti serve.</p>
++      <p><label><input type="checkbox" id="fork-redirect-youtube"> <b>YouTube</b> sul tuo
++        Invidious, anche i video dentro gli altri siti</label></p>
++      <p><label>Indirizzo di casa
++        <input id="fork-invidious-home" size="26" placeholder="http://indirizzo:porta"></label>
++        <label>Fuori casa (Tailscale)
++        <input id="fork-invidious-remote" size="26" placeholder="http://indirizzo:porta"></label>
++        <button class="fork-inline" id="fork-invidious-save">Salva</button></p>
++      <p id="fork-invidious-status"></p>
++      <p><label><input type="checkbox" id="fork-redirect-instagram"> <b>Instagram</b> su
++        imginn</label></p>
++      <p><label><input type="checkbox" id="fork-redirect-tiktok"> <b>TikTok</b> su urlebird.
++        Un video apre la pagina del suo autore: urlebird mette nell'indirizzo del video le
++        parole della descrizione, che il link di TikTok non ha.</label></p>
++
+       <h2>Cookie e dati dei siti</h2>
+       <p><label><input type="radio" name="fork-cookie-mode" value="0"> <b>Temporanei:</b> i dati
+         di un sito durano la visita e si cancellano appena lo lasci.</label></p>
+diff --git a/chrome/browser/resources/proxy_config.js b/chrome/browser/resources/proxy_config.js
+index f11264374dfdadc54721590c621c72904b5ee873..8ec4871c848036f8847b8cd9acd1ee179ea0f6af 100644
+--- a/chrome/browser/resources/proxy_config.js
++++ b/chrome/browser/resources/proxy_config.js
+@@ -337,6 +337,42 @@ window.ForkSettings = (function() {
+     }
+   }
+ 
++  // Saved in this page: the network process reads the addresses when it starts.
++  let invidiousSaved = false;
++
++  function sendRedirects() {
++    invidiousSaved = true;
++    setStatus('fork-invidious-status', 'Controllo gli indirizzi…');
++    chrome.send('setRedirects', [
++      $('fork-invidious-home').value.trim(), $('fork-invidious-remote').value.trim(),
++      $('fork-redirect-youtube').checked, $('fork-redirect-instagram').checked,
++      $('fork-redirect-tiktok').checked,
++    ]);
++  }
++
++  function invidiousText(settings) {
++    if (!settings.invidiousHome && !settings.invidiousRemote) {
++      return 'Senza un indirizzo YouTube resta com\'è.';
++    }
++    if (!settings.redirectYoutube) {
++      return 'Spento: YouTube resta com\'è.';
++    }
++    const restart = invidiousSaved ?
++        ' I video dentro gli altri siti passano a Invidious dal prossimo avvio del browser.' :
++        '';
++    switch (settings.invidiousStatus) {
++      case 'home':
++        return 'Risponde quello di casa: YouTube si apre lì.' + restart;
++      case 'remote':
++        return 'Risponde quello di Tailscale: YouTube si apre lì.' + restart;
++      case 'none':
++        return 'Nessuno dei due risponde, o non è Invidious: YouTube dà errore finché ' +
++            'non lo apri tu dalla pagina.';
++      default:
++        return 'Controllo gli indirizzi…';
++    }
++  }
++
+   function bind() {
+     $('fork-vpn-on').onclick = function() {
+       const address = $('fork-vpn-address').value.trim().replace(/^https?:\/\//, '');
+@@ -370,6 +406,11 @@ window.ForkSettings = (function() {
+     $('fork-search-off').onclick = function() {
+       chrome.send('setPersonalSearch', ['']);
+     };
++    $('fork-invidious-save').onclick = sendRedirects;
++    ['fork-redirect-youtube', 'fork-redirect-instagram', 'fork-redirect-tiktok']
++        .forEach(function(id) {
++          $(id).onchange = sendRedirects;
++        });
+     document.getElementsByName('fork-cookie-mode').forEach(function(radio) {
+       radio.onchange = function() {
+         chrome.send('setCookieMode', [Number(radio.value)]);
+@@ -420,6 +461,12 @@ window.ForkSettings = (function() {
+       if (settings.vpnExitCity && !$('fork-vpn-city').value) {
+         $('fork-vpn-city').value = settings.vpnExitCity;
+       }
++      $('fork-invidious-home').value = settings.invidiousHome;
++      $('fork-invidious-remote').value = settings.invidiousRemote;
++      $('fork-redirect-youtube').checked = settings.redirectYoutube;
++      $('fork-redirect-instagram').checked = settings.redirectInstagram;
++      $('fork-redirect-tiktok').checked = settings.redirectTiktok;
++      setStatus('fork-invidious-status', invidiousText(settings));
+       setStatus('fork-search-status', settings.personalSearch ?
+           'Attivo: le ricerche vanno a ' + settings.personalSearch + '.' :
+           'Spento: le ricerche vanno al motore predefinito.');
+diff --git a/chrome/browser/resources/site_panel.html b/chrome/browser/resources/site_panel.html
+index d160db7d28ff9a288b5e131bfd08c82278055996..39aeb65cc7341274855c19ef8fa1444f33a5f21a 100644
+--- a/chrome/browser/resources/site_panel.html
++++ b/chrome/browser/resources/site_panel.html
+@@ -67,6 +67,8 @@ figure { margin: 0; }
+ figcaption { margin-top: 4px; font-size: 11px; color: var(--sub); }
+ #webgl { margin-top: 8px; width: 100%; min-height: 28px; padding: 0 10px; border: 0; border-radius: 10px; background: var(--field); color: var(--accent); font-size: 12px; font-weight: 600; }
+ #webgl.on { color: var(--red); }
++#redirect-head { min-height: 30px; padding: 6px 10px; line-height: 1.35; }
++#redirect-go { flex-shrink: 0; min-height: 24px; padding: 0 10px; border: 0; border-radius: 12px; background: var(--accent-bg); color: var(--accent); font-size: 12px; font-weight: 600; }
+ [hidden] { display: none !important; }
+ </style>
+ <script src="site_panel.js"></script>
+@@ -81,6 +83,10 @@ figcaption { margin-top: 4px; font-size: 11px; color: var(--sub); }
+     <button id="close" aria-label="Chiudi"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
+   </header>
+   <button id="route"><span aria-hidden="true"></span><b id="route-text"></b></button>
++  <div class="group" id="redirect" hidden>
++    <div class="row" id="redirect-head"><span id="redirect-text"></span><button id="redirect-go"></button></div>
++    <button class="row" id="redirect-switch"><span id="redirect-switch-text"></span><span class="value" id="redirect-switch-value"></span></button>
++  </div>
+   <div>
+     <div class="fp-head"><h2>Fingerprinting</h2><span id="fp-total"></span></div>
+     <p class="hint" id="fp-hint"></p>
+diff --git a/chrome/browser/resources/site_panel.js b/chrome/browser/resources/site_panel.js
+index 4a743a4b458cca5085bb305ca593d8d5069ffb50..9b464f68fce7673ca9c3e01c53e1ba41d86da51a 100644
+--- a/chrome/browser/resources/site_panel.js
++++ b/chrome/browser/resources/site_panel.js
+@@ -53,6 +53,24 @@ window.SitePanel = (function() {
+                                         'Mostra tutte e ' + s.fp.length + ' le categorie';
+   }
+ 
++  // A site that tracks: the respectful version, or the original the user asked for.
++  function showRedirect(r) {
++    $('redirect').hidden = !r || !r.mode;
++    if (!r || !r.mode) {
++      return;
++    }
++    const respectful = r.mode === 'respectful';
++    $('redirect-text').textContent = respectful ?
++        'Aperto su ' + r.respectful + ' al posto di ' + r.service :
++        'Pagina originale di ' + r.service;
++    $('redirect-go').hidden = !respectful && !r.canGo;
++    $('redirect-go').textContent =
++        respectful ? 'Apri l\'originale' : 'Apri su ' + r.respectful;
++    $('redirect-switch-text').textContent = 'Reindirizza ' + r.service;
++    $('redirect-switch-value').textContent =
++        r.needsAddress ? 'Da impostare' : (r.on ? 'Sì' : 'No');
++  }
++
+   function loaded(s) {
+     state = s;
+     $('site').textContent = s.site;
+@@ -62,6 +80,7 @@ window.SitePanel = (function() {
+     $('route').className = s.route;
+     $('route-text').textContent = routeText(s);
+     showFingerprinting(s);
++    showRedirect(s.redirect);
+     // What the site received, with the noise; nothing until it reads.
+     for (const [id, src] of [['canvas-preview', s.canvasPreview],
+                              ['webgl-preview', s.webglPreview]]) {
+@@ -88,6 +107,11 @@ window.SitePanel = (function() {
+     $('close').onclick = () => chrome.send('close');
+     $('route').onclick = () => chrome.send('openVpnSettings');
+     $('webgl').onclick = () => chrome.send('setWebgl', [!state.webgl]);
++    $('redirect-go').onclick = () => chrome.send(
++        state.redirect.mode === 'respectful' ? 'openOriginal' : 'openRespectful');
++    $('redirect-switch').onclick = () => state.redirect.needsAddress ?
++        chrome.send('openVpnSettings') :
++        chrome.send('setRedirect', [!state.redirect.on]);
+     $('fp-all').onclick = () => {
+       showAll = !showAll;
+       showFingerprinting(state);
+diff --git a/chrome/browser/ui/tab_helpers.cc b/chrome/browser/ui/tab_helpers.cc
+index 029ae236427aaa3a4dfb709dacfd978860869df7..1617752009812b8b7c102c644f1238a15756e5eb 100644
+--- a/chrome/browser/ui/tab_helpers.cc
++++ b/chrome/browser/ui/tab_helpers.cc
+@@ -35,6 +35,7 @@
+ #include "chrome/browser/external_protocol/external_protocol_observer.h"
+ #include "chrome/browser/favicon/favicon_utils.h"
+ #include "chrome/browser/fork/personal_search_tab_helper.h"
++#include "chrome/browser/fork/site_redirect.h"
+ #include "chrome/browser/fork/temporary_site_data_tab_helper.h"
+ #include "chrome/browser/fork/vpn_tab_helper.h"
+ #include "chrome/browser/file_system_access/file_system_access_features.h"
+@@ -414,6 +415,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents,
+   chrome_browser_net::NetErrorTabHelper::CreateForWebContents(web_contents);
+   browser_fork::PersonalSearchTabHelper::CreateForWebContents(web_contents);
+   browser_fork::VpnTabHelper::CreateForWebContents(web_contents);
++  browser_fork::SiteRedirectTabHelper::CreateForWebContents(web_contents);
+   if (!profile->IsOffTheRecord()) {
+     browser_fork::TemporarySiteDataTabHelper::CreateForWebContents(web_contents);
+   }
+diff --git a/chrome/browser/ui/webui/proxy_config_ui.cc b/chrome/browser/ui/webui/proxy_config_ui.cc
+index 63761a9d043eb349d1cd75bd2bac4ff6c131b1dc..4060721b8fd7f851ea32cf5516c00bb5ab329939 100644
+--- a/chrome/browser/ui/webui/proxy_config_ui.cc
++++ b/chrome/browser/ui/webui/proxy_config_ui.cc
+@@ -36,6 +36,7 @@
+ #include "chrome/browser/platform_util.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/fork/personal_search.h"
++#include "chrome/browser/fork/site_redirect.h"
+ #include "chrome/browser/fork/claude_extension.h"
+ #include "chrome/browser/fork/temporary_site_data_service.h"
+ #include "chrome/browser/fork/vpn_status.h"
+@@ -93,6 +94,7 @@ class ProxyConfigMessageHandler
+   void OnSetRememberedSites(const base::ListValue& args);
+   void OnSetClaudeBlockedSites(const base::ListValue& list);
+   void OnSetPersonalSearch(const base::ListValue& args);
++  void OnSetRedirects(const base::ListValue& args);
+   void OnSetVpnSettings(const base::ListValue& args);
+   void OnSetVpnReserve(const base::ListValue& args);
+ 
+@@ -279,6 +281,10 @@ void ProxyConfigMessageHandler::RegisterMessages() {
+       "setPersonalSearch",
+       base::BindRepeating(&ProxyConfigMessageHandler::OnSetPersonalSearch,
+                           base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "setRedirects",
++      base::BindRepeating(&ProxyConfigMessageHandler::OnSetRedirects,
++                          base::Unretained(this)));
+ }
+ 
+ namespace {
+@@ -328,6 +334,16 @@ void ProxyConfigMessageHandler::SendForkSettings() {
+   settings.Set("vpnExitCity", prefs->GetString(browser_fork::kVpnExitCityPref));
+   settings.Set("vpnReserve", browser_fork::VpnStatus::Get()->route() ==
+                                  browser_fork::VpnStatus::Route::kDirectReserve);
++  settings.Set("invidiousHome", prefs->GetString(browser_fork::kInvidiousHomePref));
++  settings.Set("invidiousRemote",
++               prefs->GetString(browser_fork::kInvidiousRemotePref));
++  settings.Set("invidiousStatus", browser_fork::InvidiousReachability(prefs));
++  settings.Set("redirectYoutube",
++               prefs->GetBoolean(browser_fork::kRedirectYoutubePref));
++  settings.Set("redirectInstagram",
++               prefs->GetBoolean(browser_fork::kRedirectInstagramPref));
++  settings.Set("redirectTiktok",
++               prefs->GetBoolean(browser_fork::kRedirectTiktokPref));
+   web_ui()->CallJavascriptFunctionUnsafe("ForkSettings.loaded",
+                                          std::move(settings));
+ }
+@@ -391,6 +407,25 @@ void ProxyConfigMessageHandler::OnSetVpnReserve(const base::ListValue& list) {
+   SendForkSettings();
+ }
+ 
++void ProxyConfigMessageHandler::OnSetRedirects(const base::ListValue& list) {
++  if (list.size() != 5 || !list[0].is_string() || !list[1].is_string() ||
++      !list[2].is_bool() || !list[3].is_bool() || !list[4].is_bool()) {
++    SendForkSettings();
++    return;
++  }
++  PrefService* prefs = profile_->GetPrefs();
++  prefs->SetString(browser_fork::kInvidiousHomePref, list[0].GetString());
++  prefs->SetString(browser_fork::kInvidiousRemotePref, list[1].GetString());
++  prefs->SetBoolean(browser_fork::kRedirectYoutubePref, list[2].GetBool());
++  prefs->SetBoolean(browser_fork::kRedirectInstagramPref, list[3].GetBool());
++  prefs->SetBoolean(browser_fork::kRedirectTiktokPref, list[4].GetBool());
++  SendForkSettings();
++  // The answer of the server comes a moment later.
++  browser_fork::SiteRedirectSettingsChanged(
++      prefs, base::BindOnce(&ProxyConfigMessageHandler::SendForkSettings,
++                            weak_ptr_factory_.GetWeakPtr()));
++}
++
+ void ProxyConfigMessageHandler::OnSetPersonalSearch(
+     const base::ListValue& list) {
+   TemplateURLService* service =
+diff --git a/chrome/browser/ui/webui/site_panel_ui.cc b/chrome/browser/ui/webui/site_panel_ui.cc
+index 344220611cea936c572ce90fe1f0768180f44caf..d240b653b7ec590d0524921675854c067e8e48a9 100644
+--- a/chrome/browser/ui/webui/site_panel_ui.cc
++++ b/chrome/browser/ui/webui/site_panel_ui.cc
+@@ -11,6 +11,7 @@
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/browser/fork/fingerprinting_counter.h"
++#include "chrome/browser/fork/site_redirect.h"
+ #include "chrome/browser/fork/temporary_site_data_service.h"
+ #include "chrome/browser/fork/ublock_extension.h"
+ #include "chrome/browser/fork/vpn_status.h"
+@@ -103,6 +104,9 @@ class SitePanelHandler : public content::WebUIMessageHandler {
+     add("openBlocking", &SitePanelHandler::OnOpenBlocking);
+     add("setRemembered", &SitePanelHandler::OnSetRemembered);
+     add("setWebgl", &SitePanelHandler::OnSetWebgl);
++    add("openOriginal", &SitePanelHandler::OnOpenOriginal);
++    add("openRespectful", &SitePanelHandler::OnOpenRespectful);
++    add("setRedirect", &SitePanelHandler::OnSetRedirect);
+     // The counts go on while the panel is open.
+     fingerprinting_subscription_ =
+         browser_fork::FingerprintingCounter::RegisterChangedCallback(
+@@ -206,9 +210,41 @@ class SitePanelHandler : public content::WebUIMessageHandler {
+                                    contents, /*webgl=*/false));
+     state.Set("webglPreview", browser_fork::FingerprintingCounter::GetPreview(
+                                   contents, /*webgl=*/true));
++    state.Set("redirect", RedirectState(contents));
+     return state;
+   }
+ 
++  // The page is the respectful version of a site that tracks, or the original.
++  base::DictValue RedirectState(content::WebContents* contents) {
++    using browser_fork::RedirectService;
++    base::DictValue redirect;
++    auto* helper = browser_fork::SiteRedirectTabHelper::FromWebContents(contents);
++    if (!helper) {
++      return redirect;
++    }
++    PrefService* prefs = GetProfile()->GetPrefs();
++    RedirectService service = helper->ShownRespectful();
++    if (service != RedirectService::kNone) {
++      redirect.Set("mode", "respectful");
++    } else if ((service = helper->ShownOriginal()) != RedirectService::kNone) {
++      redirect.Set("mode", "original");
++      redirect.Set("canGo", browser_fork::RespectfulUrl(
++                                contents->GetLastCommittedURL(), prefs,
++                                /*main_frame=*/true)
++                                .is_valid());
++    } else {
++      return redirect;
++    }
++    redirect.Set("service", browser_fork::ServiceName(service));
++    redirect.Set("respectful", browser_fork::RespectfulName(service));
++    redirect.Set("on", browser_fork::IsRedirectOn(service, prefs));
++    redirect.Set("needsAddress",
++                 service == RedirectService::kYoutube &&
++                     prefs->GetString(browser_fork::kInvidiousHomePref).empty() &&
++                     prefs->GetString(browser_fork::kInvidiousRemotePref).empty());
++    return redirect;
++  }
++
+   void OnFingerprintingChanged(content::WebContents* contents) {
+     if (IsJavascriptAllowed() && contents && contents == GetSiteContents()) {
+       SendState();
+@@ -305,6 +341,50 @@ class SitePanelHandler : public content::WebUIMessageHandler {
+     SendState();
+   }
+ 
++  void OnOpenOriginal(const base::ListValue& args) {
++    content::WebContents* contents = GetSiteContents();
++    Close();
++    if (auto* helper = contents ? browser_fork::SiteRedirectTabHelper::FromWebContents(contents)
++                                : nullptr) {
++      helper->OpenOriginal();
++    }
++  }
++
++  void OnOpenRespectful(const base::ListValue& args) {
++    content::WebContents* contents = GetSiteContents();
++    Close();
++    if (auto* helper = contents ? browser_fork::SiteRedirectTabHelper::FromWebContents(contents)
++                                : nullptr) {
++      helper->OpenRespectful();
++    }
++  }
++
++  void OnSetRedirect(const base::ListValue& args) {
++    using browser_fork::RedirectService;
++    content::WebContents* contents = GetSiteContents();
++    auto* helper = contents
++                       ? browser_fork::SiteRedirectTabHelper::FromWebContents(contents)
++                       : nullptr;
++    if (!helper || args.size() != 1 || !args[0].is_bool()) {
++      return;
++    }
++    RedirectService service = helper->ShownRespectful();
++    if (service == RedirectService::kNone) {
++      service = helper->ShownOriginal();
++    }
++    const char* pref = service == RedirectService::kYoutube
++                           ? browser_fork::kRedirectYoutubePref
++                       : service == RedirectService::kInstagram
++                           ? browser_fork::kRedirectInstagramPref
++                       : service == RedirectService::kTiktok
++                           ? browser_fork::kRedirectTiktokPref
++                           : nullptr;
++    if (pref) {
++      GetProfile()->GetPrefs()->SetBoolean(pref, args[0].GetBool());
++    }
++    SendState();
++  }
++
+   base::CallbackListSubscription fingerprinting_subscription_;
+ };
+ 

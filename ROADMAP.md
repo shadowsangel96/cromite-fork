@@ -1,7 +1,7 @@
 # Roadmap
 
-Ordine deciso: interfaccia Mac come negli schizzi e voce 3 (privacy e pannello) sono fatte; adesso
-i redirect (12b), poi uBlock al posto dell'adblock (12), nome e traduzioni (12c), poi Windows. Ordine indicativo per il resto. Ogni voce diventa una o più patch in `patches/` (titolo del commit con
+Ordine deciso: interfaccia Mac come negli schizzi, voce 3 (privacy e pannello) e redirect (12b)
+sono fatti; adesso uBlock al posto dell'adblock (12), poi nome e traduzioni (12c), poi Windows. Ordine indicativo per il resto. Ogni voce diventa una o più patch in `patches/` (titolo del commit con
 `win:`, `mac:` o `ios:` per quelle di una sola piattaforma), quindi sopravvive agli
 aggiornamenti di Cromite come tutto il resto.
 
@@ -94,6 +94,9 @@ aggiornamenti di Cromite come tutto il resto.
 - Motore: DuckDuckGo Light predefinito finché non si inserisce SearXNG; se SearXNG non risponde
   entro 8 secondi la ricerca passa da sola a DuckDuckGo Light. L'indirizzo di SearXNG è accettato
   anche in http, che la modalità solo HTTPS di Cromite altrimenti blocca.
+- Redirect (12b): YouTube va sul proprio Invidious, Instagram su imginn, TikTok su urlebird, anche
+  dai link condivisi e dai link brevi (vm.tiktok.com, o un link che passa da un altro sito). Dettagli
+  nella voce 12b.
 
 ## 1. Prima build Windows installabile, poi build veloci
 
@@ -557,14 +560,42 @@ spento come già in Cromite (`Do-not-store-passwords-by-default.patch`,
   pagine si vedono), sicurezza (accesso a tutti i siti, aggiornamenti che possono diventare
   malevoli) e il fatto che le funzioni più comuni sono già nel browser.
 
-## 12b. Redirect dei siti che tracciano verso versioni rispettose
+## 12b. Redirect dei siti che tracciano verso versioni rispettose (fatto)
 
-- Un sistema di redirect: aprendo un sito che traccia, il browser va da solo alla sua versione
-  rispettosa, con un interruttore per sito e la possibilità di tornare all'originale.
-- **YouTube → Invidious** sul proprio server (container già attivo). L'indirizzo si inserisce
-  nella pagina "Rete e privacy" come quello della VPN e di SearXNG, mai nel repo.
-- **Instagram e TikTok:** stesso sistema, indirizzi dei frontend da ricevere dall'utente.
-- Link condivisi, incorporati (iframe di YouTube) e app web: da coprire anche quelli.
+- **Come funziona:** la richiesta della pagina va direttamente alla versione rispettosa, prima di
+  toccare il sito che traccia; un link breve o un link che passa da un altro sito viene fermato
+  al rimbalzo e riaperto lì. Gli interruttori stanno in chrome://proxy ("Siti che tracciano").
+  Il pannello del sito dice "Aperto su Invidious al posto di YouTube" con "Apri l'originale"; la
+  scheda resta sull'originale finché non esce dai suoi siti, e un link di Invidious verso YouTube
+  ("Guarda su YouTube") vale come scelta dell'utente.
+- **YouTube → il proprio Invidious:** due indirizzi, casa e Tailscale, scritti in chrome://proxy e
+  mai nel repo. Il browser chiede `/api/v1/stats` a entrambi e usa quello di casa se risponde
+  ed è davvero Invidious (fuori casa lo stesso indirizzo può essere un altro apparecchio), se no
+  quello di Tailscale; richiede a ogni cambio di rete e ogni 10 minuti. Se l'indirizzo in uso non
+  risponde prova l'altro da solo; se nessuno risponde c'è la pagina "Il tuo Invidious non
+  risponde" con "Apri su YouTube": YouTube non si apre mai da solo. Video, Shorts, youtu.be (senza
+  il `si` di tracciamento), canali, @nomi, playlist, ricerca e tendenze; music.youtube.com resta
+  com'è. Sulla pagina dei cookie di YouTube il pannello offre "Apri su Invidious" per la pagina
+  chiesta.
+- **Video dentro gli altri siti:** vanno su Invidious anche loro. Per farlo, i due indirizzi di
+  Invidious contano come sicuri (contenuto misto) e come pubblici per la protezione della rete
+  locale di Chromium, che altrimenti chiede il permesso a ogni sito: solo quei due indirizzi e
+  porte, il resto della rete di casa resta protetto. Il processo di rete li legge all'avvio,
+  quindi vale dal riavvio dopo averli salvati (la pagina lo dice). Vale per gli indirizzi numerici;
+  un nome come nas.local non si può dichiarare pubblico.
+- **Instagram → imginn:** profili, post, reel, storie e "taggati"; account, esplora, messaggi
+  restano su Instagram.
+- **TikTok → urlebird:** profili e tendenze. Un video apre la pagina del suo autore, perché
+  urlebird mette nell'indirizzo del video le parole della descrizione, che il link di TikTok non
+  ha. Un frontend con gli stessi indirizzi di TikTok (ProxiTok sul proprio server) aprirebbe il
+  video giusto.
+- **Non provato da qui:** il contenuto delle pagine di imginn e urlebird, che stanno dietro il
+  controllo anti-bot di Cloudflare; le prove automatiche controllano solo che l'indirizzo sia
+  quello giusto. Fuori casa via Tailscale: sul Mac delle prove Tailscale era spento, il passaggio
+  al secondo indirizzo è provato con un Invidious finto spento.
+- Provati i video incorporati con un iframe normale (getbootstrap.com). I siti che creano il video
+  con lo script di YouTube (`iframe_api`) non sono provati: lo script arriva comunque da
+  youtube.com, e il lettore che crea potrebbe non funzionare con Invidious.
 
 ## 12c. Nome del browser e traduzioni inglesi
 
