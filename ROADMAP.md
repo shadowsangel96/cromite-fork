@@ -1,7 +1,7 @@
 # Roadmap
 
-Ordine deciso: interfaccia Mac come negli schizzi, voce 3 (privacy e pannello) e redirect (12b)
-sono fatti; adesso uBlock al posto dell'adblock (12), poi nome e traduzioni (12c), poi Windows. Ordine indicativo per il resto. Ogni voce diventa una o più patch in `patches/` (titolo del commit con
+Ordine deciso: interfaccia Mac come negli schizzi, voce 3 (privacy e pannello), redirect (12b) e
+uBlock al posto dell'adblock (12) sono fatti; adesso nome e traduzioni (12c), poi Windows. Ordine indicativo per il resto. Ogni voce diventa una o più patch in `patches/` (titolo del commit con
 `win:`, `mac:` o `ios:` per quelle di una sola piattaforma), quindi sopravvive agli
 aggiornamenti di Cromite come tutto il resto.
 
@@ -53,9 +53,12 @@ aggiornamenti di Cromite come tutto il resto.
 - uBlock Origin integrato: la release ufficiale, verificata con lo sha256 e indicata in
   `overlay/chrome/browser/resources/ublock/fork-ublock.json`, gira come componente interno. Non sta tra
   le estensioni. Pulsante con il contatore nella barra e pannello "Blocco contenuti" come nella tavola,
-  con i numeri veri di uBlock. L'adblock di Cromite si spegne una volta sola e resta disponibile. Il
-  controllo giornaliero segue anche le sue release. Mancano le impostazioni dentro la pagina delle
-  impostazioni: per ora "Impostazioni" apre quella di uBlock Origin.
+  con i numeri veri di uBlock. Il controllo giornaliero segue anche le sue release. Le impostazioni
+  stanno nella pagina delle impostazioni, sezione "Blocco contenuti" (`chrome://settings/adblock`, dove
+  c'era l'adblock di Cromite): liste di filtri, filtri personali, regole e siti esclusi, con i
+  controlli di Chromium; "Impostazioni" nel pannello apre questa sezione. L'adblock di Cromite è
+  spento a ogni avvio, senza impostazioni e senza `chrome://adblock-internals`: da spento non scarica
+  liste.
 - Pannello del sito: scudo nella barra e pannello come nella tavola, in tema chiaro e scuro, con la
   strada dei dati, WebGL per sito e "Ricorda questo sito". Scrive solo protezioni misurate sul browser
   vero. Su Mac le larghezze del testo hanno il rumore ma i font installati si riconoscono ancora: da
@@ -534,9 +537,14 @@ spento come già in Cromite (`Do-not-store-passwords-by-default.patch`,
   filtri cosmetici avanzati, liste scritte per la sua sintassi.
   - **Integrato, non estensione:** gira come componente interno del browser, come il lettore
     PDF di Chromium. Non compare tra le estensioni e non si disinstalla per sbaglio.
-  - **Impostazioni** nella sezione dove prima c'era l'adblock di Cromite ("Blocco contenuti"):
-    liste di filtri, filtri personali, regole e siti esclusi di uBlock Origin dentro la pagina
-    delle impostazioni.
+  - **Impostazioni** (fatto) nella sezione dove prima c'era l'adblock di Cromite ("Blocco
+    contenuti"): liste di filtri, filtri personali, regole e siti esclusi di uBlock Origin dentro
+    la pagina delle impostazioni. La sezione parla con uBlock attraverso una sua pagina
+    (`ponte.html`) in un frame nascosto, che accetta solo i messaggi di `chrome://settings` e solo
+    quelli che la sezione usa; un sito non la può caricare. Le liste si applicano appena si tocca
+    una casella. Filtri e regole si salvano con "Salva"; le regole valgono subito e restano dopo
+    il riavvio. Il resto (backup, impostazioni avanzate, aspetto) resta nella pagina di uBlock
+    Origin, aperta da "Altre impostazioni di uBlock Origin".
   - **Icona a destra dell'indirizzo**, speculare allo scudo del fingerprinting a sinistra, con il
     numero di elementi bloccati nella pagina. Apre il pannello "Blocco contenuti": acceso o spento
     sul sito, bloccati e domini esterni, blocchi extra per sito (popup, media grandi, font
@@ -548,8 +556,10 @@ spento come già in Cromite (`Do-not-store-passwords-by-default.patch`,
   - Distribuito con il browser dalla release ufficiale su GitHub (GPL-3.0, come Cromite), non dal
     Chrome Web Store, così Google non lo vede. Il controllo giornaliero segue anche le release di
     uBlock Origin. Le liste di filtri si aggiornano da sole, passando dalla VPN.
-  - **Da fare: togliere del tutto l'adblock di Cromite** (motore eyeo) dalle impostazioni e
-    dall'interfaccia, così resta solo uBlock Origin. Oggi è spento ma ancora presente.
+  - **Adblock di Cromite tolto** (fatto) dalle impostazioni e dall'interfaccia: è spento a ogni
+    avvio, la sua pagina di impostazioni e `chrome://adblock-internals` non ci sono più. Il motore
+    eyeo resta compilato (toglierlo vorrebbe dire riscrivere molte patch di Cromite a ogni
+    aggiornamento), ma da spento non scarica liste e non filtra.
   - **Piano B**, quando Chromium toglierà del tutto MV2 e la patch di Cromite non basterà più:
     il motore nativo `adblock-rust` di Brave (MPL-2.0), che legge le liste e gli scriptlet di
     uBlock Origin. Nel frattempo, uBlock Origin Lite (MV3).

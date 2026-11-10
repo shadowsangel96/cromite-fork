@@ -574,7 +574,8 @@ time.sleep(12)  # le preferenze finiscono su disco ogni 10 s
 b.close()
 with open(os.path.join(PROFILE, "Default", "Preferences"), errors="replace") as f:
     prefs = json.load(f)
-check("l'adblock di Cromite è spento", prefs.get("adblock", {}).get("handed_to_ublock") is True, prefs.get("adblock"))
+eyeo = prefs.get("filtering", {}).get("configurations", {}).get("adblock", {})
+check("l'adblock di Cromite è spento (filtra solo uBlock Origin)", eyeo.get("enabled") is False, eyeo.get("enabled"))
 with open(PROFILE + ".log", errors="replace") as f:
     log = f.read()
 for needle in ("FATAL", "Check failed"):

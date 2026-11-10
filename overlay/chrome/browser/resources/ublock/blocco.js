@@ -126,7 +126,11 @@
     vAPI.closePopup();
   };
   $('logger').onclick = () => openPage(`logger-ui.html#_+${data.tabId}`);
-  $('settings').onclick = () => openPage('dashboard.html');
+  // Le impostazioni di uBlock stanno nella pagina delle impostazioni, sezione "Blocco contenuti".
+  $('settings').onclick = () => {
+    chrome.tabs.create({url: 'chrome://settings/adblock'});
+    vAPI.closePopup();
+  };
 
   refresh();
   setInterval(refresh, 1000);

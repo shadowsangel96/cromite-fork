@@ -707,73 +707,36 @@ index 125a4845f53e2d75bf59ea974749dcc9471031a7..ff8fe4bfe950e9be3e9f982ffbdd9830
      content::WebContents* contents = GetSiteContents();
      if (!contents || args.size() != 1 || !args[0].is_bool()) {
 diff --git a/components/adblock/content/browser/factories/subscription_service_factory.cc b/components/adblock/content/browser/factories/subscription_service_factory.cc
-index 2d8b721d0d3aae983506d80e3c8f41d5d1c429e0..cb033d899dc95b0ba7827d1c8103feecb0d25fcd 100644
+index 2d8b721d0d3aae983506d80e3c8f41d5d1c429e0..709629455bdc10c9b9d5fd1e07f676b20bb497d2 100644
 --- a/components/adblock/content/browser/factories/subscription_service_factory.cc
 +++ b/components/adblock/content/browser/factories/subscription_service_factory.cc
-@@ -346,6 +346,16 @@ void TranslateCombinedFilterListsToStandalone(
+@@ -346,6 +346,13 @@ void TranslateCombinedFilterListsToStandalone(
    }
  }
  
-+// uBlock Origin does the filtering: Cromite's adblock stays available, switched
-+// off once so that the two don't filter twice.
-+void HandOverToUBlock(PrefService* prefs,
-+                      FilteringConfiguration* adblock_filtering_configuration) {
-+  if (!prefs->GetBoolean(common::prefs::kAdblockHandedToUBlock)) {
-+    adblock_filtering_configuration->SetEnabled(false);
-+    prefs->SetBoolean(common::prefs::kAdblockHandedToUBlock, true);
-+  }
++// uBlock Origin does the filtering: Cromite's adblock is off at every start and
++// has no settings left, so the two never filter twice. A disabled configuration
++// downloads no lists.
++void HandOverToUBlock(FilteringConfiguration* adblock_filtering_configuration) {
++  adblock_filtering_configuration->SetEnabled(false);
 +}
 +
  void CheckAdblockCliSwitches(
      FilteringConfiguration* adblock_filtering_configuration) {
    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-@@ -402,6 +412,7 @@ SubscriptionServiceFactory::BuildServiceInstanceForBrowserContext(
+@@ -402,6 +409,7 @@ SubscriptionServiceFactory::BuildServiceInstanceForBrowserContext(
      }
      if (persisted_configuration->GetName() ==
          kAdblockFilteringConfigurationName) {
-+      HandOverToUBlock(prefs, persisted_configuration.get());
++      HandOverToUBlock(persisted_configuration.get());
        CheckAdblockCliSwitches(persisted_configuration.get());
        TranslateCombinedFilterListsToStandalone(persisted_configuration.get());
      }
-@@ -420,6 +431,7 @@ SubscriptionServiceFactory::BuildServiceInstanceForBrowserContext(
+@@ -420,6 +428,7 @@ SubscriptionServiceFactory::BuildServiceInstanceForBrowserContext(
      // "adblock" FilterConfiguration will be created if needed.
      CheckAndMigrateSettings(prefs, adblock_filtering_configuration);
      if (adblock_filtering_configuration) {
-+      HandOverToUBlock(prefs, adblock_filtering_configuration.get());
++      HandOverToUBlock(adblock_filtering_configuration.get());
        CheckAdblockCliSwitches(adblock_filtering_configuration.get());
        if (start_disabled) {
          adblock_filtering_configuration->SetEnabled(false);
-diff --git a/components/adblock/core/common/adblock_prefs.cc b/components/adblock/core/common/adblock_prefs.cc
-index 7a77170686fb0867d13e583d055b0172d31fc94f..068562ab5efa54dc97e626c1de5b2545f05c165e 100644
---- a/components/adblock/core/common/adblock_prefs.cc
-+++ b/components/adblock/core/common/adblock_prefs.cc
-@@ -28,6 +28,9 @@ const char kEnableAdblockLegacy[] = "adblock.enabled";
- 
- const char kAllowPrivilegedFilters[] = "adblock.privilegedfilters_enabled";
- 
-+// Whether the filtering has already been handed over to uBlock Origin.
-+const char kAdblockHandedToUBlock[] = "adblock.handed_to_ublock";
-+
- // Legacy: Whether to allow acceptable ads or block them all.
- // Used now just to map CLI switch. Otherwise use kAdblockSubscriptionsLegacy.
- const char kEnableAcceptableAdsLegacy[] = "adblock.aa_enable";
-@@ -83,6 +86,7 @@ const char kAutoInstalledSubscriptionsNextUpdateTime[] =
- 
- void RegisterProfilePrefs(PrefRegistrySimple* registry) {
-   registry->RegisterBooleanPref(kAllowPrivilegedFilters, false);
-+  registry->RegisterBooleanPref(kAdblockHandedToUBlock, false);
-   registry->RegisterBooleanPref(kEnableAdblockLegacy, true);
-   registry->RegisterBooleanPref(kEnableAcceptableAdsLegacy, false);
-   registry->RegisterBooleanPref(kAdblockMoreOptionsEnabled, true);
-diff --git a/components/adblock/core/common/adblock_prefs.h b/components/adblock/core/common/adblock_prefs.h
-index a62285149ce4349a0803ec0b6dd7657686768485..1ba42d809f358209fd3a3b9306c2dd4b93ec20b4 100644
---- a/components/adblock/core/common/adblock_prefs.h
-+++ b/components/adblock/core/common/adblock_prefs.h
-@@ -27,6 +27,7 @@ namespace adblock::common::prefs {
- 
- extern const char kEnableAdblockLegacy[];
- extern const char kAllowPrivilegedFilters[];
-+extern const char kAdblockHandedToUBlock[];
- extern const char kEnableAcceptableAdsLegacy[];
- extern const char kAdblockAllowedDomainsLegacy[];
- extern const char kAdblockCustomFiltersLegacy[];
