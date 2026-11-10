@@ -270,15 +270,13 @@ index 948451b578a011fad504e7b9dfa15df343e12936..ad5bb9b72fe88ce6ba0423dd230cb70d
    // the value of 'coreStaticStringsCount' must be updated with the
    // added strings count, (2) if the added strings are quialified names
 diff --git a/third_party/blink/renderer/core/frame/navigator_concurrent_hardware.cc b/third_party/blink/renderer/core/frame/navigator_concurrent_hardware.cc
-index d5994d3e8616ed8a60c13bb70d28a4c61d236773..8048e714686b38106495cef20af975430f243ff0 100644
+index d5994d3e8616ed8a60c13bb70d28a4c61d236773..d42b9601875e4521cc2ad5b3d7ed2191f4e7b61f 100644
 --- a/third_party/blink/renderer/core/frame/navigator_concurrent_hardware.cc
 +++ b/third_party/blink/renderer/core/frame/navigator_concurrent_hardware.cc
-@@ -3,8 +3,12 @@
+@@ -3,8 +3,10 @@
  // found in the LICENSE file.
  
  #include "third_party/blink/renderer/core/frame/navigator_concurrent_hardware.h"
-+
-+#include <algorithm>
 +
  #include "build/build_config.h"
  #include "base/system/sys_info.h"
@@ -286,19 +284,17 @@ index d5994d3e8616ed8a60c13bb70d28a4c61d236773..8048e714686b38106495cef20af97543
  
  namespace blink {
  
-@@ -12,7 +16,14 @@ unsigned NavigatorConcurrentHardware::hardwareConcurrency() const {
+@@ -12,7 +14,12 @@ unsigned NavigatorConcurrentHardware::hardwareConcurrency() const {
  #if BUILDFLAG(IS_ANDROID)
    return static_cast<unsigned>(4);
  #else
 -  return static_cast<unsigned>(8);
-+  // A common count for each site, from 4 to 8 and never above the real one,
-+  // as in Brave: the same on a site for the whole session, so sites can't
-+  // match each other on it, and it never tells how big the machine is.
-+  const unsigned real =
-+      static_cast<unsigned>(base::SysInfo::NumberOfProcessors());
-+  const unsigned highest = std::clamp(real, 4u, 8u);
++  // A count for each site, from 2 to 16 whatever the machine has: the same on
++  // a site for the whole session, so sites can't match each other on it, and
++  // it never tells how big the machine is. With 15 values two sites get the
++  // same count one time in 15 (Cover Your Tracks wants it to differ).
 +  FarblingRandom random(CurrentFarblingSeed() ^ 0x6861726477617265ull);
-+  return 4 + static_cast<unsigned>(random.Below(highest - 3));
++  return 2 + static_cast<unsigned>(random.Below(15));
  #endif
  }
  

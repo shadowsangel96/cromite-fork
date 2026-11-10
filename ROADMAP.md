@@ -65,11 +65,12 @@ aggiornamenti di Cromite come tutto il resto.
   tranne il letterboxing, tolto per la protezione del viewport di Cromite (dettagli nella voce 2).
 - Anti-fingerprinting per sito: canvas, audio, plugin, numero di processori e WebGL consentito
   danno valori fissi dentro un sito e diversi tra siti (dettagli nella voce 2). Cover Your Tracks
-  dice "your browser has a randomized fingerprint" circa 4 volte su 5 sulla build Mac: confronta tra
-  due siti audio, canvas, WebGL, plugin e numero di processori e vuole almeno 4 valori diversi.
-  WebGL è bloccato (uguale ovunque), quindi devono cambiare tutti gli altri, e il numero di
-  processori (da 4 a 8) coincide tra due siti una volta su 5. Su un computer con 4 processori il
-  numero non cambia mai e il test dice sempre "unique".
+  dice "your browser has a randomized fingerprint" (6 volte su 6 sulla build Mac, 10 novembre):
+  confronta tra due siti audio, canvas, WebGL, plugin e numero di processori e vuole almeno 4 valori
+  diversi. WebGL è bloccato (uguale ovunque), quindi devono cambiare tutti gli altri. Il numero di
+  processori va da 2 a 16 qualunque sia il computer: coincide tra due siti una volta su 15, e allora
+  il test dice "unique" (con il vecchio intervallo da 4 a 8 succedeva una volta su 5, e sempre con 4
+  processori veri).
 - Contatore del fingerprinting: numero sullo scudo, numeri per riga, totale e "Mostra tutte e 15 le
   categorie", come nella tavola. Conta le letture che Blink registra già (i contatori d'uso che
   arrivano al browser con le metriche della pagina): ogni API una volta per frame, si azzera a ogni
@@ -186,7 +187,7 @@ impercettibile ma diversi per ogni sito, così due visite non danno la stessa im
 - **Stabile nel sito, quindi niente media:** lo stesso contenuto dà sempre lo stesso risultato
   sullo stesso sito (il rumore dipende anche dall'immagine), così leggere cento volte non fa
   riemergere il valore vero.
-- Processori: da 4 a 8, mai sopra quelli veri. Plugin: i 5 lettori PDF dello standard più due
+- Processori: da 2 a 16, anche sopra quelli veri, uguale nella pagina e nei suoi worker. Plugin: i 5 lettori PDF dello standard più due
   finti con nomi, file e tipi diversi per sito.
 - WebGL consentito: nome della scheda video comune per sistema ("Apple M1" su Mac), limiti
   abbassati a valori comuni (abbassarli è sempre sicuro), rumore per sito sulle letture di almeno
