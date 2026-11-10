@@ -1,0 +1,86 @@
+{
+  "fork_bloccoAlsoBlock": {
+    "en": "On this site, also block",
+    "it": "Su questo sito blocca anche"
+  },
+  "fork_bloccoBlockedHere": {
+    "en": "Blocked on this site",
+    "it": "Bloccati su questo sito"
+  },
+  "fork_bloccoBlockedPage": {
+    "en": "blocked on this page",
+    "it": "bloccati in questa pagina"
+  },
+  "fork_bloccoExternal": {
+    "en": "external domains blocked",
+    "it": "domini esterni bloccati"
+  },
+  "fork_bloccoFonts": {
+    "en": "Remote fonts",
+    "it": "Font esterni"
+  },
+  "fork_bloccoHintOff": {
+    "en": "Click to turn it back on",
+    "it": "Tocca per riattivarlo"
+  },
+  "fork_bloccoHintOn": {
+    "en": "Click to turn it off on this site only",
+    "it": "Tocca per spegnerlo solo su questo sito"
+  },
+  "fork_bloccoLargeMedia": {
+    "en": "Large media",
+    "it": "Media grandi"
+  },
+  "fork_bloccoLogger": {
+    "en": "Logger",
+    "it": "Registro"
+  },
+  "fork_bloccoNothingYet": {
+    "en": "Nothing to block on this page so far.",
+    "it": "Finora niente da bloccare in questa pagina."
+  },
+  "fork_bloccoOffAt": {
+    "en": "Off for $1",
+    "it": "Spento su $1"
+  },
+  "fork_bloccoOffText": {
+    "en": "Nothing is blocked on this site: ads and trackers can load.",
+    "it": "Su questo sito non blocchiamo niente: pubblicità e tracker possono caricarsi."
+  },
+  "fork_bloccoOnAt": {
+    "en": "On for $1",
+    "it": "Attivo su $1"
+  },
+  "fork_bloccoOutOf": {
+    "en": "out of",
+    "it": "su"
+  },
+  "fork_bloccoPicker": {
+    "en": "Hide an element",
+    "it": "Nascondi un elemento"
+  },
+  "fork_bloccoPopups": {
+    "en": "Pop-ups",
+    "it": "Popup"
+  },
+  "fork_bloccoScripts": {
+    "en": "JavaScript",
+    "it": "JavaScript"
+  },
+  "fork_bloccoSettings": {
+    "en": "Settings",
+    "it": "Impostazioni"
+  },
+  "fork_bloccoSubtitle": {
+    "en": "uBlock Origin, built into the browser",
+    "it": "uBlock Origin, integrato nel browser"
+  },
+  "fork_close": {
+    "en": "Close",
+    "it": "Chiudi"
+  },
+  "fork_contentBlocking": {
+    "en": "Content blocking",
+    "it": "Blocco contenuti"
+  }
+}

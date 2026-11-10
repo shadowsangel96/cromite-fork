@@ -227,10 +227,12 @@ def sync_and_patch(env):
 
 
 def patches_stamp():
-    """Impronta delle nostre patch e dell'overlay: cambia quando vanno riapplicate."""
+    """Impronta delle nostre patch, dell'overlay e delle traduzioni di Cromite (forkctl le mette
+    nei .xtb quando applica le patch): cambia quando vanno riapplicate."""
     digest = hashlib.sha1()
-    for path in sorted(p for d in (ROOT / "patches", ROOT / "overlay") for p in d.rglob("*")
-                       if p.is_file()):
+    files = [p for d in (ROOT / "patches", ROOT / "overlay") for p in d.rglob("*") if p.is_file()]
+    files += [p for p in [ROOT / "strings" / "cromite_it.json"] if p.is_file()]
+    for path in sorted(files):
         digest.update(path.relative_to(ROOT).as_posix().encode() + b"\0" + path.read_bytes())
     return digest.hexdigest()
 

@@ -35,3 +35,5 @@ common/0018-impronta-nuova-quando-i-cookie-temporanei-cancellano-un-sito.patch
 common/0019-contatore-del-fingerprinting-eval-e-referrer.patch
 common/0020-redirect-youtube-sul-proprio-invidious-instagram-su-imginn-t.patch
 common/0021-blocco-contenuti-nelle-impostazioni-al-posto-dell-adblock-di.patch
+common/0022-traduzioni-le-nostre-scritte-in-inglese-e-italiano.patch
+common/0023-blocco-contenuti-la-sezione-aspetta-ublock-che-si-avvia.patch

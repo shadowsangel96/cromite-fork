@@ -21,6 +21,7 @@ import argparse
 import base64
 import concurrent.futures
 import hashlib
+import html
 import json
 import os
 import posixpath
@@ -1010,10 +1011,16 @@ def install_ublock(src):
     """uBlock Origin integrato: la release ufficiale indicata in fork-ublock.json, verificata con lo
     sha256 e aperta accanto ai nostri file di overlay. Non sta nel repo e non entra in git."""
     ours = OVERLAY / UBLOCK_DIR
+    if not (ours / "fork-ublock.json").is_file():
+        return  # un repo senza uBlock Origin, come quelli dei test di forkctl
     pin = json.loads((ours / "fork-ublock.json").read_text())
     dest = src / UBLOCK_DIR
     marker = dest / ".versione"
-    if marker.is_file() and marker.read_text() == pin["sha256"]:
+    # Le nostre scritte del pannello vanno nei _locales di uBlock: se cambiano, si rifà tutto.
+    messages = ours / "fork-messages.json"
+    stamp = pin["sha256"] + ":" + (hashlib.sha256(messages.read_bytes()).hexdigest()
+                                   if messages.is_file() else "")
+    if marker.is_file() and marker.read_text() == stamp:
         return
     archive = ROOT / ".cache" / "ublock" / f"uBlock0_{pin['version']}.chromium.zip"
     archive.parent.mkdir(parents=True, exist_ok=True)
@@ -1035,8 +1042,85 @@ def install_ublock(src):
     manifest.pop("commands", None)
     manifest["browser_action"]["default_popup"] = "blocco.html"
     (dest / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    marker.write_text(pin["sha256"])
+    if messages.is_file():
+        for key_lang in ("en", "it"):
+            path = dest / "_locales" / key_lang / "messages.json"
+            data = json.loads(path.read_text())
+            for key, texts in json.loads(messages.read_text()).items():
+                data[key] = {"message": texts[key_lang], "description": "Fork"}
+            path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+    marker.write_text(stamp)
     log(f"uBlock Origin {pin['version']} pronto in {UBLOCK_DIR}.")
+
+
+TRANSLATIONS = ROOT / "strings" / "cromite_it.json"
+TRANSLATIONS_BEGIN = "<!-- fork: traduzioni italiane di strings/cromite_it.json -->"
+TRANSLATIONS_END = "<!-- fork: fine -->"
+
+
+def install_translations(src):
+    """Le traduzioni italiane delle scritte di Cromite (strings/cromite_it.json) nei .xtb di
+    Chromium. Gli ID li calcola grit sui sorgenti di adesso: una scritta il cui inglese è cambiato
+    si salta e si segnala. Scrive solo i file che cambiano; restituisce quelli scritti."""
+    if not TRANSLATIONS.is_file():
+        return []
+    table = json.loads(TRANSLATIONS.read_text())["strings"]
+    sys.path.insert(0, str(src / "tools" / "grit"))
+    from grit import grd_reader
+    from grit.node import message as message_node
+    by_grd = {}
+    for name, entry in table.items():
+        by_grd.setdefault(entry["grd"], {})[name] = entry
+    written, matched = [], set()
+    for grd, entries in sorted(by_grd.items()):
+        grd_path = src / grd
+        match = re.search(r'<file path="([^"]+)" lang="it" />', grd_path.read_text())
+        if not match:
+            raise ForkError(f"{grd}: manca il file delle traduzioni italiane")
+        xtb = grd_path.parent / match.group(1)
+        root = grd_reader.Parse(str(grd_path), first_ids_file=None, skip_validation_checks=True)
+        lines, seen = [], set()
+        for node in root.Preorder():
+            if not isinstance(node, message_node.MessageNode) or node.attrs["name"] not in entries:
+                continue
+            name = node.attrs["name"]
+            entry = entries[name]
+            clique = node.GetCliques()[0]
+            message = clique.GetMessage()
+            # Lo stesso nome può stare in più rami <if> con testi diversi: vale quello uguale.
+            if message.GetPresentableContent() != entry["en"]:
+                continue
+            matched.add(name)
+            names = {p.GetPresentation() for p in message.GetPlaceholders()}
+            if set(re.findall(r"\{([A-Z][A-Z0-9_]*)\}", entry["it"])) != names:
+                raise ForkError(f"{name}: i segnaposto dell'italiano non sono {sorted(names)}")
+            message_id = clique.GetId()
+            if message_id in seen:
+                continue
+            seen.add(message_id)
+            parts = re.split(r"\{([A-Z][A-Z0-9_]*)\}", entry["it"])
+            text = "".join(f'<ph name="{p}"/>' if i % 2 else html.escape(p, quote=False)
+                           for i, p in enumerate(parts))
+            lines.append(f'<translation id="{message_id}">{text}</translation>')
+        current = xtb.read_text(encoding="utf-8")
+        start = current.find(TRANSLATIONS_BEGIN)
+        if start != -1:
+            end = current.index(TRANSLATIONS_END, start) + len(TRANSLATIONS_END) + 1
+            current = current[:start] + current[end:]
+        # Le traduzioni che Chromium ha già (stesso testo inglese) restano le sue.
+        have = set(re.findall(r'<translation id="(\d+)"', current))
+        block = [l for l in lines if re.search(r'id="(\d+)"', l).group(1) not in have]
+        closing = current.rindex("</translationbundle>")
+        new = (current[:closing] + TRANSLATIONS_BEGIN + "\n" + "\n".join(block) + "\n" +
+               TRANSLATIONS_END + "\n" + current[closing:])
+        if new != xtb.read_text(encoding="utf-8"):
+            xtb.write_text(new, encoding="utf-8")
+            written.append(xtb.relative_to(src).as_posix())
+    stale = sorted(set(table) - matched)
+    if stale:
+        log(f"Traduzioni di Cromite da rivedere (l'inglese è cambiato): {', '.join(stale)}")
+    log(f"Traduzioni italiane di Cromite: {len(matched)} in {len(by_grd)} file.")
+    return written
 
 
 def cmd_ublock_update(args):
@@ -1081,6 +1165,11 @@ def cmd_apply(args):
     if copied:
         git(*identity_args(src), "commit", "-q", "--no-verify", "-m", "fork: overlay", cwd=src)
     install_ublock(src)
+    # Nel commit, così reapply le ritrova uguali e lascia l'orario: niente pacchetti rifatti.
+    written = install_translations(src)
+    if written:
+        git("add", "-f", "--", *written, cwd=src)
+        git(*identity_args(src), "commit", "-q", "--no-verify", "-m", "fork: traduzioni", cwd=src)
     log(f"Applicate {len(series)} patch e {copied} file overlay su {src}.")
     return EXIT_OK
 
@@ -1150,6 +1239,7 @@ def cmd_refresh(args):
             changed += 1
     shutil.rmtree(WORK, ignore_errors=True)
     install_ublock(src)
+    changed += len(install_translations(src))
     log(f"Patch aggiornate su {src}: {changed} file cambiati su {len(wanted)} controllati.")
     return EXIT_OK
 

@@ -1,0 +1,495 @@
+{
+ "_comment": "Traduzioni italiane delle scritte che Cromite aggiunge senza italiano. forkctl le aggiunge ai .xtb di Chromium quando applica le patch, con gli ID calcolati da grit; una scritta il cui inglese è cambiato si salta. {NOME}: un segnaposto della scritta. Le tre che contengono il nome \"Cromite\" arrivano con il nome nuovo.",
+ "strings": {
+  "IDS_SETTINGS_ENABLE_GPC": {
+   "grd": "chrome/app/generated_resources.grd",
+   "en": "Global Privacy Control \"Sec-GPC\"",
+   "it": "Global Privacy Control \"Sec-GPC\""
+  },
+  "IDS_SETTINGS_ENABLE_GPC_DIALOG_TITLE": {
+   "grd": "chrome/app/generated_resources.grd",
+   "en": "Global Privacy Control \"Sec-GPC\"",
+   "it": "Global Privacy Control \"Sec-GPC\""
+  },
+  "IDS_SETTINGS_ENABLE_GPC_DIALOG_TEXT": {
+   "grd": "chrome/app/generated_resources.grd",
+   "en": "Enables support for Global Privacy Control signals.\n\nRight to opt-out of sale or sharing: You may request that businesses stop selling or sharing your personal information (“opt-out”).\n\nBusinesses cannot sell or share your personal information after they receive your opt-out request unless you later authorize them to do so again.\n\nPlease note that it only applies to the states of California (under CCPA and CPRA) and Colorado (under CoPA).",
+   "it": "Attiva il supporto dei segnali Global Privacy Control.\n\nDiritto di opporsi alla vendita o alla condivisione: puoi chiedere alle aziende di non vendere né condividere più i tuoi dati personali (“opt-out”).\n\nDopo aver ricevuto la tua richiesta di opt-out, le aziende non possono vendere né condividere i tuoi dati personali, a meno che tu non le autorizzi di nuovo in seguito.\n\nVale solo per gli stati della California (secondo CCPA e CPRA) e del Colorado (secondo CoPA)."
+  },
+  "IDS_EXTENSIONS_EXTENSION_UPDATE_ENABLED": {
+   "grd": "chrome/app/generated_resources.grd",
+   "en": "Enable Auto-Update",
+   "it": "Attiva l'aggiornamento automatico"
+  },
+  "IDS_EXTENSIONS_EXTENSION_UPDATE_ENABLED_NR": {
+   "grd": "chrome/app/generated_resources.grd",
+   "en": "Need restart",
+   "it": "Serve il riavvio"
+  },
+  "IDS_UNSUPPORTED_AES_HARDWARE": {
+   "grd": "chrome/app/generated_resources.grd",
+   "en": "Your device does not support hardware aes, so it is easier to track you at the network level.",
+   "it": "Il dispositivo non supporta AES via hardware, quindi è più facile tracciarti a livello di rete."
+  },
+  "IDS_SETTINGS_EXPIRE_HISTORY": {
+   "grd": "components/components_strings.grd",
+   "en": "Expire history days threshold",
+   "it": "Giorni dopo cui la cronologia scade"
+  },
+  "IDS_SETTINGS_NO_HISTORY": {
+   "grd": "components/components_strings.grd",
+   "en": "No history",
+   "it": "Nessuna cronologia"
+  },
+  "IDS_SETTINGS_DAYS_HISTORY_DESCRIPTION": {
+   "grd": "components/components_strings.grd",
+   "en": "Days",
+   "it": "Giorni"
+  },
+  "IDS_SETTINGS_FOREVER_HISTORY_DESCRIPTION": {
+   "grd": "components/components_strings.grd",
+   "en": "Forever",
+   "it": "Per sempre"
+  },
+  "IDS_REFERERS_POLICY_TITLE": {
+   "grd": "components/components_strings.grd",
+   "en": "HTTP Referer header policy",
+   "it": "Criterio dell'intestazione HTTP Referer"
+  },
+  "IDS_REFERERS_POLICY_SUMMARY": {
+   "grd": "components/components_strings.grd",
+   "en": "Allow to change default HTTP Referer header policy",
+   "it": "Consente di cambiare il criterio predefinito dell'intestazione HTTP Referer"
+  },
+  "IDS_STANDARD_REFERER_POLICY_TITLE": {
+   "grd": "components/components_strings.grd",
+   "en": "Standard HTTP Referrer header policy",
+   "it": "Criterio standard dell'intestazione HTTP Referer"
+  },
+  "IDS_NO_CROSS_ORIGIN_TOP_FRAME_POLICY_TITLE": {
+   "grd": "components/components_strings.grd",
+   "en": "Disable if cross-origin and user begins navigation (default)",
+   "it": "Disattiva tra origini diverse se la navigazione la avvia l'utente (predefinito)"
+  },
+  "IDS_DISABLE_REFERER_POLICY_TITLE": {
+   "grd": "components/components_strings.grd",
+   "en": "Disable all referrers",
+   "it": "Disattiva tutti i referrer"
+  },
+  "IDS_BOOKMARK_BAR_TABS_COLLECTION_FOLDER_NAME": {
+   "grd": "components/components_strings.grd",
+   "en": "Tabs Collection",
+   "it": "Raccolta di schede"
+  },
+  "IDS_CRASH_CLEAR_ALL_TEXT": {
+   "grd": "components/components_strings.grd",
+   "en": "Clear all",
+   "it": "Cancella tutto"
+  },
+  "IDS_CRASH_EXTRACT_NOW_TEXT": {
+   "grd": "components/components_strings.grd",
+   "en": "Generate report",
+   "it": "Genera il report"
+  },
+  "IDS_ERRORPAGES_TITLE_BLOCKED_BY_ADMINISTRATOR": {
+   "grd": "components/components_strings.grd",
+   "en": "Blocked by Adblock",
+   "it": "Bloccato dall'adblock"
+  },
+  "IDS_ERRORPAGES_HEADING_BLOCKED_BY_ADMINISTRATOR_ADBLOCK": {
+   "grd": "components/components_strings.grd",
+   "en": "Blocked by Adblock",
+   "it": "Bloccato dall'adblock"
+  },
+  "IDS_ERRORPAGES_PRIMARY_PARAGRAPH_BLOCKED_BY_ADMINISTRATOR": {
+   "grd": "components/components_strings.grd",
+   "en": "Adblock doesn’t allow you to view this site (subscription url URL)",
+   "it": "L'adblock non ti consente di vedere questo sito (lista: {URL})"
+  },
+  "IDS_ERRORPAGES_PRIMARYBUTTONTEXT_BLOCKED_BY_ADMINISTRATOR": {
+   "grd": "components/components_strings.grd",
+   "en": "Allow navigation until restart",
+   "it": "Consenti la navigazione fino al riavvio"
+  },
+  "IDS_ERRORPAGES_PROCEEDBUTTONTEXT_BLOCKED_BY_ADMINISTRATOR": {
+   "grd": "components/components_strings.grd",
+   "en": "Add a custom persistent allow rule",
+   "it": "Aggiungi un'eccezione permanente"
+  },
+  "IDS_AUTOPLAY_PERMISSION_TITLE": {
+   "grd": "components/components_strings.grd",
+   "en": "Autoplay",
+   "it": "Riproduzione automatica"
+  },
+  "IDS_WEBSITE_SETTINGS_ADD_SITE_DESCRIPTION_AUTOPLAY": {
+   "grd": "components/components_strings.grd",
+   "en": "Allow autoplay for a specific site.",
+   "it": "Consenti la riproduzione automatica per un sito specifico."
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_AUTOPLAY_ENABLED": {
+   "grd": "components/components_strings.grd",
+   "en": "Allow sites to automatically play muted videos",
+   "it": "Consenti ai siti di riprodurre da soli i video senza audio"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_AUTOPLAY_DISABLED": {
+   "grd": "components/components_strings.grd",
+   "en": "Autoplay disabled",
+   "it": "Riproduzione automatica disattivata"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_AUTOPLAY_ALLOWED_EXCEPTIONS": {
+   "grd": "components/components_strings.grd",
+   "en": "Allowed to autoplay",
+   "it": "Riproduzione automatica consentita"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_AUTOPLAY_BLOCKED_EXCEPTIONS": {
+   "grd": "components/components_strings.grd",
+   "en": "Not allowed to autoplay",
+   "it": "Riproduzione automatica non consentita"
+  },
+  "IDS_INSECURE_PRIVATE_NETWORK_PERMISSION_TITLE": {
+   "grd": "components/components_strings.grd",
+   "en": "Access to Private Network",
+   "it": "Accesso alla rete privata"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_INSECURE_PRIVATE_NETWORK_DESCRIPTION": {
+   "grd": "components/components_strings.grd",
+   "en": "Enable access to private network",
+   "it": "Consenti l'accesso alla rete privata"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_INSECURE_PRIVATE_NETWORK_ALLOWED": {
+   "grd": "components/components_strings.grd",
+   "en": "Allow access to private network",
+   "it": "Consenti l'accesso alla rete privata"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_INSECURE_PRIVATE_NETWORK_BLOCKED": {
+   "grd": "components/components_strings.grd",
+   "en": "Block access to private network",
+   "it": "Blocca l'accesso alla rete privata"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_INSECURE_PRIVATE_NETWORK_ASK": {
+   "grd": "components/components_strings.grd",
+   "en": "Ask access to private network",
+   "it": "Chiedi prima di accedere alla rete privata"
+  },
+  "IDS_SITE_SETTINGS_TYPE_PROTECTED_KEYBOARD_GEOMETRY": {
+   "grd": "components/components_strings.grd",
+   "en": "Keyboard Size Protection",
+   "it": "Protezione delle dimensioni della tastiera"
+  },
+  "IDS_PROTECTED_KEYBOARD_GEOMETRY_PERMISSION_TITLE": {
+   "grd": "components/components_strings.grd",
+   "en": "Keyboard Size Protection",
+   "it": "Protezione delle dimensioni della tastiera"
+  },
+  "IDS_SITE_SETTINGS_TYPE_PROTECTED_KEYBOARD_GEOMETRY_MID_SENTENCE": {
+   "grd": "components/components_strings.grd",
+   "en": "Keyboard Size Protection",
+   "it": "protezione delle dimensioni della tastiera"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_PROTECTED_KEYBOARD_GEOMETRY_DESCRIPTION": {
+   "grd": "components/components_strings.grd",
+   "en": "Hides the keyboard size",
+   "it": "Nasconde le dimensioni della tastiera"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_PROTECTED_KEYBOARD_GEOMETRY_ALLOWED_EXCEPTIONS": {
+   "grd": "components/components_strings.grd",
+   "en": "Keyboard size is protected",
+   "it": "Dimensioni della tastiera protette"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_PROTECTED_KEYBOARD_GEOMETRY_BLOCKED_EXCEPTIONS": {
+   "grd": "components/components_strings.grd",
+   "en": "Keyboard size is not protected",
+   "it": "Dimensioni della tastiera non protette"
+  },
+  "IDS_SITE_SETTINGS_TYPE_WEBRTC": {
+   "grd": "components/components_strings.grd",
+   "en": "WebRTC",
+   "it": "WebRTC"
+  },
+  "IDS_SITE_SETTINGS_TYPE_WEBRTC_MID_SENTENCE": {
+   "grd": "components/components_strings.grd",
+   "en": "webRTC",
+   "it": "WebRTC"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_WEBRTC_DESCRIPTION": {
+   "grd": "components/components_strings.grd",
+   "en": "Enable WebRTC, a JavaScript API for real-time communication and direct peer-to-peer communication",
+   "it": "Attiva WebRTC, un'API JavaScript per comunicare in tempo reale e direttamente tra dispositivi (peer-to-peer)"
+  },
+  "IDS_WEBRTC_PERMISSION_TITLE": {
+   "grd": "components/components_strings.grd",
+   "en": "WebRTC",
+   "it": "WebRTC"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_WEBRTC_ALLOWED_EXCEPTIONS": {
+   "grd": "components/components_strings.grd",
+   "en": "Allowed to use WebRTC",
+   "it": "Possono usare WebRTC"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_WEBRTC_BLOCKED_EXCEPTIONS": {
+   "grd": "components/components_strings.grd",
+   "en": "Not allowed to use WebRTC",
+   "it": "Non possono usare WebRTC"
+  },
+  "IDS_SITE_SETTINGS_TYPE_VIEWPORT": {
+   "grd": "components/components_strings.grd",
+   "en": "Viewport Size Protection",
+   "it": "Protezione delle dimensioni della finestra"
+  },
+  "IDS_VIEWPORT_PERMISSION_TITLE": {
+   "grd": "components/components_strings.grd",
+   "en": "Viewport Size Protection",
+   "it": "Protezione delle dimensioni della finestra"
+  },
+  "IDS_SITE_SETTINGS_TYPE_VIEWPORT_MID_SENTENCE": {
+   "grd": "components/components_strings.grd",
+   "en": "Viewport Size Protection",
+   "it": "protezione delle dimensioni della finestra"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_VIEWPORT_PROTECTION_DESCRIPTION": {
+   "grd": "components/components_strings.grd",
+   "en": "Hides the screen size by randomly changing the values for each website",
+   "it": "Nasconde le dimensioni dello schermo cambiandone i valori a caso per ogni sito"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_VIEWPORT_PROTECTION_ALLOWED_EXCEPTIONS": {
+   "grd": "components/components_strings.grd",
+   "en": "Viewport Protection is enabled with these websites",
+   "it": "Protezione delle dimensioni attiva su questi siti"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_VIEWPORT_PROTECTION_BLOCKED_EXCEPTIONS": {
+   "grd": "components/components_strings.grd",
+   "en": "Not allowed to use Viewport Protection",
+   "it": "Protezione delle dimensioni non consentita"
+  },
+  "IDS_WEBSITE_SETTINGS_ADD_SITE_DESCRIPTION_IMAGES": {
+   "grd": "components/components_strings.grd",
+   "en": "Allow images on websites you specify while blocking them for the rest of the web",
+   "it": "Consenti le immagini sui siti che indichi e bloccale nel resto del web"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_IMAGES_ENABLED": {
+   "grd": "components/components_strings.grd",
+   "en": "Allow sites to load images",
+   "it": "Consenti ai siti di caricare le immagini"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_IMAGES_DISABLED": {
+   "grd": "components/components_strings.grd",
+   "en": "Disallow sites to load images",
+   "it": "Non consentire ai siti di caricare le immagini"
+  },
+  "IDS_SITE_SETTINGS_TIMEZONE_OVERRIDE_TITLE": {
+   "grd": "components/components_strings.grd",
+   "en": "Timezone override",
+   "it": "Fuso orario personalizzato"
+  },
+  "IDS_WEBSITE_SETTINGS_TIMEOVERRIDE_INFO": {
+   "grd": "components/components_strings.grd",
+   "en": "Override timezone with a custom or random one, or use the system timezone",
+   "it": "Sostituisci il fuso orario con uno personalizzato o casuale, oppure usa quello di sistema"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_TIMEZONE_OVERRIDE_ALLOWED_TEXT": {
+   "grd": "components/components_strings.grd",
+   "en": "None (use system timezone)",
+   "it": "Nessuno (usa il fuso orario di sistema)"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_TIMEZONE_OVERRIDE_RANDOM_TEXT": {
+   "grd": "components/components_strings.grd",
+   "en": "Random",
+   "it": "Casuale"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_TIMEZONE_OVERRIDE_ALLOWED": {
+   "grd": "components/components_strings.grd",
+   "en": "System timezone",
+   "it": "Fuso orario di sistema"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_TIMEZONE_OVERRIDE_CUSTOM": {
+   "grd": "components/components_strings.grd",
+   "en": "Custom timezone",
+   "it": "Fuso orario personalizzato"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_TIMEZONE_OVERRIDE_CUSTOM_HINT": {
+   "grd": "components/components_strings.grd",
+   "en": "Specify a custom timezone (default UTC)",
+   "it": "Indica un fuso orario personalizzato (di base UTC)"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_TIMEZONE_OVERRIDE_RANDOM": {
+   "grd": "components/components_strings.grd",
+   "en": "Random (for each page)",
+   "it": "Casuale (per ogni pagina)"
+  },
+  "IDS_WEBSITE_SETTINGS_SELECT_BUTTON": {
+   "grd": "components/components_strings.grd",
+   "en": "Choose Timezone...",
+   "it": "Scegli il fuso orario..."
+  },
+  "IDS_WEBSITE_SETTINGS_SELECT_DIALOG_TITLE": {
+   "grd": "components/components_strings.grd",
+   "en": "Choose Timezone",
+   "it": "Scegli il fuso orario"
+  },
+  "IDS_WEBSITE_SETTINGS_SELECT_DIALOG_BUTTON": {
+   "grd": "components/components_strings.grd",
+   "en": "Select",
+   "it": "Seleziona"
+  },
+  "IDS_TIMEZONE_OVERRIDE_PERMISSION_TITLE": {
+   "grd": "components/components_strings.grd",
+   "en": "Timezone override",
+   "it": "Fuso orario personalizzato"
+  },
+  "IDS_SITE_SETTINGS_TYPE_REQUEST_DESKTOP_SITE": {
+   "grd": "components/components_strings.grd",
+   "en": "Request desktop site",
+   "it": "Richiedi sito desktop"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_REQUEST_DESKTOP_SITE_DESCRIPTION": {
+   "grd": "components/components_strings.grd",
+   "en": "Request desktop site",
+   "it": "Richiedi sito desktop"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_REQUEST_DESKTOP_SITE_ENABLED": {
+   "grd": "components/components_strings.grd",
+   "en": "Request desktop site",
+   "it": "Richiedi sito desktop"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_REQUEST_DESKTOP_SITE_DISABLED": {
+   "grd": "components/components_strings.grd",
+   "en": "Request mobile site",
+   "it": "Richiedi sito mobile"
+  },
+  "IDS_JAVASCRIPT_JIT_PERMISSION_TITLE": {
+   "grd": "components/components_strings.grd",
+   "en": "JavaScript JIT",
+   "it": "JIT di JavaScript"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_JIT_DESCRIPTION_CROMITE": {
+   "grd": "components/components_strings.grd",
+   "en": "Enable the JIT compiler and WebAssembly support in V8",
+   "it": "Attiva il compilatore JIT e il supporto di WebAssembly in V8"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_JAVASCRIPT_JIT_ENABLED": {
+   "grd": "components/components_strings.grd",
+   "en": "Allow JIT and WebAssembly",
+   "it": "Consenti JIT e WebAssembly"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_JAVASCRIPT_JIT_DISABLED": {
+   "grd": "components/components_strings.grd",
+   "en": "Block JIT and WebAssembly",
+   "it": "Blocca JIT e WebAssembly"
+  },
+  "IDS_WEBSITE_SETTINGS_ADD_SITE_DESCRIPTION_JAVASCRIPT_JIT_ALLOW": {
+   "grd": "components/components_strings.grd",
+   "en": "Allow sites to use just-in-time compilation; more performant but a constant source of security vulnerabilities.",
+   "it": "Consenti ai siti di usare la compilazione just-in-time: più veloce, ma una fonte continua di vulnerabilità."
+  },
+  "IDS_WEBSITE_SETTINGS_ADD_SITE_DESCRIPTION_JAVASCRIPT_JIT_BLOCK": {
+   "grd": "components/components_strings.grd",
+   "en": "Block sites from using just-in-time compilation, using only interpreted JavaScript; less performant but more secure against security vulnerabilities.",
+   "it": "Impedisci ai siti di usare la compilazione just-in-time, con JavaScript solo interpretato: meno veloce, ma più protetto dalle vulnerabilità."
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_POPUP": {
+   "grd": "components/components_strings.grd",
+   "en": "Block sites from showing pop-ups and redirects",
+   "it": "Impedisci ai siti di mostrare popup e reindirizzamenti"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_POPUP_DESCRIPTION": {
+   "grd": "components/components_strings.grd",
+   "en": "When on, sites can use pop-ups and redirects. When off, sites can’t use pop-ups and redirects.",
+   "it": "Se è attiva, i siti possono usare popup e reindirizzamenti. Se è disattivata, non possono usarli."
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_POPUP_BLOCK_ALL": {
+   "grd": "components/components_strings.grd",
+   "en": "Block all popups",
+   "it": "Blocca tutti i popup"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_POPUP_ALLOWED": {
+   "grd": "components/components_strings.grd",
+   "en": "Allows popups",
+   "it": "Consente i popup"
+  },
+  "IDS_WEBSITE_SETTINGS_CATEGORY_POPUP_BLOCKED": {
+   "grd": "components/components_strings.grd",
+   "en": "Block some popups",
+   "it": "Blocca alcuni popup"
+  },
+  "IDS_SITE_SETTINGS_TYPE_WEBGL": {
+   "grd": "components/components_strings.grd",
+   "en": "Webgl",
+   "it": "WebGL"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_WEBGL_DESCRIPTION": {
+   "grd": "components/components_strings.grd",
+   "en": "Enable Webgl, a JavaScript API for rendering high-performance interactive 3D and 2D graphics",
+   "it": "Attiva WebGL, un'API JavaScript per la grafica 3D e 2D interattiva ad alte prestazioni"
+  },
+  "IDS_SITE_SETTINGS_TYPE_WEBGL_MID_SENTENCE": {
+   "grd": "components/components_strings.grd",
+   "en": "webgl",
+   "it": "WebGL"
+  },
+  "IDS_WEBGL_PERMISSION_TITLE": {
+   "grd": "components/components_strings.grd",
+   "en": "Webgl",
+   "it": "WebGL"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_WEBGL_ALLOWED_EXCEPTIONS": {
+   "grd": "components/components_strings.grd",
+   "en": "Allowed to use webgl",
+   "it": "Possono usare WebGL"
+  },
+  "IDS_SETTINGS_SITE_SETTINGS_WEBGL_BLOCKED_EXCEPTIONS": {
+   "grd": "components/components_strings.grd",
+   "en": "Not allowed to use webgl",
+   "it": "Non possono usare WebGL"
+  },
+  "IDS_PREFS_USERSCRIPTS_SETTINGS": {
+   "grd": "components/components_strings.grd",
+   "en": "User Scripts",
+   "it": "Script utente"
+  },
+  "IDS_OPTION_USERSCRIPT_FLAG": {
+   "grd": "components/components_strings.grd",
+   "en": "Activate User Scripts",
+   "it": "Attiva gli script utente"
+  },
+  "IDS_OPTION_USERSCRIPT_FLAG_ON": {
+   "grd": "components/components_strings.grd",
+   "en": "ON",
+   "it": "ATTIVI"
+  },
+  "IDS_OPTION_USERSCRIPT_FLAG_OFF": {
+   "grd": "components/components_strings.grd",
+   "en": "OFF",
+   "it": "SPENTI"
+  },
+  "IDS_ADD_SCRIPT": {
+   "grd": "components/components_strings.grd",
+   "en": "Add script",
+   "it": "Aggiungi uno script"
+  },
+  "IDS_SCRIPTS_LIST_DESCRIPTION": {
+   "grd": "components/components_strings.grd",
+   "en": "Experimental support for Greasemonkey-style user scripts.",
+   "it": "Supporto sperimentale per gli script utente in stile Greasemonkey."
+  },
+  "IDS_SCRIPTS_ITEM_FILENAME": {
+   "grd": "components/components_strings.grd",
+   "en": "File:",
+   "it": "File:"
+  },
+  "IDS_SCRIPTS_ITEM_URL": {
+   "grd": "components/components_strings.grd",
+   "en": "Url:",
+   "it": "URL:"
+  },
+  "IDS_SCRIPTS_VIEW_SOURCE": {
+   "grd": "components/components_strings.grd",
+   "en": "View source",
+   "it": "Mostra il codice"
+  },
+  "IDS_ASK_TO_INSTALL": {
+   "grd": "components/components_strings.grd",
+   "en": "Do you want to install this user script from following location?\n\nFILE\n\nNOTE: only install user scripts that you have verified are secure, user scripts can steal your credentials and data.",
+   "it": "Vuoi installare questo script utente da questo indirizzo?\n\n{FILE}\n\nNOTA: installa solo script utente che hai verificato come sicuri: gli script utente possono rubare le tue credenziali e i tuoi dati."
+  }
+ }
+}

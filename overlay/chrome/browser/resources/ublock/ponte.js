@@ -39,6 +39,38 @@
     return;
   }
 
+  // In un frame vapi-client.js spegne vAPI per sempre se la connessione con uBlock cade, e cade
+  // se la pagina si apre mentre uBlock si sta ancora avviando. Qui si fa come nella pagina
+  // principale: si chiude la connessione (le richieste in corso tornano vuote) e la prossima
+  // richiesta ne apre una nuova. Va fatto prima della prima richiesta, che lega questo gestore.
+  vAPI.messaging.disconnectListener = function() {
+    void chrome.runtime.lastError;
+    this.destroyPort();
+  };
+
+  // Le letture hanno sempre una risposta: se torna vuota uBlock non era pronto, e si riprova.
+  const READS = new Set(['getAppData', 'getLists', 'getRules', 'getWhitelist', 'readUserFilters']);
+
+  async function ask(message) {
+    for (let attempt = 0; ; attempt++) {
+      if (!self.vAPI) {
+        // Spento comunque (connessione impossibile): si ricarica il ponte.
+        location.reload();
+        return new Promise(() => {});
+      }
+      let response;
+      try {
+        response = await vAPI.messaging.send('dashboard', message);
+      } catch (e) {
+        response = undefined;
+      }
+      if (response !== undefined || !READS.has(message.what) || attempt >= 20) {
+        return response;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+
   window.addEventListener('message', async (event) => {
     if (event.origin !== SETTINGS || event.source !== window.parent) {
       return;
@@ -47,12 +79,7 @@
     if (typeof id !== 'number' || !allowed(message)) {
       return;
     }
-    let response;
-    try {
-      response = await vAPI.messaging.send('dashboard', message);
-    } catch (e) {
-      response = undefined;
-    }
+    const response = await ask(message);
     window.parent.postMessage({id, response}, SETTINGS);
   });
 

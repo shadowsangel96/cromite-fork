@@ -1,0 +1,1827 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 17:48:48 +0100
+Subject: [PATCH] Traduzioni: le nostre scritte in inglese e italiano
+
+Le scritte delle nostre patch passano dalle risorse di Chromium: fork_strings.grd
+(inglese) e fork_strings_it.xtb (italiano), generati da tools/fork_strings.py del
+fork a partire da strings/fork_strings.json. La lingua segue quella del browser.
+
+Fork-Patch: common/0022-traduzioni-le-nostre-scritte-in-inglese-e-italiano.patch
+
+diff --git a/chrome/app/BUILD.gn b/chrome/app/BUILD.gn
+index 07e4d3aa8789b0a9631bb84312b0e22916b2c3b5..7f592d9c63b23472f6f7bf1ced245cab16c93a35 100644
+--- a/chrome/app/BUILD.gn
++++ b/chrome/app/BUILD.gn
+@@ -93,6 +93,15 @@ if (is_win) {
+   }
+ }
+ 
++# The strings of the fork: English in fork_strings.grd, the translations in
++# resources/fork_strings_*.xtb, both made by tools/fork_strings.py of the fork.
++grit_strings("fork_strings") {
++  source = "fork_strings.grd"
++  inputs = [ "resources/fork_strings_it.xtb" ]
++  output_dir = "$root_gen_dir/chrome"
++  outputs = [ "grit/fork_strings.h" ]
++}
++
+ grit_strings("generated_resources") {
+   source = "generated_resources.grd"
+   gritdeps = "generated_resources.grd.gritdeps"
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index b92c2108042cbf517eca416d5bbc556e6fb8864c..edb87acc6b437ebb9f4ad7990c6e670481f80764 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -856,6 +856,7 @@ source_set("core") {
+     "fork/temporary_site_data_tab_helper.h",
+     "fork/vpn_status.cc",
+     "fork/claude_extension.h",
++    "fork/fork_webui_strings.h",
+     "fork/ublock_extension.h",
+     "fork/vpn_status.h",
+     "fork/vpn_tab_helper.cc",
+@@ -930,6 +931,7 @@ source_set("core") {
+ 
+   deps = [
+     ":active_use_util",
++    "//chrome/app:fork_strings",
+     "//third_party/blink/public/mojom:farbling_preview_mojo_bindings",
+     ":after_startup_task_utils",
+     ":bad_message",
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index 5d9b56cff69564913c1903d2aa393bbed261ee99..0ab9146634a4268f867fe975014694b33787a92e 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -448,6 +448,8 @@
+ #include "ui/base/clipboard/clipboard_format_type.h"
+ #include "ui/base/clipboard/clipboard_metadata.h"
+ #include "ui/base/l10n/l10n_util.h"
++#include "chrome/grit/fork_strings.h"
++#include "components/strings/grit/components_strings.h"
+ #include "ui/base/page_transition_types.h"
+ #include "ui/base/resource/resource_bundle.h"
+ #include "ui/base/ui_base_features.h"
+@@ -8613,17 +8615,17 @@ ChromeContentBrowserClient::GetAlternativeErrorPageOverrideInfo(
+       params.Set(error_page::kOverrideErrorPage, base::Value(true));
+       params.Set("iconClass", "icon-vpn");
+       params.Set("errorCode", "");
+-      params.SetByDottedPath("heading.msg", "Il server VPN non risponde");
+-      params.SetByDottedPath(
+-          "summary.msg",
+-          "Per non mostrare l'IP di casa ai siti, il browser non passa da solo "
+-          "alla connessione diretta.");
++      params.SetByDottedPath("heading.msg",
++                             l10n_util::GetStringUTF8(IDS_FORK_VPN_ERROR_HEADING));
++      params.SetByDottedPath("summary.msg",
++                             l10n_util::GetStringUTF8(IDS_FORK_VPN_ERROR_SUMMARY));
+       if (!navigation_handle.IsPost()) {
+-        params.SetByDottedPath("reloadButton.msg", "Riprova");
++        params.SetByDottedPath("reloadButton.msg",
++                               l10n_util::GetStringUTF8(IDS_ERRORPAGES_BUTTON_RELOAD));
+         params.SetByDottedPath("reloadButton.reloadUrl", url.spec());
+       }
+       params.SetByDottedPath("vpnDirectButton.msg",
+-                             "Naviga diretto (riserva)");
++                             l10n_util::GetStringUTF8(IDS_FORK_VPN_DIRECT_BUTTON));
+       return info;
+     }
+   }
+@@ -8649,14 +8651,15 @@ ChromeContentBrowserClient::GetAlternativeErrorPageOverrideInfo(
+         params.Set(error_page::kOverrideErrorPage, base::Value(true));
+         params.Set("iconClass", "icon-generic");
+         params.Set("errorCode", "");
+-        params.SetByDottedPath("heading.msg", "Il tuo Invidious non risponde");
+-        params.SetByDottedPath(
+-            "summary.msg",
+-            "Il browser ha provato l'indirizzo di casa e quello di Tailscale. "
+-            "YouTube non si apre da solo: se vuoi, aprilo tu.");
+-        params.SetByDottedPath("reloadButton.msg", "Riprova");
++        params.SetByDottedPath("heading.msg",
++                               l10n_util::GetStringUTF8(IDS_FORK_INVIDIOUS_ERROR_HEADING));
++        params.SetByDottedPath("summary.msg",
++                               l10n_util::GetStringUTF8(IDS_FORK_INVIDIOUS_ERROR_SUMMARY));
++        params.SetByDottedPath("reloadButton.msg",
++                               l10n_util::GetStringUTF8(IDS_ERRORPAGES_BUTTON_RELOAD));
+         params.SetByDottedPath("reloadButton.reloadUrl", url.spec());
+-        params.SetByDottedPath("vpnDirectButton.msg", "Apri su YouTube");
++        params.SetByDottedPath("vpnDirectButton.msg",
++                               l10n_util::GetStringUTF8(IDS_FORK_OPEN_ON_YOUTUBE));
+         return info;
+       }
+       default:
+diff --git a/chrome/browser/fork/fingerprinting_counter.cc b/chrome/browser/fork/fingerprinting_counter.cc
+index 572eded400f3cca967ab3e9df605e529fbc387ad..a5acd702cda791190f27e99bb42fb301144a22f5 100644
+--- a/chrome/browser/fork/fingerprinting_counter.cc
++++ b/chrome/browser/fork/fingerprinting_counter.cc
+@@ -21,6 +21,7 @@
+ #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-shared.h"
+ #include "third_party/blink/public/mojom/use_counter/use_counter_feature.mojom-shared.h"
+ #include "url/gurl.h"
++#include "chrome/grit/fork_strings.h"
+ 
+ namespace browser_fork {
+ 
+@@ -29,7 +30,7 @@ namespace {
+ using blink::mojom::WebFeature;
+ 
+ struct Category {
+-  const char* name;
++  int name_id;
+   FingerprintingAnswer answer;
+ };
+ 
+@@ -40,23 +41,23 @@ struct Category {
+ // off, fixed battery values, no local addresses through WebRTC. The time zone
+ // stays the real one unless it is changed in the settings of the site.
+ constexpr Category kCategories[] = {
+-    {"Canvas", FingerprintingAnswer::kRandomized},
+-    {"WebGL", FingerprintingAnswer::kBlocked},
+-    {"Audio", FingerprintingAnswer::kRandomized},
+-    {"Font", FingerprintingAnswer::kRandomized},
+-    {"Schermo", FingerprintingAnswer::kRandomized},
+-    {"Navigator e Client Hints", FingerprintingAnswer::kUniform},
+-    {"WebGPU", FingerprintingAnswer::kBlocked},
+-    {"ClientRects", FingerprintingAnswer::kRandomized},
+-    {"Fuso orario", FingerprintingAnswer::kAllowed},
+-    {"WebRTC", FingerprintingAnswer::kLimited},
+-    {"Storage", FingerprintingAnswer::kAllowed},
+-    {"Permessi", FingerprintingAnswer::kAllowed},
+-    {"Batteria", FingerprintingAnswer::kUniform},
++    {IDS_FORK_FP_CAT_CANVAS, FingerprintingAnswer::kRandomized},
++    {IDS_FORK_FP_CAT_WEBGL, FingerprintingAnswer::kBlocked},
++    {IDS_FORK_FP_CAT_AUDIO, FingerprintingAnswer::kRandomized},
++    {IDS_FORK_FP_CAT_FONTS, FingerprintingAnswer::kRandomized},
++    {IDS_FORK_FP_CAT_SCREEN, FingerprintingAnswer::kRandomized},
++    {IDS_FORK_FP_CAT_NAVIGATOR, FingerprintingAnswer::kUniform},
++    {IDS_FORK_FP_CAT_WEBGPU, FingerprintingAnswer::kBlocked},
++    {IDS_FORK_FP_CAT_CLIENT_RECTS, FingerprintingAnswer::kRandomized},
++    {IDS_FORK_FP_CAT_TIME_ZONE, FingerprintingAnswer::kAllowed},
++    {IDS_FORK_FP_CAT_WEBRTC, FingerprintingAnswer::kLimited},
++    {IDS_FORK_FP_CAT_STORAGE, FingerprintingAnswer::kAllowed},
++    {IDS_FORK_FP_CAT_PERMISSIONS, FingerprintingAnswer::kAllowed},
++    {IDS_FORK_FP_CAT_BATTERY, FingerprintingAnswer::kUniform},
+     // Code from strings stays allowed; the referrer goes only within a site,
+     // as Cromite removes it on the navigations between sites.
+-    {"eval", FingerprintingAnswer::kAllowed},
+-    {"Referrer", FingerprintingAnswer::kLimited},
++    {IDS_FORK_FP_CAT_EVAL, FingerprintingAnswer::kAllowed},
++    {IDS_FORK_FP_CAT_REFERRER, FingerprintingAnswer::kLimited},
+ };
+ static_assert(std::size(kCategories) == FingerprintingCounter::kCategoryCount);
+ 
+@@ -277,7 +278,7 @@ std::vector<FingerprintingRow> FingerprintingCounter::GetRows(
+     if (i == kWebGL && contents && IsWebglAllowed(contents)) {
+       answer = FingerprintingAnswer::kRandomized;
+     }
+-    rows.push_back({kCategories[i].name, counter ? counter->counts_[i] : 0,
++    rows.push_back({kCategories[i].name_id, counter ? counter->counts_[i] : 0,
+                     answer});
+   }
+   return rows;
+diff --git a/chrome/browser/fork/fingerprinting_counter.h b/chrome/browser/fork/fingerprinting_counter.h
+index 4f0cb8b26ffe9c1034910f4b0e12fbf2453b4fb0..8f65cbd851f420a7b2bfececfedf75c3d001dc30 100644
+--- a/chrome/browser/fork/fingerprinting_counter.h
++++ b/chrome/browser/fork/fingerprinting_counter.h
+@@ -38,7 +38,8 @@ enum class FingerprintingAnswer {
+ };
+ 
+ struct FingerprintingRow {
+-  const char* name;
++  // IDS_FORK_FP_CAT_*: the name of the category.
++  int name_id;
+   int count;
+   FingerprintingAnswer answer;
+ };
+diff --git a/chrome/browser/fork/site_redirect.cc b/chrome/browser/fork/site_redirect.cc
+index 341c554c242e405cd9385a64aa2ed9c578709dbf..e82c5c7f8374b7829b86278e676f6f2aecc1ac2c 100644
+--- a/chrome/browser/fork/site_redirect.cc
++++ b/chrome/browser/fork/site_redirect.cc
+@@ -66,7 +66,7 @@ constexpr net::NetworkTrafficAnnotationTag kInvidiousCheckAnnotation =
+       }
+       policy {
+         cookies_allowed: NO
+-        setting: "chrome://proxy, Siti che tracciano."
++        setting: "chrome://proxy, Sites that track."
+         policy_exception_justification: "Not implemented."
+       })");
+ 
+diff --git a/chrome/browser/fork/vpn_tab_helper.cc b/chrome/browser/fork/vpn_tab_helper.cc
+index 169c4a2f78079b124dc886742cdfc1554d74ff78..2c8bf456568f85c24fd33867194509a85579367b 100644
+--- a/chrome/browser/fork/vpn_tab_helper.cc
++++ b/chrome/browser/fork/vpn_tab_helper.cc
+@@ -35,6 +35,8 @@
+ #include "ui/views/widget/widget_delegate.h"
+ #include "ui/views/window/dialog_delegate.h"
+ #include "url/gurl.h"
++#include "chrome/grit/fork_strings.h"
++#include "ui/base/l10n/l10n_util.h"
+ 
+ namespace browser_fork {
+ 
+@@ -47,8 +49,13 @@ constexpr infobars::InfoBarDelegate::InfoBarIdentifier kInfoBarId =
+ // The red of the direct connection, in the sketches.
+ constexpr SkColor kDirectRed = SkColorSetRGB(0xC4, 0x00, 0x1A);
+ 
+-constexpr char16_t kDirectBarTitle[] = u"Connessione diretta.";
+-constexpr char16_t kDirectBarText[] = u" I siti vedono l'IP di casa.";
++std::u16string DirectBarTitle() {
++  return l10n_util::GetStringUTF16(IDS_FORK_DIRECT_BAR_TITLE);
++}
++
++std::u16string DirectBarText() {
++  return u" " + l10n_util::GetStringUTF16(IDS_FORK_DIRECT_BAR_TEXT);
++}
+ 
+ // The network service gets the new route on its own pipe: without a moment the
+ // reload could still go the old way.
+@@ -72,11 +79,9 @@ void ReloadSoon(content::WebContents* web_contents) {
+ void ShowReserveDialog(content::WebContents* contents) {
+   auto model =
+       ui::DialogModel::Builder()
+-          .SetTitle(u"Navigare senza VPN?")
++          .SetTitle(l10n_util::GetStringUTF16(IDS_FORK_DIRECT_CONFIRM_TITLE))
+           .AddParagraph(ui::DialogModelLabel(
+-              u"I siti vedranno l'IP di casa. La modalità diretta scade alla "
+-              u"chiusura del browser o dopo 24 ore, e torna da sola alla VPN "
+-              u"quando il server risponde."))
++              l10n_util::GetStringUTF16(IDS_FORK_DIRECT_CONFIRM_BODY)))
+           .AddOkButton(
+               base::BindOnce(
+                   [](base::WeakPtr<content::WebContents> web_contents) {
+@@ -86,10 +91,11 @@ void ShowReserveDialog(content::WebContents* contents) {
+                     }
+                   },
+                   contents->GetWeakPtr()),
+-              ui::DialogModel::Button::Params().SetLabel(u"Naviga diretto"))
++              ui::DialogModel::Button::Params().SetLabel(
++                  l10n_util::GetStringUTF16(IDS_FORK_DIRECT_CONFIRM_OK)))
+           .AddCancelButton(
+               base::DoNothing(),
+-              ui::DialogModel::Button::Params().SetLabel(u"Annulla"))
++              ui::DialogModel::Button::Params().SetLabel(l10n_util::GetStringUTF16(IDS_FORK_CANCEL)))
+           .OverrideDefaultButton(ui::mojom::DialogButton::kCancel)
+           .Build();
+   views::Widget* widget =
+@@ -109,8 +115,8 @@ class DirectReserveInfoBar : public ConfirmInfoBar {
+  public:
+   explicit DirectReserveInfoBar(std::unique_ptr<ConfirmInfoBarDelegate> delegate)
+       : ConfirmInfoBar(std::move(delegate)) {
+-    const std::u16string title(kDirectBarTitle);
+-    const std::u16string text = title + kDirectBarText;
++    const std::u16string title = DirectBarTitle();
++    const std::u16string text = title + DirectBarText();
+     auto label = CreateStyledLabel(text);
+     label->SetAutoColorReadabilityEnabled(false);
+     views::StyledLabel::RangeStyleInfo bold;
+@@ -166,11 +172,11 @@ class DirectReserveInfoBarDelegate : public ConfirmInfoBarDelegate {
+   }
+   bool IsCloseable() const override { return false; }
+   std::u16string GetMessageText() const override {
+-    return std::u16string(kDirectBarTitle) + kDirectBarText;
++    return DirectBarTitle() + DirectBarText();
+   }
+   int GetButtons() const override { return BUTTON_OK; }
+   std::u16string GetButtonLabel(InfoBarButton button) const override {
+-    return u"Torna alla VPN";
++    return l10n_util::GetStringUTF16(IDS_FORK_BACK_TO_VPN);
+   }
+   bool Accept() override {
+     content::WebContents* contents =
+@@ -234,8 +240,7 @@ void VpnTabHelper::OnBackToVpn() {
+     manager->AddInfoBar(
+         CreateConfirmInfoBar(std::make_unique<SimpleAlertInfoBarDelegate>(
+             kInfoBarId, &vector_icons::kInfoIcon,
+-            u"Il server VPN risponde di nuovo: il browser è tornato a uscire "
+-            u"dalla VPN.",
++            l10n_util::GetStringUTF16(IDS_FORK_VPN_BACK_NOTICE),
+             /*auto_expire=*/true, /*should_animate=*/true)));
+   }
+ }
+diff --git a/chrome/browser/resources/profilo_panel.html b/chrome/browser/resources/profilo_panel.html
+index 979b6b051ae6b603717165f31c874b41dcf7dd5d..f7fb4704c6f140f09d195c2fe6bafb79cc05e814 100644
+--- a/chrome/browser/resources/profilo_panel.html
++++ b/chrome/browser/resources/profilo_panel.html
+@@ -1,8 +1,8 @@
+ <!doctype html>
+-<html lang="it">
++<html dir="$i18n{textdirection}" lang="$i18n{language}">
+ <head>
+ <meta charset="utf-8">
+-<title>Profilo</title>
++<title>$i18n{forkProfiloLabel}</title>
+ <style>
+ :root {
+   --text: #1d1d1f; --sub: #5a5a60; --field: rgba(0,0,0,0.07); --panel: #fafafc;
+@@ -35,25 +35,25 @@ p { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--sub); }
+ <script src="profilo_panel.js"></script>
+ </head>
+ <body>
+-<section id="panel" role="dialog" aria-label="Profilo">
++<section id="panel" role="dialog" aria-label="$i18n{forkProfiloLabel}">
+   <div id="out">
+     <span id="avatar" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="5.5" r="2.8"></circle><path d="M2.8 14c.6-2.7 2.7-4.3 5.2-4.3s4.6 1.6 5.2 4.3"></path></svg></span>
+-    <div id="out-title">Non hai ancora fatto l'accesso</div>
+-    <p>Un solo accesso con il tuo account Claude per Claude in Chrome e le tue chat.</p>
+-    <button id="login"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M8 1.6v12.8M1.6 8h12.8M3.5 3.5l9 9M12.5 3.5l-9 9"></path></svg>Accedi con Claude</button>
++    <div id="out-title">$i18n{forkProfiloNotSignedIn}</div>
++    <p>$i18n{forkProfiloIntro}</p>
++    <button id="login"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M8 1.6v12.8M1.6 8h12.8M3.5 3.5l9 9M12.5 3.5l-9 9"></path></svg>$i18n{forkProfiloSignIn}</button>
+   </div>
+   <div id="in" hidden>
+     <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M8 1.6v12.8M1.6 8h12.8M3.5 3.5l9 9M12.5 3.5l-9 9"></path></svg>
+     <div>
+-      <div id="in-title">Account Claude</div>
+-      <div id="in-sub">Accesso fatto su claude.ai</div>
++      <div id="in-title">$i18n{forkProfiloAccount}</div>
++      <div id="in-sub">$i18n{forkProfiloSignedIn}</div>
+     </div>
+   </div>
+   <div id="actions" hidden>
+-    <button id="chats">Le tue chat</button>
+-    <button id="logout">Esci</button>
++    <button id="chats">$i18n{forkYourChats}</button>
++    <button id="logout">$i18n{forkProfiloSignOut}</button>
+   </div>
+-  <button id="others">Altri profili e ospite</button>
++  <button id="others">$i18n{forkProfiloOthers}</button>
+ </section>
+ </body>
+ </html>
+diff --git a/chrome/browser/resources/proxy_config.html b/chrome/browser/resources/proxy_config.html
+index f5b9fb37bbca84a0eee8594154f1353a77411313..4739e68772087fee9ca54a66f917b96cc3287924 100644
+--- a/chrome/browser/resources/proxy_config.html
++++ b/chrome/browser/resources/proxy_config.html
+@@ -14,73 +14,60 @@
+ <script type="module" src="chrome://proxy/proxy_config.js"></script>
+ <link rel="stylesheet" href="chrome://resources/css/text_defaults.css">
+ <link rel="stylesheet" href="proxy_config.css">
+-<title>Rete e privacy</title>
++<title>$i18n{forkProxyPageTitle}</title>
+ </head>
+ <body>
+   <div id="main-container">
+     <div id="fork-settings">
+-      <h2>VPN personale</h2>
+-      <p>Solo il browser esce dalla VPN del tuo server. Se il server non risponde le pagine danno
+-        errore: non si esce mai direttamente senza che tu lo sappia. Restano fuori dalla VPN le reti
+-        di casa e Tailscale, così il server stesso si raggiunge sempre.</p>
+-      <p><label>Indirizzo del proxy
+-        <input id="fork-vpn-address" size="30" placeholder="indirizzo:porta"></label>
+-        <label>Città di uscita
+-        <input id="fork-vpn-city" size="14" placeholder="Roma"></label>
+-        <button class="fork-inline" id="fork-vpn-on">Attiva</button>
+-        <button class="fork-inline" id="fork-vpn-off">Disattiva</button></p>
++      <h2>$i18n{forkProxyVpnTitle}</h2>
++      <p>$i18n{forkProxyVpnIntro}</p>
++      <p><label>$i18n{forkProxyVpnAddress}
++        <input id="fork-vpn-address" size="30" placeholder="$i18n{forkProxyAddressPlaceholder}"></label>
++        <label>$i18n{forkProxyVpnCity}
++        <input id="fork-vpn-city" size="14" placeholder="$i18n{forkProxyVpnCityPlaceholder}"></label>
++        <button class="fork-inline" id="fork-vpn-on">$i18n{forkProxyVpnOn}</button>
++        <button class="fork-inline" id="fork-vpn-off">$i18n{forkProxyVpnOff}</button></p>
+       <p id="fork-vpn-status"></p>
+-      <p><button class="fork-inline" id="fork-vpn-back" hidden>Torna alla VPN</button></p>
+-      <h3>Siti che escono diretti</h3>
+-      <p>Uno per riga: banche e servizi che bloccano gli indirizzi delle VPN. Questi siti vedono
+-        l'indirizzo IP di casa tua.</p>
++      <p><button class="fork-inline" id="fork-vpn-back" hidden>$i18n{forkBackToVpn}</button></p>
++      <h3>$i18n{forkProxyDirectTitle}</h3>
++      <p>$i18n{forkProxyDirectIntro}</p>
+       <textarea id="fork-vpn-direct" rows="4" cols="40"></textarea>
+-      <p><button class="fork-inline" id="fork-vpn-direct-save">Salva l'elenco</button></p>
++      <p><button class="fork-inline" id="fork-vpn-direct-save">$i18n{forkProxySaveList}</button></p>
+       <p id="fork-vpn-direct-status"></p>
+ 
+-      <h2>Motore di ricerca personale</h2>
+-      <p>Le ricerche dalla barra degli indirizzi vanno al tuo SearXNG. Se non risponde entro qualche
+-        secondo, quella ricerca passa da sola a DuckDuckGo Light.</p>
+-      <p><label>Indirizzo di SearXNG
+-        <input id="fork-search-url" size="30" placeholder="http://indirizzo:porta"></label>
+-        <button class="fork-inline" id="fork-search-on">Usa</button>
+-        <button class="fork-inline" id="fork-search-off">Togli</button></p>
++      <h2>$i18n{forkProxySearchTitle}</h2>
++      <p>$i18n{forkProxySearchIntro}</p>
++      <p><label>$i18n{forkProxySearchAddress}
++        <input id="fork-search-url" size="30" placeholder="$i18n{forkProxyUrlPlaceholder}"></label>
++        <button class="fork-inline" id="fork-search-on">$i18n{forkProxySearchUse}</button>
++        <button class="fork-inline" id="fork-search-off">$i18n{forkProxySearchRemove}</button></p>
+       <p id="fork-search-status"></p>
+ 
+-      <h2>Siti che tracciano</h2>
+-      <p>Aprendo questi siti il browser va da solo alla loro versione che non ti traccia, anche dai
+-        link condivisi. Dal pannello del sito (lo scudo nella barra degli indirizzi) torni
+-        all'originale quando ti serve.</p>
+-      <p><label><input type="checkbox" id="fork-redirect-youtube"> <b>YouTube</b> sul tuo
+-        Invidious, anche i video dentro gli altri siti</label></p>
+-      <p><label>Indirizzo di casa
+-        <input id="fork-invidious-home" size="26" placeholder="http://indirizzo:porta"></label>
+-        <label>Fuori casa (Tailscale)
+-        <input id="fork-invidious-remote" size="26" placeholder="http://indirizzo:porta"></label>
+-        <button class="fork-inline" id="fork-invidious-save">Salva</button></p>
++      <h2>$i18n{forkProxyTrackersTitle}</h2>
++      <p>$i18n{forkProxyTrackersIntro}</p>
++      <p><label><input type="checkbox" id="fork-redirect-youtube"> <b>YouTube</b> $i18n{forkProxyRedirectYoutube}</label></p>
++      <p><label>$i18n{forkProxyInvidiousHome}
++        <input id="fork-invidious-home" size="26" placeholder="$i18n{forkProxyUrlPlaceholder}"></label>
++        <label>$i18n{forkProxyInvidiousRemote}
++        <input id="fork-invidious-remote" size="26" placeholder="$i18n{forkProxyUrlPlaceholder}"></label>
++        <button class="fork-inline" id="fork-invidious-save">$i18n{forkSave}</button></p>
+       <p id="fork-invidious-status"></p>
+-      <p><label><input type="checkbox" id="fork-redirect-instagram"> <b>Instagram</b> su
+-        imginn</label></p>
+-      <p><label><input type="checkbox" id="fork-redirect-tiktok"> <b>TikTok</b> su urlebird.
+-        Un video apre la pagina del suo autore: urlebird mette nell'indirizzo del video le
+-        parole della descrizione, che il link di TikTok non ha.</label></p>
++      <p><label><input type="checkbox" id="fork-redirect-instagram"> <b>Instagram</b> $i18n{forkProxyRedirectInstagram}</label></p>
++      <p><label><input type="checkbox" id="fork-redirect-tiktok"> <b>TikTok</b> $i18n{forkProxyRedirectTiktok}</label></p>
+ 
+-      <h2>Cookie e dati dei siti</h2>
+-      <p><label><input type="radio" name="fork-cookie-mode" value="0"> <b>Temporanei:</b> i dati
+-        di un sito durano la visita e si cancellano appena lo lasci.</label></p>
+-      <p><label><input type="radio" name="fork-cookie-mode" value="1"> <b>Normale:</b> come in
+-        Chrome, con i cookie separati per sito.</label></p>
+-      <p><label><input type="radio" name="fork-cookie-mode" value="2"> <b>Blocca tutti:</b> nessun
+-        sito salva dati, i login non funzionano. Valgono solo i siti da ricordare.</label></p>
+-      <h3>Siti da ricordare</h3>
+-      <p>Uno per riga. Qui resti collegato: i loro dati non si cancellano mai.</p>
++      <h2>$i18n{forkCookiesAndSiteData}</h2>
++      <p><label><input type="radio" name="fork-cookie-mode" value="0"> <b>$i18n{forkProxyCookieTempName}</b> $i18n{forkProxyCookieTemp}</label></p>
++      <p><label><input type="radio" name="fork-cookie-mode" value="1"> <b>$i18n{forkProxyCookieNormalName}</b> $i18n{forkProxyCookieNormal}</label></p>
++      <p><label><input type="radio" name="fork-cookie-mode" value="2"> <b>$i18n{forkProxyCookieBlockName}</b> $i18n{forkProxyCookieBlock}</label></p>
++      <h3>$i18n{forkProxyRememberedTitle}</h3>
++      <p>$i18n{forkProxyRememberedIntro}</p>
+       <textarea id="fork-remembered" rows="8" cols="40"></textarea>
+-      <p><button class="fork-inline" id="fork-remembered-save">Salva l'elenco</button></p>
++      <p><button class="fork-inline" id="fork-remembered-save">$i18n{forkProxySaveList}</button></p>
+       <p id="fork-remembered-status"></p>
+-      <h3>Claude non entra in questi siti</h3>
+-      <p>Uno per riga, per esempio banche e sanità. Claude in Chrome non può leggerli né usarli.</p>
++      <h3>$i18n{forkProxyClaudeBlockedTitle}</h3>
++      <p>$i18n{forkProxyClaudeBlockedIntro}</p>
+       <textarea id="fork-claude-blocked" rows="6" cols="40"></textarea>
+-      <p><button class="fork-inline" id="fork-claude-blocked-save">Salva l'elenco</button></p>
++      <p><button class="fork-inline" id="fork-claude-blocked-save">$i18n{forkProxySaveList}</button></p>
+       <p id="fork-claude-blocked-status"></p>
+       <hr>
+     </div>
+diff --git a/chrome/browser/resources/proxy_config.js b/chrome/browser/resources/proxy_config.js
+index 8ec4871c848036f8847b8cd9acd1ee179ea0f6af..091940c2bd7c1a2cebbcab1dee69d55cb0efa4bb 100644
+--- a/chrome/browser/resources/proxy_config.js
++++ b/chrome/browser/resources/proxy_config.js
+@@ -15,8 +15,11 @@
+     along with Bromite. If not, see <https://www.gnu.org/licenses/>.
+ */
+ 
++import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+ import {$} from 'chrome://resources/js/util.js';
+ 
++import './strings.m.js';
++
+ /**
+  * Main entry point called once the page has loaded.
+  */
+@@ -328,12 +331,12 @@ window.ForkSettings = (function() {
+     const address = vpnFromConfig(window.ProxyConfigView.getInstance().currentConfig);
+     $('fork-vpn-back').hidden = !reserve;
+     if (reserve) {
+-      setStatus('fork-vpn-status', 'Connessione diretta di riserva: il tuo IP è visibile.');
++      setStatus('fork-vpn-status', loadTimeData.getString('forkProxyVpnReserve'));
+     } else if (address) {
+       $('fork-vpn-address').value = address;
+-      setStatus('fork-vpn-status', 'Attiva: il browser esce da ' + address + '.');
++      setStatus('fork-vpn-status', loadTimeData.getStringF('forkProxyVpnActive', address));
+     } else {
+-      setStatus('fork-vpn-status', 'Spenta: il browser esce dalla connessione normale.');
++      setStatus('fork-vpn-status', loadTimeData.getString('forkProxyVpnInactive'));
+     }
+   }
+ 
+@@ -342,7 +345,7 @@ window.ForkSettings = (function() {
+ 
+   function sendRedirects() {
+     invidiousSaved = true;
+-    setStatus('fork-invidious-status', 'Controllo gli indirizzi…');
++    setStatus('fork-invidious-status', loadTimeData.getString('forkProxyChecking'));
+     chrome.send('setRedirects', [
+       $('fork-invidious-home').value.trim(), $('fork-invidious-remote').value.trim(),
+       $('fork-redirect-youtube').checked, $('fork-redirect-instagram').checked,
+@@ -352,24 +355,23 @@ window.ForkSettings = (function() {
+ 
+   function invidiousText(settings) {
+     if (!settings.invidiousHome && !settings.invidiousRemote) {
+-      return 'Senza un indirizzo YouTube resta com\'è.';
++      return loadTimeData.getString('forkProxyInvidiousNoAddress');
+     }
+     if (!settings.redirectYoutube) {
+-      return 'Spento: YouTube resta com\'è.';
++      return loadTimeData.getString('forkProxyInvidiousOff');
+     }
+     const restart = invidiousSaved ?
+-        ' I video dentro gli altri siti passano a Invidious dal prossimo avvio del browser.' :
++        ' ' + loadTimeData.getString('forkProxyInvidiousRestart') :
+         '';
+     switch (settings.invidiousStatus) {
+       case 'home':
+-        return 'Risponde quello di casa: YouTube si apre lì.' + restart;
++        return loadTimeData.getString('forkProxyInvidiousHomeAnswers') + restart;
+       case 'remote':
+-        return 'Risponde quello di Tailscale: YouTube si apre lì.' + restart;
++        return loadTimeData.getString('forkProxyInvidiousRemoteAnswers') + restart;
+       case 'none':
+-        return 'Nessuno dei due risponde, o non è Invidious: YouTube dà errore finché ' +
+-            'non lo apri tu dalla pagina.';
++        return loadTimeData.getString('forkProxyInvidiousNone');
+       default:
+-        return 'Controllo gli indirizzi…';
++        return loadTimeData.getString('forkProxyChecking');
+     }
+   }
+ 
+@@ -377,7 +379,7 @@ window.ForkSettings = (function() {
+     $('fork-vpn-on').onclick = function() {
+       const address = $('fork-vpn-address').value.trim().replace(/^https?:\/\//, '');
+       if (!address) {
+-        setStatus('fork-vpn-status', 'Scrivi prima l\'indirizzo del proxy.');
++        setStatus('fork-vpn-status', loadTimeData.getString('forkProxyVpnNeedAddress'));
+         return;
+       }
+       const sites = directSites();
+@@ -395,7 +397,7 @@ window.ForkSettings = (function() {
+       if (current) {
+         applyVpn(current, sites);
+       }
+-      setStatus('fork-vpn-direct-status', 'Elenco salvato: ' + sites.length + ' siti.');
++      setStatus('fork-vpn-direct-status', loadTimeData.getStringF('forkProxyListSaved', String(sites.length)));
+     };
+     $('fork-vpn-off').onclick = function() {
+       chrome.send('clear', []);
+@@ -421,7 +423,7 @@ window.ForkSettings = (function() {
+           .map(function(line) { return line.trim(); })
+           .filter(function(line) { return line.length > 0; });
+       chrome.send('setRememberedSites', [sites]);
+-      setStatus('fork-remembered-status', 'Elenco salvato: ' + sites.length + ' siti.');
++      setStatus('fork-remembered-status', loadTimeData.getStringF('forkProxyListSaved', String(sites.length)));
+     };
+ 
+     $('fork-claude-blocked-save').onclick = function() {
+@@ -429,7 +431,7 @@ window.ForkSettings = (function() {
+           .map(function(line) { return line.trim(); })
+           .filter(function(line) { return line.length > 0; });
+       chrome.send('setClaudeBlockedSites', [sites]);
+-      setStatus('fork-claude-blocked-status', 'Elenco salvato: ' + sites.length + ' siti. Vale per le schede nuove: chiudi quelle già aperte su questi siti.');
++      setStatus('fork-claude-blocked-status', loadTimeData.getStringF('forkProxyClaudeListSaved', String(sites.length)));
+     };
+ 
+     const view = window.ProxyConfigView.getInstance();
+@@ -468,8 +470,8 @@ window.ForkSettings = (function() {
+       $('fork-redirect-tiktok').checked = settings.redirectTiktok;
+       setStatus('fork-invidious-status', invidiousText(settings));
+       setStatus('fork-search-status', settings.personalSearch ?
+-          'Attivo: le ricerche vanno a ' + settings.personalSearch + '.' :
+-          'Spento: le ricerche vanno al motore predefinito.');
++          loadTimeData.getStringF('forkProxySearchActive', settings.personalSearch) :
++          loadTimeData.getString('forkProxySearchInactive'));
+       refreshVpn();
+     },
+   };
+diff --git a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
+index 4aa448ddd9b27f9ca0987f1fa5a70cb8f121cd72..21edfa610492f212ce08eed8e0e8ffb897921b75 100644
+--- a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
+@@ -86,8 +86,8 @@ export function getHtml(this: SettingsAppearancePageElement) {
+     <if expr="is_macosx">
+     <settings-toggle-button id="compactTabs"
+         pref-key="fork.compact_tabs"
+-        label="Schede nella barra degli strumenti"
+-        sub-label="Compatte, come Safari. Vale per le finestre che apri dopo.">
++        label="$i18n{forkSettingsCompactTabs}"
++        sub-label="$i18n{forkSettingsCompactTabsSub}">
+     </settings-toggle-button>
+     </if>
+     <settings-toggle-button elide-label
+diff --git a/chrome/browser/resources/settings/settings_menu/settings_menu.html b/chrome/browser/resources/settings/settings_menu/settings_menu.html
+index f5af9b68336067295b7ec09a2bf10c5c2d544808..0458cc7854545b9da209f37ec4d677c292a8cc6b 100644
+--- a/chrome/browser/resources/settings/settings_menu/settings_menu.html
++++ b/chrome/browser/resources/settings/settings_menu/settings_menu.html
+@@ -150,7 +150,7 @@
+         </a>
+         <a role="menuitem" id="adblock" href="/adblock" class="cr-nav-menu-item" hidden="[[!pageVisibility.adblock]]">
+           <cr-icon icon="settings:block"></cr-icon>
+-          Blocco contenuti
++          $i18n{forkContentBlocking}
+           <cr-ripple></cr-ripple>
+         </a>
+ <if expr="not is_chromeos">
+diff --git a/chrome/browser/resources/settings/ublock_page/ublock_page.html b/chrome/browser/resources/settings/ublock_page/ublock_page.html
+index d7f5521ceb7b23b21d74c44d83a9096ee2090721..529264923a95ad0ac3bec45cf6a51931221ac72b 100644
+--- a/chrome/browser/resources/settings/ublock_page/ublock_page.html
++++ b/chrome/browser/resources/settings/ublock_page/ublock_page.html
+@@ -85,14 +85,11 @@
+   }
+ </style>
+ 
+-<settings-section page-title="Blocco contenuti" section="adblock">
++<settings-section page-title="$i18n{forkContentBlocking}" section="adblock">
+   <div class="cr-row first">
+     <div class="flex cr-padded-text">
+-      <div>[[appName_]], integrato nel browser</div>
+-      <div class="cr-secondary-text">
+-        Blocca pubblicità, tracker e siti pericolosi in tutte le pagine. Per
+-        spegnerlo su un solo sito c'è il pulsante a destra dell'indirizzo.
+-      </div>
++      <div>[[integratedText_(appName_)]]</div>
++      <div class="cr-secondary-text">$i18n{forkUblockIntro}</div>
+       <div class="cr-secondary-text" hidden$="[[!filterCountText_]]">
+         [[filterCountText_]]
+       </div>
+@@ -101,19 +98,17 @@
+   </div>
+ 
+   <cr-expand-button class="cr-row" expanded="{{listsOpened_}}">
+-    <div>Liste di filtri</div>
++    <div>$i18n{forkUblockLists}</div>
+     <div class="cr-secondary-text">[[listsSummary_]]</div>
+   </cr-expand-button>
+   <cr-collapse opened="[[listsOpened_]]">
+     <div class="cr-row continuation">
+       <div class="flex cr-padded-text">
+-        <div>Aggiorna le liste da sole</div>
+-        <div class="cr-secondary-text">
+-          Ogni lista si scarica di nuovo dal suo sito quando scade.
+-        </div>
++        <div>$i18n{forkUblockAutoUpdate}</div>
++        <div class="cr-secondary-text">$i18n{forkUblockAutoUpdateSub}</div>
+       </div>
+       <cr-toggle id="autoUpdate" checked="[[autoUpdate_]]"
+-          aria-label="Aggiorna le liste da sole"
++          aria-label="$i18n{forkUblockAutoUpdate}"
+           on-change="onAutoUpdateChange_">
+       </cr-toggle>
+     </div>
+@@ -123,7 +118,7 @@
+       </div>
+       <cr-button id="updateNow" on-click="onUpdateNowClick_"
+           disabled="[[updating_]]">
+-        Aggiorna adesso
++        $i18n{forkUblockUpdateNow}
+       </cr-button>
+     </div>
+     <div class="list-frame">
+@@ -141,7 +136,8 @@
+                 <template is="dom-if" if="[[list.custom]]">
+                   <cr-icon-button class="icon-delete-gray"
+                       data-key$="[[list.key]]" on-click="onRemoveListClick_"
+-                      title="Togli la lista" aria-label="Togli la lista">
++                      title="$i18n{forkUblockRemoveList}"
++                      aria-label="$i18n{forkUblockRemoveList}">
+                   </cr-icon-button>
+                 </template>
+               </div>
+@@ -149,14 +145,14 @@
+           </div>
+         </div>
+       </template>
+-      <h3>Aggiungi una lista</h3>
++      <h3>$i18n{forkUblockAddList}</h3>
+       <div class="add-row">
+         <cr-input id="newList" value="{{newList_}}"
+-            placeholder="https://esempio.org/lista.txt"
+-            aria-label="Indirizzo della lista" on-keydown="onNewListKeydown_">
++            placeholder="$i18n{forkUblockListPlaceholder}"
++            aria-label="$i18n{forkUblockListAddress}" on-keydown="onNewListKeydown_">
+         </cr-input>
+         <cr-button on-click="onAddListClick_" disabled="[[!newList_]]">
+-          Aggiungi
++          $i18n{forkAdd}
+         </cr-button>
+       </div>
+       <div class="status" hidden$="[[!listsStatus_]]">[[listsStatus_]]</div>
+@@ -164,109 +160,100 @@
+   </cr-collapse>
+ 
+   <cr-expand-button class="cr-row" expanded="{{filtersOpened_}}">
+-    <div>Filtri personali</div>
++    <div>$i18n{forkUblockFilters}</div>
+     <div class="cr-secondary-text">[[filtersSummary_]]</div>
+   </cr-expand-button>
+   <cr-collapse opened="[[filtersOpened_]]">
+     <div class="cr-row continuation">
+       <div class="flex cr-padded-text">
+-        <div>Usa i filtri personali</div>
+-        <div class="cr-secondary-text">
+-          Un filtro per riga, nella
+-          <a href="https://github.com/gorhill/uBlock/wiki/Static-filter-syntax"
+-              target="_blank">sintassi di uBlock Origin</a>.
+-          Anche "Nascondi un elemento" li aggiunge qui.
++        <div>$i18n{forkUblockUseFilters}</div>
++        <div class="cr-secondary-text"
++            inner-h-t-m-l="[[i18nAdvanced('forkUblockFiltersHelp')]]">
+         </div>
+       </div>
+       <cr-toggle checked="[[filtersEnabled_]]"
+-          aria-label="Usa i filtri personali"
++          aria-label="$i18n{forkUblockUseFilters}"
+           on-change="onFiltersEnabledChange_">
+       </cr-toggle>
+     </div>
+     <div class="editor">
+       <textarea class="code" id="filters" spellcheck="false"
+-          aria-label="Filtri personali" value="{{filtersText_::input}}"></textarea>
++          aria-label="$i18n{forkUblockFilters}" value="{{filtersText_::input}}"></textarea>
+       <div class="editor-buttons">
+         <div class="status">[[filtersStatus_]]</div>
+         <cr-button on-click="onFiltersRevertClick_"
+-            disabled="[[!filtersDirty_]]">Annulla</cr-button>
++            disabled="[[!filtersDirty_]]">$i18n{forkCancel}</cr-button>
+         <cr-button class="action-button" on-click="onFiltersSaveClick_"
+-            disabled="[[!filtersDirty_]]">Salva</cr-button>
++            disabled="[[!filtersDirty_]]">$i18n{forkSave}</cr-button>
+       </div>
+     </div>
+   </cr-collapse>
+ 
+   <cr-expand-button class="cr-row" expanded="{{rulesOpened_}}">
+-    <div>Regole</div>
++    <div>$i18n{forkUblockRules}</div>
+     <div class="cr-secondary-text">[[rulesSummary_]]</div>
+   </cr-expand-button>
+   <cr-collapse opened="[[rulesOpened_]]">
+     <div class="cr-row continuation">
+       <div class="flex cr-padded-text">
+-        <div class="cr-secondary-text">
+-          Regole di filtraggio dinamico, una per riga: sito di partenza, sito
+-          di destinazione, tipo di richiesta e azione
+-          (<a href="https://github.com/gorhill/uBlock/wiki/Dynamic-filtering:-rule-syntax"
+-              target="_blank">come si scrivono</a>). Valgono subito e restano
+-          dopo il riavvio.
++        <div class="cr-secondary-text"
++            inner-h-t-m-l="[[i18nAdvanced('forkUblockRulesHelp')]]">
+         </div>
+       </div>
+     </div>
+     <div class="editor">
+       <textarea class="code" id="rules" spellcheck="false"
+-          aria-label="Regole" value="{{rulesText_::input}}"></textarea>
++          aria-label="$i18n{forkUblockRules}" value="{{rulesText_::input}}"></textarea>
+       <div class="editor-buttons">
+         <div class="status">[[rulesStatus_]]</div>
+         <cr-button on-click="onRulesRevertClick_"
+-            disabled="[[!rulesDirty_]]">Annulla</cr-button>
++            disabled="[[!rulesDirty_]]">$i18n{forkCancel}</cr-button>
+         <cr-button class="action-button" on-click="onRulesSaveClick_"
+-            disabled="[[!rulesDirty_]]">Salva</cr-button>
++            disabled="[[!rulesDirty_]]">$i18n{forkSave}</cr-button>
+       </div>
+     </div>
+   </cr-collapse>
+ 
+   <cr-expand-button class="cr-row" expanded="{{sitesOpened_}}">
+-    <div>Siti esclusi</div>
++    <div>$i18n{forkUblockSites}</div>
+     <div class="cr-secondary-text">[[sitesSummary_]]</div>
+   </cr-expand-button>
+   <cr-collapse opened="[[sitesOpened_]]">
+     <div class="cr-row continuation">
+       <div class="flex cr-padded-text">
+-        <div class="cr-secondary-text">
+-          Qui non si blocca niente. Il pulsante di accensione nel pannello
+-          "Blocco contenuti" aggiunge e toglie i siti da questo elenco.
+-        </div>
++        <div class="cr-secondary-text">$i18n{forkUblockSitesHelp}</div>
+       </div>
+     </div>
+     <div class="list-frame">
+       <div class="vertical-list">
+         <div class="list-item secondary" hidden$="[[sites_.length]]">
+-          Nessun sito escluso
++          $i18n{forkUblockNoSites}
+         </div>
+         <template is="dom-repeat" items="[[sites_]]" as="site">
+           <div class="list-item">
+             <div class="flex cr-padded-text list-name">[[site]]</div>
+             <cr-icon-button class="icon-delete-gray" data-site$="[[site]]"
+-                on-click="onRemoveSiteClick_" title="Togli il sito"
+-                aria-label="Togli il sito">
++                on-click="onRemoveSiteClick_" title="$i18n{forkUblockRemoveSite}"
++                aria-label="$i18n{forkUblockRemoveSite}">
+             </cr-icon-button>
+           </div>
+         </template>
+       </div>
+-      <h3>Aggiungi un sito</h3>
++      <h3>$i18n{forkUblockAddSite}</h3>
+       <div class="add-row">
+-        <cr-input id="newSite" value="{{newSite_}}" placeholder="esempio.org"
+-            aria-label="Sito da escludere" on-keydown="onNewSiteKeydown_">
++        <cr-input id="newSite" value="{{newSite_}}"
++            placeholder="$i18n{forkUblockSitePlaceholder}"
++            aria-label="$i18n{forkUblockSiteLabel}" on-keydown="onNewSiteKeydown_">
+         </cr-input>
+         <cr-button on-click="onAddSiteClick_" disabled="[[!newSite_]]">
+-          Aggiungi
++          $i18n{forkAdd}
+         </cr-button>
+       </div>
+     </div>
+   </cr-collapse>
+ 
+-  <cr-link-row class="hr" label="Altre impostazioni di uBlock Origin"
+-      sub-label="Backup, impostazioni avanzate e aspetto, nella pagina di uBlock Origin"
++  <cr-link-row class="hr" label="$i18n{forkUblockMore}"
++      sub-label="$i18n{forkUblockMoreSub}"
+       external on-click="onDashboardClick_">
+   </cr-link-row>
+ </settings-section>
+diff --git a/chrome/browser/resources/settings/ublock_page/ublock_page.ts b/chrome/browser/resources/settings/ublock_page/ublock_page.ts
+index 100f978d3854f6b1f6e0562361ad027359f387aa..fae7be418b0b3ab0019cbf806f21617662e6ade0 100644
+--- a/chrome/browser/resources/settings/ublock_page/ublock_page.ts
++++ b/chrome/browser/resources/settings/ublock_page/ublock_page.ts
+@@ -16,6 +16,8 @@ import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
+ import '../settings_page/settings_section.js';
+ import '../settings_shared.css.js';
+ 
++import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
++import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+ 
+ import {getSearchManager} from '../search_settings.js';
+@@ -27,19 +29,20 @@ import {getTemplate} from './ublock_page.html.js';
+ // fork-ublock.json, as in chrome/browser/fork/ublock_extension.h.
+ const UBLOCK_ORIGIN = 'chrome-extension://kkmdaeadfdjhhlfdpadhpjjommebkohi';
+ 
+-// The groups of the lists, in the order of the dashboard of uBlock.
++// The groups of the lists, in the order of the dashboard of uBlock, with the
++// strings of their names.
+ const GROUPS: Array<[string, string]> = [
+-  ['default', 'Integrate'],
+-  ['ads', 'Pubblicità'],
+-  ['privacy', 'Privacy'],
+-  ['malware', 'Malware e siti pericolosi'],
+-  ['multipurpose', 'Multiuso'],
+-  ['cookies', 'Avvisi sui cookie'],
+-  ['social', 'Pulsanti dei social'],
+-  ['annoyances', 'Elementi fastidiosi'],
+-  ['regions', 'Regioni e lingue'],
+-  ['unknown', 'Altre'],
+-  ['custom', 'Aggiunte da te'],
++  ['default', 'forkUblockGroupDefault'],
++  ['ads', 'forkUblockGroupAds'],
++  ['privacy', 'forkUblockGroupPrivacy'],
++  ['malware', 'forkUblockGroupMalware'],
++  ['multipurpose', 'forkUblockGroupMultipurpose'],
++  ['cookies', 'forkUblockGroupCookies'],
++  ['social', 'forkUblockGroupSocial'],
++  ['annoyances', 'forkUblockGroupAnnoyances'],
++  ['regions', 'forkUblockGroupRegions'],
++  ['unknown', 'forkUblockGroupUnknown'],
++  ['custom', 'forkUblockGroupCustom'],
+ ];
+ 
+ interface UblockList {
+@@ -120,25 +123,30 @@ function ago(time: number|undefined): string {
+   }
+   const minutes = Math.floor((Date.now() - time) / 60000);
+   if (minutes < 1) {
+-    return 'adesso';
++    return loadTimeData.getString('forkUblockAgoNow');
+   }
+   if (minutes < 60) {
+-    return minutes === 1 ? '1 minuto fa' : `${minutes} minuti fa`;
++    return minutes === 1 ? loadTimeData.getString('forkUblockAgoMinute') :
++                           loadTimeData.getStringF('forkUblockAgoMinutes', String(minutes));
+   }
+   const hours = Math.floor(minutes / 60);
+   if (hours < 24) {
+-    return hours === 1 ? '1 ora fa' : `${hours} ore fa`;
++    return hours === 1 ? loadTimeData.getString('forkUblockAgoHour') :
++                         loadTimeData.getStringF('forkUblockAgoHours', String(hours));
+   }
+   const days = Math.floor(hours / 24);
+-  return days === 1 ? 'ieri' : `${days} giorni fa`;
++  return days === 1 ? loadTimeData.getString('forkUblockAgoYesterday') :
++                      loadTimeData.getStringF('forkUblockAgoDays', String(days));
+ }
+ 
+ function lines(text: string): string[] {
+   return text.split(/\s*[\n\r]+\s*/).filter(line => line !== '');
+ }
+ 
+-export class SettingsUblockPageElement extends PolymerElement implements
+-    SettingsPlugin {
++const SettingsUblockPageElementBase = I18nMixin(PolymerElement);
++
++export class SettingsUblockPageElement extends SettingsUblockPageElementBase
++    implements SettingsPlugin {
+   static get is() {
+     return 'settings-ublock-page';
+   }
+@@ -275,8 +283,7 @@ export class SettingsUblockPageElement extends PolymerElement implements
+     this.frame_ = frame;
+     this.shadowRoot!.appendChild(frame);
+     const timeout = setTimeout(() => {
+-      this.problem_ = 'uBlock Origin non risponde. Riprova tra poco ' +
+-          'o riavvia il browser.';
++      this.problem_ = loadTimeData.getString('forkUblockNoAnswer');
+     }, 10000);
+     this.bridgeReady_.then(() => {
+       clearTimeout(timeout);
+@@ -324,9 +331,7 @@ export class SettingsUblockPageElement extends PolymerElement implements
+     this.lists_ = lists;
+     this.autoUpdate_ = lists.autoUpdate === true;
+     this.updating_ = lists.isUpdating === true;
+-    this.filterCountText_ = `${formatNumber(lists.netFilterCount)} filtri di ` +
+-        `rete e ${formatNumber(lists.cosmeticFilterCount)} filtri cosmetici ` +
+-        'in uso.';
++    this.filterCountText_ = loadTimeData.getStringF('forkUblockFilterCount', formatNumber(lists.netFilterCount), formatNumber(lists.cosmeticFilterCount));
+ 
+     const known = new Set(GROUPS.map(([key]) => key));
+     const byGroup = new Map<string, FilterList[]>();
+@@ -352,12 +357,11 @@ export class SettingsUblockPageElement extends PolymerElement implements
+       if (selected) {
+         const parts = [];
+         if (typeof list.entryCount === 'number') {
+-          parts.push(`${formatNumber(list.entryUsedCount || 0)} filtri usati` +
+-              ` su ${formatNumber(list.entryCount)}`);
++          parts.push(loadTimeData.getStringF('forkUblockListUsed', formatNumber(list.entryUsedCount || 0), formatNumber(list.entryCount)));
+         }
+         parts.push(
+-            writeTime ? `aggiornata ${ago(writeTime)}` :
+-                        'copia inclusa in uBlock Origin, da aggiornare');
++            writeTime ? loadTimeData.getStringF('forkUblockListUpdated', ago(writeTime)) :
++                        loadTimeData.getString('forkUblockListBundled'));
+         detail = parts.join(' · ');
+         newest = Math.max(newest, writeTime);
+         on++;
+@@ -376,20 +380,20 @@ export class SettingsUblockPageElement extends PolymerElement implements
+       byGroup.get(group)!.push(entry);
+     }
+     this.groups_ = GROUPS.filter(([key]) => byGroup.has(key))
+-                       .map(([key, title]) => {
++                       .map(([key, titleId]) => {
+                          const items = byGroup.get(key)!;
+                          const active = items.filter(item => item.on).length;
+                          return {
+                            key,
+-                           title,
+-                           summary: `${active} attive su ${items.length}`,
++                           title: loadTimeData.getString(titleId),
++                           summary: loadTimeData.getStringF('forkUblockActiveOf', String(active), String(items.length)),
+                            lists: items,
+                          };
+                        });
+-    this.listsSummary_ = `${on} attive su ${total}`;
++    this.listsSummary_ = loadTimeData.getStringF('forkUblockActiveOf', String(on), String(total));
+     this.updateText_ = this.updating_ ?
+-        'Aggiornamento in corso…' :
+-        (newest ? `Ultimo aggiornamento ${ago(newest)}` : '');
++        loadTimeData.getString('forkUblockUpdating') :
++        (newest ? loadTimeData.getStringF('forkUblockLastUpdate', ago(newest)) : '');
+     if (this.updating_) {
+       setTimeout(() => this.loadLists_(), 2000);
+     }
+@@ -406,13 +410,13 @@ export class SettingsUblockPageElement extends PolymerElement implements
+     } else {
+       this.selection_.delete(key);
+     }
+-    this.listsStatus_ = 'Applico le liste…';
++    this.listsStatus_ = loadTimeData.getString('forkUblockListsApplying');
+     clearTimeout(this.applyTimer_);
+     this.applyTimer_ = setTimeout(() => this.applyLists_({}), 600);
+   }
+ 
+   private async applyLists_(extra: {toImport?: string, toRemove?: string[]}) {
+-    this.listsStatus_ = 'Applico le liste…';
++    this.listsStatus_ = loadTimeData.getString('forkUblockListsApplying');
+     await this.send_({
+       what: 'applyFilterListSelection',
+       toSelect: [...this.selection_],
+@@ -421,7 +425,7 @@ export class SettingsUblockPageElement extends PolymerElement implements
+     });
+     await this.send_({what: 'reloadAllFilters'});
+     await this.loadLists_();
+-    this.listsStatus_ = 'Liste applicate.';
++    this.listsStatus_ = loadTimeData.getString('forkUblockListsApplied');
+   }
+ 
+   private onRemoveListClick_(e: Event) {
+@@ -436,8 +440,7 @@ export class SettingsUblockPageElement extends PolymerElement implements
+   private onAddListClick_() {
+     const url = this.newList_.trim();
+     if (!/^https?:\/\/\S+$/.test(url)) {
+-      this.listsStatus_ = 'Scrivi l\'indirizzo completo della lista, con ' +
+-          'https://.';
++      this.listsStatus_ = loadTimeData.getString('forkUblockListBadUrl');
+       return;
+     }
+     this.newList_ = '';
+@@ -458,7 +461,7 @@ export class SettingsUblockPageElement extends PolymerElement implements
+ 
+   private async onUpdateNowClick_() {
+     this.updating_ = true;
+-    this.updateText_ = 'Aggiornamento in corso…';
++    this.updateText_ = loadTimeData.getString('forkUblockUpdating');
+     await this.send_({what: 'updateNow'});
+     setTimeout(() => this.loadLists_(), 2000);
+   }
+@@ -483,9 +486,10 @@ export class SettingsUblockPageElement extends PolymerElement implements
+     const count = lines(this.savedFilters_)
+                       .filter(line => !line.startsWith('!'))
+                       .length;
+-    const what = count === 1 ? '1 filtro' : `${count} filtri`;
++    const what = count === 1 ? loadTimeData.getString('forkUblockFilterOne') :
++                               loadTimeData.getStringF('forkUblockFilterMany', String(count));
+     this.filtersSummary_ =
+-        this.filtersEnabled_ ? what : `${what}, non in uso`;
++        this.filtersEnabled_ ? what : loadTimeData.getStringF('forkUblockNotInUse', what);
+   }
+ 
+   private onFiltersEdited_() {
+@@ -509,9 +513,9 @@ export class SettingsUblockPageElement extends PolymerElement implements
+   }
+ 
+   private async onFiltersSaveClick_() {
+-    this.filtersStatus_ = 'Salvo…';
++    this.filtersStatus_ = loadTimeData.getString('forkUblockSaving');
+     await this.writeFilters_(this.filtersText_);
+-    this.filtersStatus_ = 'Salvati.';
++    this.filtersStatus_ = loadTimeData.getString('forkUblockFiltersSaved');
+     this.loadLists_();
+   }
+ 
+@@ -548,7 +552,8 @@ export class SettingsUblockPageElement extends PolymerElement implements
+     // The observer doesn't run when the text was already the same.
+     this.onRulesEdited_();
+     const count = this.savedRules_.length;
+-    this.rulesSummary_ = count === 1 ? '1 regola' : `${count} regole`;
++    this.rulesSummary_ = count === 1 ? loadTimeData.getString('forkUblockRuleOne') :
++                                       loadTimeData.getStringF('forkUblockRuleMany', String(count));
+   }
+ 
+   private onRulesEdited_() {
+@@ -563,7 +568,7 @@ export class SettingsUblockPageElement extends PolymerElement implements
+     const after = new Set(lines(this.rulesText_));
+     const toAdd = [...after].filter(rule => !before.has(rule)).join('\n');
+     const toRemove = [...before].filter(rule => !after.has(rule)).join('\n');
+-    this.rulesStatus_ = 'Salvo…';
++    this.rulesStatus_ = loadTimeData.getString('forkUblockSaving');
+     // The rules in use now, then the ones saved for the next start.
+     await this.send_(
+         {what: 'modifyRuleset', permanent: false, toAdd, toRemove});
+@@ -576,8 +581,8 @@ export class SettingsUblockPageElement extends PolymerElement implements
+     const rejected = [...after].filter(
+         rule => !this.savedRules_.includes(rule.split(/\s+/).join(' ')));
+     this.rulesStatus_ = rejected.length ?
+-        `Salvate. Non valide, quindi tolte: ${rejected.join(', ')}` :
+-        'Salvate.';
++        loadTimeData.getStringF('forkUblockRulesRejected', rejected.join(', ')) :
++        loadTimeData.getString('forkUblockRulesSaved');
+   }
+ 
+   private onRulesRevertClick_() {
+@@ -599,8 +604,9 @@ export class SettingsUblockPageElement extends PolymerElement implements
+     this.sites_ = this.trusted_.filter(
+         line => !hidden.has(line) && !line.startsWith('#'));
+     const count = this.sites_.length;
+-    this.sitesSummary_ = count === 0 ? 'Nessuno' :
+-        (count === 1 ? '1 sito' : `${count} siti`);
++    this.sitesSummary_ = count === 0 ? loadTimeData.getString('forkUblockSitesNone') :
++        (count === 1 ? loadTimeData.getString('forkUblockSiteOne') :
++                       loadTimeData.getStringF('forkUblockSiteMany', String(count)));
+   }
+ 
+   private async saveSites_(sites: string[]) {
+@@ -640,6 +646,10 @@ export class SettingsUblockPageElement extends PolymerElement implements
+     }
+   }
+ 
++  private integratedText_(appName: string): string {
++    return loadTimeData.getStringF('forkUblockIntegrated', appName);
++  }
++
+   private onDashboardClick_() {
+     this.send_({
+       what: 'gotoURL',
+diff --git a/chrome/browser/resources/site_panel.html b/chrome/browser/resources/site_panel.html
+index 39aeb65cc7341274855c19ef8fa1444f33a5f21a..5c63e7c767fad2955613d322cc1196cbed45394d 100644
+--- a/chrome/browser/resources/site_panel.html
++++ b/chrome/browser/resources/site_panel.html
+@@ -1,8 +1,8 @@
+ <!doctype html>
+-<html lang="it">
++<html dir="$i18n{textdirection}" lang="$i18n{language}">
+ <head>
+ <meta charset="utf-8">
+-<title>Informazioni sul sito</title>
++<title>$i18n{forkSitePanelLabel}</title>
+ <style>
+ :root {
+   --text: #1d1d1f; --sub: #5a5a60; --field: rgba(0,0,0,0.07); --sep: rgba(0,0,0,0.12);
+@@ -71,16 +71,16 @@ figcaption { margin-top: 4px; font-size: 11px; color: var(--sub); }
+ #redirect-go { flex-shrink: 0; min-height: 24px; padding: 0 10px; border: 0; border-radius: 12px; background: var(--accent-bg); color: var(--accent); font-size: 12px; font-weight: 600; }
+ [hidden] { display: none !important; }
+ </style>
+-<script src="site_panel.js"></script>
++<script type="module" src="site_panel.js"></script>
+ </head>
+ <body>
+-<section id="panel" role="dialog" aria-label="Informazioni sul sito">
++<section id="panel" role="dialog" aria-label="$i18n{forkSitePanelLabel}">
+   <header>
+     <div>
+       <div id="site"></div>
+       <div id="secure"><svg id="lock" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg><span id="secure-text"></span></div>
+     </div>
+-    <button id="close" aria-label="Chiudi"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
++    <button id="close" aria-label="$i18n{forkClose}"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
+   </header>
+   <button id="route"><span aria-hidden="true"></span><b id="route-text"></b></button>
+   <div class="group" id="redirect" hidden>
+@@ -94,28 +94,28 @@ figcaption { margin-top: 4px; font-size: 11px; color: var(--sub); }
+     <button id="fp-all"></button>
+   </div>
+   <div>
+-    <h3>Come risponde il browser</h3>
++    <h3>$i18n{forkSitePanelHowAnswers}</h3>
+     <div class="previews">
+       <figure>
+-        <div class="preview" id="canvas-preview"><img alt=""><span>Nessuna lettura</span></div>
+-        <figcaption>Canvas · come l'ha ricevuto il sito</figcaption>
++        <div class="preview" id="canvas-preview"><img alt=""><span>$i18n{forkSitePanelNoReading}</span></div>
++        <figcaption>$i18n{forkSitePanelCanvasCaption}</figcaption>
+       </figure>
+       <figure id="webgl-off">
+-        <div class="preview blocked"><span>WebGL bloccato</span></div>
+-        <figcaption>WebGL · nessuna immagine</figcaption>
++        <div class="preview blocked"><span>$i18n{forkSitePanelWebglBlocked}</span></div>
++        <figcaption>$i18n{forkSitePanelWebglNoImage}</figcaption>
+       </figure>
+       <figure id="webgl-on" hidden>
+-        <div class="preview" id="webgl-preview"><img alt=""><span>Nessuna lettura</span></div>
+-        <figcaption>WebGL · come l'ha ricevuto il sito</figcaption>
++        <div class="preview" id="webgl-preview"><img alt=""><span>$i18n{forkSitePanelNoReading}</span></div>
++        <figcaption>$i18n{forkSitePanelWebglCaption}</figcaption>
+       </figure>
+     </div>
+     <button id="webgl"></button>
+   </div>
+   <div class="group">
+-    <button class="row" id="remember"><span>Ricorda questo sito</span><span class="value" id="remember-value"></span></button>
+-    <button class="row" id="cookies"><span>Cookie e dati dei siti</span><span class="value" id="cookies-value"></span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"></path></svg></button>
+-    <button class="row" id="blocking"><span>Tracker e pubblicità bloccati</span><span class="value" id="blocking-value"></span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"></path></svg></button>
+-    <button class="row" id="permissions"><span>Autorizzazioni</span><span class="value" id="permissions-value"></span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"></path></svg></button>
++    <button class="row" id="remember"><span>$i18n{forkSitePanelRemember}</span><span class="value" id="remember-value"></span></button>
++    <button class="row" id="cookies"><span>$i18n{forkCookiesAndSiteData}</span><span class="value" id="cookies-value"></span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"></path></svg></button>
++    <button class="row" id="blocking"><span>$i18n{forkSitePanelBlocked}</span><span class="value" id="blocking-value"></span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"></path></svg></button>
++    <button class="row" id="permissions"><span>$i18n{forkSitePanelPermissions}</span><span class="value" id="permissions-value"></span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"></path></svg></button>
+   </div>
+ </section>
+ </body>
+diff --git a/chrome/browser/resources/site_panel.js b/chrome/browser/resources/site_panel.js
+index 9b464f68fce7673ca9c3e01c53e1ba41d86da51a..fc9cc3deec934422aae63d82c32a4df24b5b664f 100644
+--- a/chrome/browser/resources/site_panel.js
++++ b/chrome/browser/resources/site_panel.js
+@@ -1,3 +1,7 @@
++import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
++
++import './strings.m.js';
++
+ window.SitePanel = (function() {
+   'use strict';
+ 
+@@ -8,16 +12,16 @@ window.SitePanel = (function() {
+   const $ = (id) => document.getElementById(id);
+ 
+   function routeText(s) {
+-    const place = s.city ? ' (' + s.city + ')' : '';
+     switch (s.route) {
+       case 'vpn':
+-        return 'Esci dalla VPN personale' + place;
++        return s.city ? loadTimeData.getStringF('forkSitePanelRouteVpnCity', s.city) :
++                        loadTimeData.getString('forkSitePanelRouteVpn');
+       case 'down':
+-        return 'Il server VPN non risponde: nessuna pagina esce diretta';
++        return loadTimeData.getString('forkSitePanelRouteDown');
+       case 'direct':
+-        return 'Connessione diretta: i siti vedono l\'IP di casa';
++        return loadTimeData.getString('forkSitePanelRouteDirect');
+       default:
+-        return 'VPN spenta: esci dalla connessione normale';
++        return loadTimeData.getString('forkSitePanelRouteOff');
+     }
+   }
+ 
+@@ -33,7 +37,7 @@ window.SitePanel = (function() {
+     const chip = document.createElement('span');
+     const counted = r.kind !== 'none';
+     chip.className = 'chip ' + (used || !counted ? r.kind : 'none');
+-    chip.textContent = used || !counted ? r.status : 'Non usata';
++    chip.textContent = used || !counted ? r.status : loadTimeData.getString('forkSitePanelNotUsed');
+     div.append(name, count, chip);
+     return div;
+   }
+@@ -42,15 +46,16 @@ window.SitePanel = (function() {
+   function showFingerprinting(s) {
+     const used = s.fp.filter((r) => r.count > 0);
+     const rows = showAll ? used.concat(s.fp.filter((r) => r.count === 0)) : used;
+-    $('fp-total').textContent = s.fpBlocked === 1 ? '1 tentativo bloccato' :
+-        s.fpBlocked ? s.fpBlocked + ' tentativi bloccati' : 'Nessun tentativo';
+-    $('fp-hint').textContent = used.length ?
+-        'Il sito ha cercato di leggere queste API. Ecco cosa gli ha risposto il browser.' :
+-        'Finora il sito non ha letto nessuna di queste API.';
++    $('fp-total').textContent = s.fpBlocked === 1 ? loadTimeData.getString('forkSitePanelFpOne') :
++        s.fpBlocked ? loadTimeData.getStringF('forkSitePanelFpMany', String(s.fpBlocked)) :
++                      loadTimeData.getString('forkSitePanelFpNone');
++    $('fp-hint').textContent = used.length ? loadTimeData.getString('forkSitePanelFpHintUsed') :
++                                             loadTimeData.getString('forkSitePanelFpHintNone');
+     $('fp-rows').replaceChildren(...rows.map(row));
+     $('fp-rows').hidden = !rows.length;
+-    $('fp-all').textContent = showAll ? 'Mostra solo quelle usate' :
+-                                        'Mostra tutte e ' + s.fp.length + ' le categorie';
++    $('fp-all').textContent = showAll ?
++        loadTimeData.getString('forkSitePanelShowUsed') :
++        loadTimeData.getStringF('forkSitePanelShowAll', String(s.fp.length));
+   }
+ 
+   // A site that tracks: the respectful version, or the original the user asked for.
+@@ -61,14 +66,17 @@ window.SitePanel = (function() {
+     }
+     const respectful = r.mode === 'respectful';
+     $('redirect-text').textContent = respectful ?
+-        'Aperto su ' + r.respectful + ' al posto di ' + r.service :
+-        'Pagina originale di ' + r.service;
++        loadTimeData.getStringF('forkSitePanelOpenedOn', r.respectful, r.service) :
++        loadTimeData.getStringF('forkSitePanelOriginalOf', r.service);
+     $('redirect-go').hidden = !respectful && !r.canGo;
+-    $('redirect-go').textContent =
+-        respectful ? 'Apri l\'originale' : 'Apri su ' + r.respectful;
+-    $('redirect-switch-text').textContent = 'Reindirizza ' + r.service;
+-    $('redirect-switch-value').textContent =
+-        r.needsAddress ? 'Da impostare' : (r.on ? 'Sì' : 'No');
++    $('redirect-go').textContent = respectful ?
++        loadTimeData.getString('forkSitePanelOpenOriginal') :
++        loadTimeData.getStringF('forkSitePanelOpenOn', r.respectful);
++    $('redirect-switch-text').textContent =
++        loadTimeData.getStringF('forkSitePanelRedirectSwitch', r.service);
++    $('redirect-switch-value').textContent = r.needsAddress ?
++        loadTimeData.getString('forkSitePanelToSetUp') :
++        (r.on ? loadTimeData.getString('forkYes') : loadTimeData.getString('forkNo'));
+   }
+ 
+   function loaded(s) {
+@@ -76,7 +84,7 @@ window.SitePanel = (function() {
+     $('site').textContent = s.site;
+     $('lock').toggleAttribute('hidden', !s.secure);
+     $('secure-text').textContent =
+-        s.secure ? 'Connessione sicura' : 'Connessione non sicura';
++        s.secure ? loadTimeData.getString('forkSitePanelSecure') : loadTimeData.getString('forkSitePanelNotSecure');
+     $('route').className = s.route;
+     $('route-text').textContent = routeText(s);
+     showFingerprinting(s);
+@@ -94,13 +102,15 @@ window.SitePanel = (function() {
+     $('webgl-on').hidden = !s.webgl;
+     $('webgl-off').hidden = s.webgl;
+     $('webgl').classList.toggle('on', s.webgl);
+-    $('webgl').textContent = s.webgl ? 'Blocca di nuovo WebGL su questo sito' :
+-                                       'Consenti WebGL su questo sito (randomizzato)';
+-    $('remember-value').textContent = s.remembered ? 'Sì' : 'No';
+-    $('cookies-value').textContent = s.cookies ? s.cookies + ' in uso' : 'Nessuno';
++    $('webgl').textContent = s.webgl ? loadTimeData.getString('forkSitePanelBlockWebglAgain') :
++                                       loadTimeData.getString('forkSitePanelAllowWebgl');
++    $('remember-value').textContent = s.remembered ? loadTimeData.getString('forkYes') : loadTimeData.getString('forkNo');
++    $('cookies-value').textContent = s.cookies ?
++        loadTimeData.getStringF('forkSitePanelCookiesInUse', String(s.cookies)) :
++        loadTimeData.getString('forkSitePanelNoCookies');
+     $('blocking-value').textContent = s.blocked || '0';
+     $('permissions-value').textContent =
+-        s.permissions ? String(s.permissions) : 'Nessuna';
++        s.permissions ? String(s.permissions) : loadTimeData.getString('forkSitePanelNoPermissions');
+   }
+ 
+   document.addEventListener('DOMContentLoaded', () => {
+diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
+index eaed07e78590d739b445c9674707fc59fe6bd782..9bf1ee958709847ca5133ded891a1c2473e314ab 100644
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -570,6 +570,7 @@ static_library("ui") {
+   ]
+ 
+   deps = [
++    "//chrome/app:fork_strings",
+     ":browser_element_identifiers",
+     ":browser_otr_state",
+     ":browser_ui_prefs",
+diff --git a/chrome/browser/ui/views/location_bar/BUILD.gn b/chrome/browser/ui/views/location_bar/BUILD.gn
+index 533f8aae399cdc8dd3b20459b61fc6d0be7b7e48..0b667339f3c2204de404d0aba5abe54510251316 100644
+--- a/chrome/browser/ui/views/location_bar/BUILD.gn
++++ b/chrome/browser/ui/views/location_bar/BUILD.gn
+@@ -71,6 +71,7 @@ source_set("impl") {
+   sources = []
+   public = []
+   deps = [
++    "//chrome/app:fork_strings",
+     ":icon_label_bubble",
+     ":location_bar",
+     "//chrome/browser:defaults",
+diff --git a/chrome/browser/ui/views/location_bar/location_icon_view.cc b/chrome/browser/ui/views/location_bar/location_icon_view.cc
+index 2f9ae8227f518e7cc574f393616dc5ca211c9917..2c43da1eff43cae2d39ce23d2bf9949c829baa37 100644
+--- a/chrome/browser/ui/views/location_bar/location_icon_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_icon_view.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/views/location_bar/location_icon_view.h"
+ 
++#include "chrome/grit/fork_strings.h"
++
+ #include <algorithm>
+ 
+ #include "base/functional/bind.h"
+@@ -140,10 +142,9 @@ class ShieldImageSource : public gfx::CanvasImageSource {
+ 
+ // What the boards say for the shield with its number.
+ std::u16string ShieldName(int blocked) {
+-  return base::StrCat({u"Informazioni sul sito: ",
+-                       base::NumberToString16(blocked),
+-                       blocked == 1 ? u" tentativo di fingerprinting bloccato"
+-                                    : u" tentativi di fingerprinting bloccati"});
++  return blocked == 1 ? l10n_util::GetStringUTF16(IDS_FORK_SITE_INFO_FP_ONE)
++                      : l10n_util::GetStringFUTF16(IDS_FORK_SITE_INFO_FP_MANY,
++                                                  base::NumberToString16(blocked));
+ }
+ 
+ }  // namespace
+diff --git a/chrome/browser/ui/views/location_bar/ublock_button.cc b/chrome/browser/ui/views/location_bar/ublock_button.cc
+index 72853989b46bf18ded91f041805ecb543b898ad6..c33e9dbaa17855aa84eebaf8837962c8d0d9c8c0 100644
+--- a/chrome/browser/ui/views/location_bar/ublock_button.cc
++++ b/chrome/browser/ui/views/location_bar/ublock_button.cc
+@@ -33,6 +33,8 @@
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/bubble/bubble_anchor.h"
+ #include "ui/views/bubble/bubble_border.h"
++#include "chrome/grit/fork_strings.h"
++#include "ui/base/l10n/l10n_util.h"
+ 
+ namespace {
+ 
+@@ -56,7 +58,7 @@ UBlockButton::UBlockButton(LocationBarView* location_bar,
+       profile_(profile) {
+   SetVisible(false);
+   GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
+-  GetViewAccessibility().SetName(u"Blocco contenuti");
++  GetViewAccessibility().SetName(l10n_util::GetStringUTF16(IDS_FORK_CONTENT_BLOCKING));
+   action_observation_.Observe(
+       extensions::ExtensionActionDispatcher::Get(profile_));
+ }
+@@ -90,9 +92,9 @@ void UBlockButton::Update(content::WebContents* contents, bool show) {
+   // The badge can also be "!": the page started before uBlock Origin was ready.
+   const bool counted = !badge_.empty() && base::IsAsciiDigit(badge_[0]);
+   const std::u16string name =
+-      on_ ? (counted ? u"Blocco contenuti: " + badge_ + u" elementi bloccati"
+-                     : u"Blocco contenuti")
+-          : u"Blocco contenuti spento su questo sito";
++      on_ ? (counted ? l10n_util::GetStringFUTF16(IDS_FORK_UBLOCK_BUTTON_COUNT, badge_)
++                     : l10n_util::GetStringUTF16(IDS_FORK_CONTENT_BLOCKING))
++          : l10n_util::GetStringUTF16(IDS_FORK_UBLOCK_BUTTON_OFF);
+   GetViewAccessibility().SetName(name);
+   SetTooltipText(name);
+   SchedulePaint();
+diff --git a/chrome/browser/ui/views/profiles/BUILD.gn b/chrome/browser/ui/views/profiles/BUILD.gn
+index 0abbae56995c4d535bcd716a37185b267bff4a56..f0099c4f3a8ac7a93bf38fabf069adb6bf94d215 100644
+--- a/chrome/browser/ui/views/profiles/BUILD.gn
++++ b/chrome/browser/ui/views/profiles/BUILD.gn
+@@ -94,6 +94,7 @@ if (toolkit_views) {
+     ]
+ 
+     deps = [
++      "//chrome/app:fork_strings",
+       ":avatar_toolbar_button",
+       "//chrome/app/vector_icons",
+       "//chrome/browser:browser_process",
+diff --git a/chrome/browser/ui/views/profiles/avatar_toolbar_button.cc b/chrome/browser/ui/views/profiles/avatar_toolbar_button.cc
+index cd3bb92c91481c61c05510a23bda5df5e2b930c9..b6634c4ec62a992ad33dd7fde60d632324c62d6a 100644
+--- a/chrome/browser/ui/views/profiles/avatar_toolbar_button.cc
++++ b/chrome/browser/ui/views/profiles/avatar_toolbar_button.cc
+@@ -58,6 +58,8 @@
+ #include "ui/views/controls/image_view.h"
+ #include "ui/views/view_class_properties.h"
+ #include "ui/views/view_utils.h"
++#include "chrome/grit/fork_strings.h"
++#include "ui/base/l10n/l10n_util.h"
+ 
+ namespace {
+ 
+@@ -443,8 +445,8 @@ void AvatarToolbarButton::UpdateText() {
+   UpdateAccessibilityLabel();
+   if (profilo_panel_) {
+     const std::u16string name = claude_signed_in_
+-                                    ? u"Profilo: account Claude collegato"
+-                                    : u"Profilo: accedi con Claude";
++                                    ? l10n_util::GetStringUTF16(IDS_FORK_AVATAR_CLAUDE_LINKED)
++                                    : l10n_util::GetStringUTF16(IDS_FORK_AVATAR_SIGN_IN);
+     SetTooltipText(name);
+     GetViewAccessibility().SetName(name);
+   }
+diff --git a/chrome/browser/ui/views/side_panel/BUILD.gn b/chrome/browser/ui/views/side_panel/BUILD.gn
+index 704cbf3ed70ff9baf8afc8a6149ab3744fd994bd..02e80f9f79a97a26d10cff4686ce13270e8fcc94 100644
+--- a/chrome/browser/ui/views/side_panel/BUILD.gn
++++ b/chrome/browser/ui/views/side_panel/BUILD.gn
+@@ -95,6 +95,7 @@ source_set("side_panel") {
+     "//url",
+   ]
+   deps = [
++    "//chrome/app:fork_strings",
+     "//base:i18n",
+     "//chrome/app:generated_resources",
+     "//chrome/app:generated_resources_grit",
+diff --git a/chrome/browser/ui/views/side_panel/claude_side_panel.cc b/chrome/browser/ui/views/side_panel/claude_side_panel.cc
+index 31a7148a4b825dd0e37967701fe007ab769bd094..98612de9c8fe17dca5ffa38f1cc12720bdcc97f4 100644
+--- a/chrome/browser/ui/views/side_panel/claude_side_panel.cc
++++ b/chrome/browser/ui/views/side_panel/claude_side_panel.cc
+@@ -53,6 +53,8 @@
+ #include "ui/views/controls/webview/webview.h"
+ #include "ui/views/layout/box_layout_view.h"
+ #include "ui/views/view_class_properties.h"
++#include "chrome/grit/fork_strings.h"
++#include "ui/base/l10n/l10n_util.h"
+ 
+ namespace browser_fork {
+ 
+@@ -225,7 +227,7 @@ class CloseButton : public views::Button {
+  public:
+   explicit CloseButton(PressedCallback callback)
+       : views::Button(std::move(callback)) {
+-    GetViewAccessibility().SetName(u"Chiudi Claude");
++    GetViewAccessibility().SetName(l10n_util::GetStringUTF16(IDS_FORK_CLOSE_CLAUDE));
+   }
+ 
+   gfx::Size CalculatePreferredSize(
+@@ -284,11 +286,8 @@ class ClaudePanelHeader : public views::BoxLayoutView {
+     // What each view is, in the words of the boards. Only what exists: the
+     // functions on the API come with their buttons.
+     description_ = AddChildView(std::make_unique<views::Label>(
+-        page_selected
+-            ? u"Chat e \"Fallo tu\": Claude in Chrome con il tuo "
+-              u"abbonamento claude.ai."
+-            : u"claude.ai con il tuo account: chat, progetti e artifact come "
+-              u"nell'app."));
++        page_selected ? l10n_util::GetStringUTF16(IDS_FORK_CLAUDE_PAGE_DESC)
++                      : l10n_util::GetStringUTF16(IDS_FORK_CLAUDE_CHATS_DESC)));
+     description_->SetMultiLine(true);
+     description_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+     description_->SetFontList(gfx::FontList().DeriveWithSizeDelta(
+@@ -298,12 +297,12 @@ class ClaudePanelHeader : public views::BoxLayoutView {
+     segments_->SetInsideBorderInsets(gfx::Insets(3));
+     segments_->SetFlexForView(
+         segments_->AddChildView(std::make_unique<SegmentButton>(
+-            u"Questa pagina", page_selected,
++            l10n_util::GetStringUTF16(IDS_FORK_THIS_PAGE), page_selected,
+             base::BindRepeating(base::IgnoreResult(&ShowPageView), browser_))),
+         1);
+     segments_->SetFlexForView(
+         segments_->AddChildView(std::make_unique<SegmentButton>(
+-            u"Le tue chat", !page_selected,
++            l10n_util::GetStringUTF16(IDS_FORK_YOUR_CHATS), !page_selected,
+             base::BindRepeating(&ShowChatsView, browser_))),
+         1);
+   }
+diff --git a/chrome/browser/ui/views/toolbar/BUILD.gn b/chrome/browser/ui/views/toolbar/BUILD.gn
+index 27101da1e4fc353e5f9e4007edceef91c8135fba..7bd2574505468e2a313530bc2e8b335a7e8790fd 100644
+--- a/chrome/browser/ui/views/toolbar/BUILD.gn
++++ b/chrome/browser/ui/views/toolbar/BUILD.gn
+@@ -176,6 +176,7 @@ source_set("impl") {
+   }
+ 
+   deps = [
++    "//chrome/app:fork_strings",
+     ":toolbar",
+     "//base:i18n",
+     "//build:branding_buildflags",
+diff --git a/chrome/browser/ui/views/toolbar/compact_tabs_view.cc b/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
+index 7831bd85dfd9de2fb4d7d695d7d27e7432a047b3..fafebc1e0324b5aef022e7666cf95cff759975be 100644
+--- a/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
++++ b/chrome/browser/ui/views/toolbar/compact_tabs_view.cc
+@@ -52,6 +52,7 @@
+ #include "ui/views/controls/button/label_button.h"
+ #include "ui/views/layout/flex_layout.h"
+ #include "ui/views/view_class_properties.h"
++#include "chrome/grit/fork_strings.h"
+ 
+ namespace browser_fork {
+ 
+@@ -456,11 +457,13 @@ class CompactGroupHeader : public views::LabelButton,
+       text = text.empty() ? count : text + u" · " + count;
+     }
+     SetText(text);
++    const std::u16string group_name = visuals->title().empty()
++                                          ? l10n_util::GetStringUTF16(IDS_FORK_TAB_GROUP)
++                                          : visuals->title();
+     const std::u16string name =
+-        (visuals->title().empty() ? u"Gruppo di schede" : visuals->title()) +
+-        (visuals->is_collapsed() ? u", chiuso: clic per aprirlo"
+-                                 : u", aperto: clic per chiuderlo") +
+-        u"; tasto destro per modificarlo";
++        l10n_util::GetStringFUTF16(visuals->is_collapsed() ? IDS_FORK_TAB_GROUP_CLOSED_TIP
++                                                  : IDS_FORK_TAB_GROUP_OPEN_TIP,
++                                  group_name);
+     SetTooltipText(name);
+     GetViewAccessibility().SetName(name);
+     UpdateColors();
+@@ -584,8 +587,8 @@ class SidebarButton : public ToolbarButton {
+               }
+             },
+             browser)) {
+-    GetViewAccessibility().SetName(u"Barra laterale");
+-    SetTooltipText(u"Barra laterale");
++    GetViewAccessibility().SetName(l10n_util::GetStringUTF16(IDS_FORK_SIDEBAR));
++    SetTooltipText(l10n_util::GetStringUTF16(IDS_FORK_SIDEBAR));
+     SetProperty(browser_fork::kSidebarButtonKey, true);
+     SetProperty(views::kMarginsKey, gfx::Insets::VH(0, 6));
+   }
+@@ -635,8 +638,9 @@ class CompactOverflowChip : public views::LabelButton,
+     count_ = count;
+     SetText(u"+" + base::NumberToString16(count));
+     const std::u16string name =
+-        count == 1 ? u"Un'altra scheda"
+-                   : u"Altre " + base::NumberToString16(count) + u" schede";
++        count == 1 ? l10n_util::GetStringUTF16(IDS_FORK_MORE_TABS_ONE)
++                   : l10n_util::GetStringFUTF16(IDS_FORK_MORE_TABS_MANY,
++                                               base::NumberToString16(count));
+     SetTooltipText(name);
+     GetViewAccessibility().SetName(name);
+   }
+@@ -695,7 +699,8 @@ class CompactOverflowChip : public views::LabelButton,
+       const gfx::Image favicon = favicon::TabFaviconFromWebContents(contents);
+       menu_model_->AddItemWithIcon(
+           index,
+-          contents->GetTitle().empty() ? u"Scheda" : contents->GetTitle(),
++          contents->GetTitle().empty() ? l10n_util::GetStringUTF16(IDS_FORK_UNTITLED_TAB)
++                                       : contents->GetTitle(),
+           ui::ImageModel::FromImage(
+               favicon.IsEmpty() ? favicon::GetDefaultFavicon() : favicon));
+     }
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index a704af8d25204f3654bb69bd4b43e6a7388c1c57..0997359c078ee04b57f8c56ef5f3eb3524f149a4 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+ 
++#include "chrome/grit/fork_strings.h"
++
+ #include <algorithm>
+ #include <memory>
+ #include <utility>
+@@ -549,7 +551,7 @@ void ToolbarView::Init() {
+     auto new_tab = std::make_unique<ToolbarButton>(
+         base::BindRepeating(callback, browser_, IDC_NEW_TAB));
+     new_tab->SetVectorIcons(kAddIcon, kAddIcon);
+-    new_tab->GetViewAccessibility().SetName(u"Nuova scheda");
++    new_tab->GetViewAccessibility().SetName(l10n_util::GetStringUTF16(IDS_FORK_NEW_TAB));
+     new_tab->SetProperty(views::kMarginsKey, gfx::Insets());
+     AddChildView(std::move(new_tab));
+     AddChildView(std::make_unique<CompactTabsSpacer>());
+diff --git a/chrome/browser/ui/views/toolbar/vpn_status_button.cc b/chrome/browser/ui/views/toolbar/vpn_status_button.cc
+index 24cee9c7e9373fb73f4105a8916e28fcacbd8649..fec580bd22fe7e0ee718af287c282ad66cbde2ff 100644
+--- a/chrome/browser/ui/views/toolbar/vpn_status_button.cc
++++ b/chrome/browser/ui/views/toolbar/vpn_status_button.cc
+@@ -19,6 +19,8 @@
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/controls/label.h"
+ #include "url/gurl.h"
++#include "chrome/grit/fork_strings.h"
++#include "ui/base/l10n/l10n_util.h"
+ 
+ namespace {
+ 
+@@ -90,8 +92,8 @@ void VpnStatusButton::OnRouteChanged() {
+   std::u16string label;
+   switch (route) {
+     case Route::kNormal:
+-      label = u"● VPN spenta";
+-      SetTooltipText(u"VPN spenta: esci dalla connessione normale.");
++      label = u"● " + l10n_util::GetStringUTF16(IDS_FORK_VPN_OFF);
++      SetTooltipText(l10n_util::GetStringUTF16(IDS_FORK_VPN_OFF_TIP));
+       break;
+     case Route::kVpn: {
+       label = u"● VPN";
+@@ -100,17 +102,16 @@ void VpnStatusButton::OnRouteChanged() {
+       if (!city.empty()) {
+         label += u" · " + base::UTF8ToUTF16(city);
+       }
+-      SetTooltipText(u"Esci dalla VPN del tuo server.");
++      SetTooltipText(l10n_util::GetStringUTF16(IDS_FORK_VPN_ON_TIP));
+       break;
+     }
+     case Route::kVpnDown:
+-      label = u"● VPN non raggiungibile";
+-      SetTooltipText(
+-          u"Il server VPN non risponde: nessuna pagina esce diretta.");
++      label = u"● " + l10n_util::GetStringUTF16(IDS_FORK_VPN_DOWN);
++      SetTooltipText(l10n_util::GetStringUTF16(IDS_FORK_VPN_DOWN_TIP));
+       break;
+     case Route::kDirectReserve:
+-      label = u"● Diretto · IP visibile";
+-      SetTooltipText(u"Connessione diretta: i siti vedono l'IP di casa.");
++      label = u"● " + l10n_util::GetStringUTF16(IDS_FORK_VPN_DIRECT);
++      SetTooltipText(l10n_util::GetStringUTF16(IDS_FORK_VPN_DIRECT_TIP));
+       break;
+   }
+   full_label_ = label;
+diff --git a/chrome/browser/ui/webui/BUILD.gn b/chrome/browser/ui/webui/BUILD.gn
+index 904caf0b28b078db04915b7e6b8569f7ed14f228..17d7db0e0f75b78d55865e502b59ea659ce646e3 100644
+--- a/chrome/browser/ui/webui/BUILD.gn
++++ b/chrome/browser/ui/webui/BUILD.gn
+@@ -54,6 +54,7 @@ source_set("configs") {
+   }
+ 
+   deps = [
++    "//chrome/app:fork_strings",
+     ":gcm_internals_ui",
+     ":memory_internals_ui",
+     ":net_export_ui",
+diff --git a/chrome/browser/ui/webui/profilo_panel_ui.cc b/chrome/browser/ui/webui/profilo_panel_ui.cc
+index 6a16b600b6e192468c2ff2a26b690addc8205d53..45888fac8d3280945a5fae51da9ba7d83b9c7c93 100644
+--- a/chrome/browser/ui/webui/profilo_panel_ui.cc
++++ b/chrome/browser/ui/webui/profilo_panel_ui.cc
+@@ -22,6 +22,7 @@
+ #include "net/cookies/canonical_cookie.h"
+ #include "services/network/public/mojom/cookie_manager.mojom.h"
+ #include "url/gurl.h"
++#include "chrome/browser/fork/fork_webui_strings.h"
+ 
+ namespace {
+ 
+@@ -124,6 +125,8 @@ ProfiloPanelUI::ProfiloPanelUI(content::WebUI* web_ui)
+   web_ui->AddMessageHandler(std::make_unique<ProfiloPanelHandler>());
+   content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+       Profile::FromWebUI(web_ui), chrome::kChromeUIProfiloPanelHost);
++  source->AddLocalizedStrings(browser_fork::kForkProfiloStrings);
++  source->UseStringsJs();
+   source->AddResourcePath("profilo_panel.js", IDR_PROFILO_PANEL_JS);
+   source->SetDefaultResource(IDR_PROFILO_PANEL_HTML);
+ }
+diff --git a/chrome/browser/ui/webui/proxy_config_ui.cc b/chrome/browser/ui/webui/proxy_config_ui.cc
+index 4060721b8fd7f851ea32cf5516c00bb5ab329939..850879020b9b3a9c554fff13da2fb717af6a695f 100644
+--- a/chrome/browser/ui/webui/proxy_config_ui.cc
++++ b/chrome/browser/ui/webui/proxy_config_ui.cc
+@@ -60,6 +60,9 @@
+ 
+ #include "url/gurl.h"
+ #include "url/url_constants.h"
++#include "chrome/browser/fork/fork_webui_strings.h"
++#include "chrome/grit/fork_strings.h"
++#include "ui/base/l10n/l10n_util.h"
+ 
+ using content::BrowserThread;
+ using content::WebContents;
+@@ -459,7 +462,7 @@ void ProxyConfigMessageHandler::OnSetPersonalSearch(
+   }
+   if (url.is_valid() && url.SchemeIsHTTPOrHTTPS()) {
+     TemplateURLData data;
+-    data.SetShortName(u"SearXNG personale");
++    data.SetShortName(l10n_util::GetStringUTF16(IDS_FORK_PERSONAL_SEARCH_NAME));
+     data.SetKeyword(browser_fork::kPersonalSearchKeyword);
+     data.SetURL(base_url + kPersonalSearchPath);
+     data.suggestions_url = base_url + "/autocompleter?q={searchTerms}";
+@@ -627,6 +630,7 @@ ProxyConfigUI::ProxyConfigUI(content::WebUI* web_ui) : WebUIController(web_ui) {
+       content::WebUIDataSource::CreateAndAdd(web_ui->GetWebContents()->GetBrowserContext(),
+           chrome::kChromeUIProxyConfigHost);
+ 
++  source->AddLocalizedStrings(browser_fork::kForkProxyStrings);
+   source->UseStringsJs();
+   source->AddResourcePath("proxy_config.js", IDR_PROXY_CONFIG_JS);
+   source->SetDefaultResource(IDR_PROXY_CONFIG_HTML);
+diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
+index 36b791148fff3a13f61f9d23bf41fdfa722683ae..d96f1e018ca3f854adf24a9eaa6d535581b0461b 100644
+--- a/chrome/browser/ui/webui/settings/BUILD.gn
++++ b/chrome/browser/ui/webui/settings/BUILD.gn
+@@ -179,6 +179,7 @@ source_set("impl") {
+   ]
+ 
+   deps = [
++    "//chrome/app:fork_strings",
+     ":settings",
+     "//chrome/app:command_ids",
+     "//chrome/app:generated_resources",
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index 94e41b2af37895503055b3bcd285e3a33cc9cf6d..7284b3e9d6256fcd31f0f04e8ee06d3429cf865d 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -21,6 +21,7 @@
+ #include "chrome/browser/browser_features.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/commerce/shopping_service_factory.h"
++#include "chrome/browser/fork/fork_webui_strings.h"
+ #include "chrome/browser/fork/ublock_extension.h"
+ // #include "chrome/browser/compose/compose_enabling.h"
+ #include "chrome/browser/contextual_cueing/features.h"
+@@ -241,6 +242,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->OverrideContentSecurityPolicy(
+       network::mojom::CSPDirectiveName::WorkerSrc,
+       "worker-src blob: chrome://resources 'self';");
++  // The strings of the fork: "Blocco contenuti" and the tabs in the toolbar.
++  html_source->AddLocalizedStrings(browser_fork::kForkSettingsStrings);
+   // The section "Blocco contenuti" talks to uBlock Origin through a page of
+   // uBlock, in a hidden frame.
+   html_source->OverrideContentSecurityPolicy(
+diff --git a/chrome/browser/ui/webui/site_panel_ui.cc b/chrome/browser/ui/webui/site_panel_ui.cc
+index d240b653b7ec590d0524921675854c067e8e48a9..b1c9eedec39079b416ddd4798508c21099ab69f2 100644
+--- a/chrome/browser/ui/webui/site_panel_ui.cc
++++ b/chrome/browser/ui/webui/site_panel_ui.cc
+@@ -42,6 +42,9 @@
+ #include "extensions/browser/extension_action_manager.h"
+ #include "extensions/browser/extension_registry.h"
+ #include "url/gurl.h"
++#include "chrome/browser/fork/fork_webui_strings.h"
++#include "chrome/grit/fork_strings.h"
++#include "ui/base/l10n/l10n_util.h"
+ 
+ namespace {
+ 
+@@ -51,21 +54,21 @@ constexpr ContentSettingsType kPermissions[] = {
+     ContentSettingsType::MEDIASTREAM_CAMERA};
+ 
+ // The chip of a category in the panel: its words and its colors.
+-std::pair<const char*, const char*> AnswerChip(
++std::pair<int, const char*> AnswerChip(
+     browser_fork::FingerprintingAnswer answer) {
+   switch (answer) {
+     case browser_fork::FingerprintingAnswer::kRandomized:
+-      return {"Randomizzato", "rand"};
++      return {IDS_FORK_FP_RANDOMIZED, "rand"};
+     case browser_fork::FingerprintingAnswer::kBlocked:
+-      return {"Bloccato", "block"};
++      return {IDS_FORK_FP_BLOCKED, "block"};
+     case browser_fork::FingerprintingAnswer::kUniform:
+-      return {"Uniformato", "uni"};
++      return {IDS_FORK_FP_UNIFORM, "uni"};
+     case browser_fork::FingerprintingAnswer::kLimited:
+-      return {"Limitato", "uni"};
++      return {IDS_FORK_FP_LIMITED, "uni"};
+     case browser_fork::FingerprintingAnswer::kAllowed:
+-      return {"Consentito", "allowed"};
++      return {IDS_FORK_FP_ALLOWED, "allowed"};
+     case browser_fork::FingerprintingAnswer::kNotCounted:
+-      return {"Non contata", "none"};
++      return {IDS_FORK_FP_NOT_COUNTED, "none"};
+   }
+ }
+ 
+@@ -197,9 +200,9 @@ class SitePanelHandler : public content::WebUIMessageHandler {
+          browser_fork::FingerprintingCounter::GetRows(contents)) {
+       const auto [status, kind] = AnswerChip(row.answer);
+       base::DictValue entry;
+-      entry.Set("name", row.name);
++      entry.Set("name", l10n_util::GetStringUTF16(row.name_id));
+       entry.Set("count", row.count);
+-      entry.Set("status", status);
++      entry.Set("status", l10n_util::GetStringUTF16(status));
+       entry.Set("kind", kind);
+       rows.Append(std::move(entry));
+     }
+@@ -395,6 +398,8 @@ SitePanelUI::SitePanelUI(content::WebUI* web_ui)
+   web_ui->AddMessageHandler(std::make_unique<SitePanelHandler>());
+   content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+       Profile::FromWebUI(web_ui), chrome::kChromeUISitePanelHost);
++  source->AddLocalizedStrings(browser_fork::kForkSitePanelStrings);
++  source->UseStringsJs();
+   source->AddResourcePath("site_panel.js", IDR_SITE_PANEL_JS);
+   source->SetDefaultResource(IDR_SITE_PANEL_HTML);
+ }
+diff --git a/chrome/chrome_repack_locales.gni b/chrome/chrome_repack_locales.gni
+index 226c91dd847f533d800407fb95cf2d7b56917e6e..cd06077b5b71b4f5aad511fd0b4b2d1de529f4b4 100644
+--- a/chrome/chrome_repack_locales.gni
++++ b/chrome/chrome_repack_locales.gni
+@@ -23,6 +23,7 @@ template("chrome_repack_locales") {
+     # Each input pak file should also have a deps line.
+     source_patterns = [
+       "${root_gen_dir}/chrome/branded_strings_",
++      "${root_gen_dir}/chrome/fork_strings_",
+       "${root_gen_dir}/chrome/generated_resources_",
+       "${root_gen_dir}/chrome/locale_settings_",
+       "${root_gen_dir}/chrome/platform_locale_settings_",
+@@ -48,6 +49,7 @@ template("chrome_repack_locales") {
+     }
+     deps += [
+       "//chrome/app:branded_strings",
++      "//chrome/app:fork_strings",
+       "//chrome/app:generated_resources",
+       "//chrome/app/resources:locale_settings",
+       "//chrome/app/resources:platform_locale_settings",
+diff --git a/tools/gritsettings/resource_ids.spec b/tools/gritsettings/resource_ids.spec
+index 73e3e35118bad7b5547149e890c6f92dd91b88ba..d0c43ea85aacb3b6f8048bb02934f3b1f443bd19 100644
+--- a/tools/gritsettings/resource_ids.spec
++++ b/tools/gritsettings/resource_ids.spec
+@@ -1802,6 +1802,11 @@
+     "messages": [10120],
+   },
+ 
++  # The strings of the fork (tools/fork_strings.py).
++  "chrome/app/fork_strings.grd": {
++    "messages": [10130],
++  },
++
+   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/webui_toolbar_shared/resources.grd": {
+     "META": {"sizes": {"includes": [100]}},
+     "includes": [10140],

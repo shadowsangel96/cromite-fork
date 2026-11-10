@@ -290,6 +290,13 @@ la voce 2). Il fuso orario resta "Consentito": il browser non lo cambia.
 
 ## 4. Traduzioni italiane dove mancano
 
+**Fatto per il Mac (10 novembre):** delle scritte che Cromite aggiunge, 101 si vedono anche sul Mac
+senza italiano. 98 sono tradotte in `strings/cromite_it.json`: forkctl le mette nei `.xtb` di
+Chromium quando applica le patch, con gli ID calcolati da grit sui sorgenti di quel momento (niente
+patch sui `.xtb`, che cambiano a ogni versione), e segnala quelle il cui inglese è cambiato. Le
+altre 3 contengono il nome "Cromite" e arrivano con il nome nuovo (12c). Da rifare il conto per
+Windows quando torniamo lì (qualche scritta può valere solo lì).
+
 Chromium è già tradotto in italiano, ma le stringhe aggiunte da Cromite no: delle 343 che le sue
 patch aggiungono ai file `.grd`/`.grdp`, solo quelle dell'adblock (eyeo) hanno le traduzioni.
 Tolte le 222 solo Android, ne restano **121 che servono anche su Windows, macOS e iOS**:
@@ -544,7 +551,9 @@ spento come già in Cromite (`Do-not-store-passwords-by-default.patch`,
     quelli che la sezione usa; un sito non la può caricare. Le liste si applicano appena si tocca
     una casella. Filtri e regole si salvano con "Salva"; le regole valgono subito e restano dopo
     il riavvio. Il resto (backup, impostazioni avanzate, aspetto) resta nella pagina di uBlock
-    Origin, aperta da "Altre impostazioni di uBlock Origin".
+    Origin, aperta da "Altre impostazioni di uBlock Origin". Appena avviato il browser uBlock
+    risponde solo dopo aver caricato le liste (a freddo, su questo Mac, anche più di un minuto):
+    la sezione scrive "uBlock Origin si sta avviando…" e riprova da sola.
   - **Icona a destra dell'indirizzo**, speculare allo scudo del fingerprinting a sinistra, con il
     numero di elementi bloccati nella pagina. Apre il pannello "Blocco contenuti": acceso o spento
     sul sito, bloccati e domini esterni, blocchi extra per sito (popup, media grandi, font
@@ -612,8 +621,15 @@ spento come già in Cromite (`Do-not-store-passwords-by-default.patch`,
 - **Scegliere il nome definitivo** (oggi "NomeBrowser") e sostituirlo ovunque compare "Cromite":
   stringhe dell'interfaccia ("Your Cromite", "Cromite didn't shut down correctly", il chip sulle
   pagine chrome://, la pagina Informazioni), icone e nomi dei file.
-- **Traduzioni inglesi** delle stringhe delle nostre patch, oggi solo in italiano, per chi usa il
-  browser in inglese (le italiane di Cromite sono la voce 4).
+- **Traduzioni inglesi** delle stringhe delle nostre patch (fatto): le 249 scritte stanno in
+  `strings/fork_strings.json` con inglese e italiano e passano dalle risorse di Chromium (un nostro
+  `fork_strings.grd` con il suo `.xtb` italiano, generati da `tools/fork_strings.py`). La lingua
+  segue quella del Mac; le altre lingue usano l'inglese. Coperte: Rete e privacy, pannello del
+  sito, profilo, impostazioni ("Blocco contenuti" e schede nella barra), pannello di uBlock
+  (attraverso i `_locales` di uBlock), pannello di Claude, pillola e barra della VPN, pagine
+  d'errore di VPN e Invidious, scudo, schede. La pagina d'errore usa il "Ricarica" di Chromium al
+  posto del nostro "Riprova". Restano in inglese le parti di Cromite della pagina `chrome://proxy`
+  ("Proxy configuration"): sono stringhe di Cromite, voce 4.
 
 ## 13. iOS
 

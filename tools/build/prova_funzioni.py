@@ -394,7 +394,7 @@ time.sleep(5)
 check("VPN che non risponde: nessuna uscita diretta", not any("vpn-spenta" in h[0] for h in hits), hits[-3:])
 testo = str(t.eval("document.body.innerText"))
 check("VPN che non risponde: la pagina di errore è la nostra",
-      "Il server VPN non risponde" in testo and "Riprova" in testo and "Naviga diretto (riserva)" in testo, testo[:120])
+      "Il server VPN non risponde" in testo and "Ricarica" in testo and "Naviga diretto (riserva)" in testo, testo[:120])
 b.close_tab(t)
 print("--- riserva", flush=True)
 t = proxy_page(b)

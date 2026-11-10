@@ -1,0 +1,362 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generato da tools/fork_strings.py da strings/fork_strings.json: non modificare a mano. -->
+<grit latest_public_release="0" current_release="1" source_lang_id="en" enc_check="möl">
+  <outputs>
+    <output filename="grit/fork_strings.h" type="rc_header">
+      <emit emit_type='prepend'></emit>
+    </output>
+    <output filename="fork_strings_af.pak" type="data_package" lang="af" />
+    <output filename="fork_strings_am.pak" type="data_package" lang="am" />
+    <output filename="fork_strings_ar.pak" type="data_package" lang="ar" />
+    <output filename="fork_strings_as.pak" type="data_package" lang="as" />
+    <output filename="fork_strings_az.pak" type="data_package" lang="az" />
+    <output filename="fork_strings_be.pak" type="data_package" lang="be" />
+    <output filename="fork_strings_bg.pak" type="data_package" lang="bg" />
+    <output filename="fork_strings_bn.pak" type="data_package" lang="bn" />
+    <output filename="fork_strings_bs.pak" type="data_package" lang="bs" />
+    <output filename="fork_strings_ca.pak" type="data_package" lang="ca" />
+    <output filename="fork_strings_cs.pak" type="data_package" lang="cs" />
+    <output filename="fork_strings_cy.pak" type="data_package" lang="cy" />
+    <output filename="fork_strings_da.pak" type="data_package" lang="da" />
+    <output filename="fork_strings_de.pak" type="data_package" lang="de" />
+    <output filename="fork_strings_el.pak" type="data_package" lang="el" />
+    <output filename="fork_strings_en-GB.pak" type="data_package" lang="en-GB" />
+    <output filename="fork_strings_en-US.pak" type="data_package" lang="en" />
+    <output filename="fork_strings_es.pak" type="data_package" lang="es" />
+    <if expr="is_ios">
+      <output filename="fork_strings_es-MX.pak" type="data_package" lang="es-419" />
+    </if>
+    <if expr="not is_ios">
+      <output filename="fork_strings_es-419.pak" type="data_package" lang="es-419" />
+    </if>
+    <output filename="fork_strings_et.pak" type="data_package" lang="et" />
+    <output filename="fork_strings_eu.pak" type="data_package" lang="eu" />
+    <output filename="fork_strings_fa.pak" type="data_package" lang="fa" />
+    <output filename="fork_strings_fi.pak" type="data_package" lang="fi" />
+    <output filename="fork_strings_fil.pak" type="data_package" lang="fil" />
+    <output filename="fork_strings_fr-CA.pak" type="data_package" lang="fr-CA" />
+    <output filename="fork_strings_fr.pak" type="data_package" lang="fr" />
+    <output filename="fork_strings_gl.pak" type="data_package" lang="gl" />
+    <output filename="fork_strings_gu.pak" type="data_package" lang="gu" />
+    <output filename="fork_strings_he.pak" type="data_package" lang="he" />
+    <output filename="fork_strings_hi.pak" type="data_package" lang="hi" />
+    <output filename="fork_strings_hr.pak" type="data_package" lang="hr" />
+    <output filename="fork_strings_hu.pak" type="data_package" lang="hu" />
+    <output filename="fork_strings_hy.pak" type="data_package" lang="hy" />
+    <output filename="fork_strings_id.pak" type="data_package" lang="id" />
+    <output filename="fork_strings_is.pak" type="data_package" lang="is" />
+    <output filename="fork_strings_it.pak" type="data_package" lang="it" />
+    <output filename="fork_strings_ja.pak" type="data_package" lang="ja" />
+    <output filename="fork_strings_ka.pak" type="data_package" lang="ka" />
+    <output filename="fork_strings_kk.pak" type="data_package" lang="kk" />
+    <output filename="fork_strings_km.pak" type="data_package" lang="km" />
+    <output filename="fork_strings_kn.pak" type="data_package" lang="kn" />
+    <output filename="fork_strings_ko.pak" type="data_package" lang="ko" />
+    <output filename="fork_strings_ky.pak" type="data_package" lang="ky" />
+    <output filename="fork_strings_lo.pak" type="data_package" lang="lo" />
+    <output filename="fork_strings_lt.pak" type="data_package" lang="lt" />
+    <output filename="fork_strings_lv.pak" type="data_package" lang="lv" />
+    <output filename="fork_strings_mk.pak" type="data_package" lang="mk" />
+    <output filename="fork_strings_ml.pak" type="data_package" lang="ml" />
+    <output filename="fork_strings_mn.pak" type="data_package" lang="mn" />
+    <output filename="fork_strings_mr.pak" type="data_package" lang="mr" />
+    <output filename="fork_strings_ms.pak" type="data_package" lang="ms" />
+    <output filename="fork_strings_my.pak" type="data_package" lang="my" />
+    <output filename="fork_strings_ne.pak" type="data_package" lang="ne" />
+    <output filename="fork_strings_nl.pak" type="data_package" lang="nl" />
+    <output filename="fork_strings_nb.pak" type="data_package" lang="no" />
+    <output filename="fork_strings_pa.pak" type="data_package" lang="pa" />
+    <output filename="fork_strings_pl.pak" type="data_package" lang="pl" />
+    <if expr="is_ios">
+      <output filename="fork_strings_pt.pak" type="data_package" lang="pt-BR" />
+    </if>
+    <if expr="not is_ios">
+      <output filename="fork_strings_pt-BR.pak" type="data_package" lang="pt-BR" />
+    </if>
+    <output filename="fork_strings_pt-PT.pak" type="data_package" lang="pt-PT" />
+    <output filename="fork_strings_or.pak" type="data_package" lang="or" />
+    <output filename="fork_strings_ro.pak" type="data_package" lang="ro" />
+    <output filename="fork_strings_ru.pak" type="data_package" lang="ru" />
+    <output filename="fork_strings_si.pak" type="data_package" lang="si" />
+    <output filename="fork_strings_sk.pak" type="data_package" lang="sk" />
+    <output filename="fork_strings_sl.pak" type="data_package" lang="sl" />
+    <output filename="fork_strings_sq.pak" type="data_package" lang="sq" />
+    <output filename="fork_strings_sr-Latn.pak" type="data_package" lang="sr-Latn" />
+    <output filename="fork_strings_sr.pak" type="data_package" lang="sr" />
+    <output filename="fork_strings_sv.pak" type="data_package" lang="sv" />
+    <output filename="fork_strings_sw.pak" type="data_package" lang="sw" />
+    <output filename="fork_strings_ta.pak" type="data_package" lang="ta" />
+    <output filename="fork_strings_te.pak" type="data_package" lang="te" />
+    <output filename="fork_strings_th.pak" type="data_package" lang="th" />
+    <output filename="fork_strings_tr.pak" type="data_package" lang="tr" />
+    <output filename="fork_strings_uk.pak" type="data_package" lang="uk" />
+    <output filename="fork_strings_ur.pak" type="data_package" lang="ur" />
+    <output filename="fork_strings_uz.pak" type="data_package" lang="uz" />
+    <output filename="fork_strings_vi.pak" type="data_package" lang="vi" />
+    <output filename="fork_strings_zh-CN.pak" type="data_package" lang="zh-CN" />
+    <output filename="fork_strings_zh-HK.pak" type="data_package" lang="zh-HK" />
+    <output filename="fork_strings_zh-TW.pak" type="data_package" lang="zh-TW" />
+    <output filename="fork_strings_zu.pak" type="data_package" lang="zu" />
+    <output filename="fork_strings_ar-XB.pak" type="data_package" lang="ar-XB" />
+    <output filename="fork_strings_en-XA.pak" type="data_package" lang="en-XA" />
+    <if expr="is_android">
+    </if>
+  </outputs>
+  <translations>
+    <file path="resources/fork_strings_it.xtb" lang="it" />
+  </translations>
+  <release seq="1" allow_pseudo="false">
+    <messages fallback_to_english="true">
+      <message name="IDS_FORK_CLOSE" desc="Interface of the fork.">Close</message>
+      <message name="IDS_FORK_YES" desc="Interface of the fork.">Yes</message>
+      <message name="IDS_FORK_NO" desc="Interface of the fork.">No</message>
+      <message name="IDS_FORK_CANCEL" desc="Interface of the fork.">Cancel</message>
+      <message name="IDS_FORK_SAVE" desc="Interface of the fork.">Save</message>
+      <message name="IDS_FORK_ADD" desc="Interface of the fork.">Add</message>
+      <message name="IDS_FORK_CONTENT_BLOCKING" desc="Interface of the fork.">Content blocking</message>
+      <message name="IDS_FORK_YOUR_CHATS" desc="Interface of the fork.">Your chats</message>
+      <message name="IDS_FORK_COOKIES_AND_SITE_DATA" desc="Interface of the fork.">Cookies and site data</message>
+      <message name="IDS_FORK_BACK_TO_VPN" desc="Interface of the fork.">Back to the VPN</message>
+      <message name="IDS_FORK_PROXY_PAGE_TITLE" desc="Interface of the fork.">Network and privacy</message>
+      <message name="IDS_FORK_PROXY_VPN_TITLE" desc="Interface of the fork.">Personal VPN</message>
+      <message name="IDS_FORK_PROXY_VPN_INTRO" desc="Interface of the fork.">Only the browser goes out through the VPN of your server. If the server doesn't answer, pages show an error: the browser never goes out directly without you knowing. Home networks and Tailscale stay outside the VPN, so the server itself can always be reached.</message>
+      <message name="IDS_FORK_PROXY_VPN_ADDRESS" desc="Interface of the fork.">Proxy address</message>
+      <message name="IDS_FORK_PROXY_ADDRESS_PLACEHOLDER" desc="Interface of the fork.">address:port</message>
+      <message name="IDS_FORK_PROXY_URL_PLACEHOLDER" desc="Interface of the fork.">http://address:port</message>
+      <message name="IDS_FORK_PROXY_VPN_CITY" desc="Interface of the fork.">Exit city</message>
+      <message name="IDS_FORK_PROXY_VPN_CITY_PLACEHOLDER" desc="Interface of the fork.">Rome</message>
+      <message name="IDS_FORK_PROXY_VPN_ON" desc="Interface of the fork.">Turn on</message>
+      <message name="IDS_FORK_PROXY_VPN_OFF" desc="Interface of the fork.">Turn off</message>
+      <message name="IDS_FORK_PROXY_DIRECT_TITLE" desc="Interface of the fork.">Sites that go out directly</message>
+      <message name="IDS_FORK_PROXY_DIRECT_INTRO" desc="Interface of the fork.">One per line: banks and services that block VPN addresses. These sites see the IP address of your home.</message>
+      <message name="IDS_FORK_PROXY_SAVE_LIST" desc="Interface of the fork.">Save the list</message>
+      <message name="IDS_FORK_PROXY_SEARCH_TITLE" desc="Interface of the fork.">Personal search engine</message>
+      <message name="IDS_FORK_PROXY_SEARCH_INTRO" desc="Interface of the fork.">Searches from the address bar go to your SearXNG. If it doesn't answer within a few seconds, that search moves to DuckDuckGo Light by itself.</message>
+      <message name="IDS_FORK_PROXY_SEARCH_ADDRESS" desc="Interface of the fork.">SearXNG address</message>
+      <message name="IDS_FORK_PROXY_SEARCH_USE" desc="Interface of the fork.">Use</message>
+      <message name="IDS_FORK_PROXY_SEARCH_REMOVE" desc="Interface of the fork.">Remove</message>
+      <message name="IDS_FORK_PROXY_TRACKERS_TITLE" desc="Interface of the fork.">Sites that track</message>
+      <message name="IDS_FORK_PROXY_TRACKERS_INTRO" desc="Interface of the fork.">When you open these sites, the browser goes by itself to their version that doesn't track you, from shared links too. From the site panel (the shield in the address bar) you go back to the original when you need it.</message>
+      <message name="IDS_FORK_PROXY_REDIRECT_YOUTUBE" desc="After the bold word YouTube.">on your Invidious, videos inside other sites too</message>
+      <message name="IDS_FORK_PROXY_INVIDIOUS_HOME" desc="Interface of the fork.">Home address</message>
+      <message name="IDS_FORK_PROXY_INVIDIOUS_REMOTE" desc="Interface of the fork.">Away from home (Tailscale)</message>
+      <message name="IDS_FORK_PROXY_REDIRECT_INSTAGRAM" desc="After the bold word Instagram.">on imginn</message>
+      <message name="IDS_FORK_PROXY_REDIRECT_TIKTOK" desc="After the bold word TikTok.">on urlebird. A video opens the page of its author: urlebird puts the words of the description in the address of the video, and the TikTok link doesn't have them.</message>
+      <message name="IDS_FORK_PROXY_COOKIE_TEMP_NAME" desc="Interface of the fork.">Temporary:</message>
+      <message name="IDS_FORK_PROXY_COOKIE_TEMP" desc="Interface of the fork.">the data of a site lasts for the visit and is deleted as soon as you leave it.</message>
+      <message name="IDS_FORK_PROXY_COOKIE_NORMAL_NAME" desc="Interface of the fork.">Normal:</message>
+      <message name="IDS_FORK_PROXY_COOKIE_NORMAL" desc="Interface of the fork.">as in Chrome, with the cookies of each site kept apart.</message>
+      <message name="IDS_FORK_PROXY_COOKIE_BLOCK_NAME" desc="Interface of the fork.">Block all:</message>
+      <message name="IDS_FORK_PROXY_COOKIE_BLOCK" desc="Interface of the fork.">no site saves data, sign-ins don't work. Only the sites to remember can.</message>
+      <message name="IDS_FORK_PROXY_REMEMBERED_TITLE" desc="Interface of the fork.">Sites to remember</message>
+      <message name="IDS_FORK_PROXY_REMEMBERED_INTRO" desc="Interface of the fork.">One per line. Here you stay signed in: their data is never deleted.</message>
+      <message name="IDS_FORK_PROXY_CLAUDE_BLOCKED_TITLE" desc="Interface of the fork.">Claude doesn't enter these sites</message>
+      <message name="IDS_FORK_PROXY_CLAUDE_BLOCKED_INTRO" desc="Interface of the fork.">One per line, for example banks and health care. Claude in Chrome can't read or use them.</message>
+      <message name="IDS_FORK_PROXY_VPN_RESERVE" desc="Interface of the fork.">Direct reserve connection: your IP is visible.</message>
+      <message name="IDS_FORK_PROXY_VPN_ACTIVE" desc="Interface of the fork.">On: the browser goes out through <ph name="ADDRESS">$1</ph>.</message>
+      <message name="IDS_FORK_PROXY_VPN_INACTIVE" desc="Interface of the fork.">Off: the browser goes out through the normal connection.</message>
+      <message name="IDS_FORK_PROXY_VPN_NEED_ADDRESS" desc="Interface of the fork.">Write the proxy address first.</message>
+      <message name="IDS_FORK_PROXY_CHECKING" desc="Interface of the fork.">Checking the addresses…</message>
+      <message name="IDS_FORK_PROXY_INVIDIOUS_NO_ADDRESS" desc="Interface of the fork.">Without an address, YouTube stays as it is.</message>
+      <message name="IDS_FORK_PROXY_INVIDIOUS_OFF" desc="Interface of the fork.">Off: YouTube stays as it is.</message>
+      <message name="IDS_FORK_PROXY_INVIDIOUS_RESTART" desc="Interface of the fork.">Videos inside other sites move to Invidious from the next start of the browser.</message>
+      <message name="IDS_FORK_PROXY_INVIDIOUS_HOME_ANSWERS" desc="Interface of the fork.">The home one answers: YouTube opens there.</message>
+      <message name="IDS_FORK_PROXY_INVIDIOUS_REMOTE_ANSWERS" desc="Interface of the fork.">The Tailscale one answers: YouTube opens there.</message>
+      <message name="IDS_FORK_PROXY_INVIDIOUS_NONE" desc="Interface of the fork.">Neither one answers, or it isn't Invidious: YouTube shows an error until you open it yourself from the page.</message>
+      <message name="IDS_FORK_PROXY_LIST_SAVED" desc="Interface of the fork.">List saved: <ph name="COUNT">$1</ph> sites.</message>
+      <message name="IDS_FORK_PROXY_CLAUDE_LIST_SAVED" desc="Interface of the fork.">List saved: <ph name="COUNT">$1</ph> sites. It applies to new tabs: close the ones already open on these sites.</message>
+      <message name="IDS_FORK_PROXY_SEARCH_ACTIVE" desc="Interface of the fork.">On: searches go to <ph name="ADDRESS">$1</ph>.</message>
+      <message name="IDS_FORK_PROXY_SEARCH_INACTIVE" desc="Interface of the fork.">Off: searches go to the default engine.</message>
+      <message name="IDS_FORK_PERSONAL_SEARCH_NAME" desc="Name of the user&#x27;s own search engine in the list of engines.">Personal SearXNG</message>
+      <message name="IDS_FORK_SITE_PANEL_LABEL" desc="Interface of the fork.">Site information</message>
+      <message name="IDS_FORK_SITE_PANEL_HOW_ANSWERS" desc="Interface of the fork.">How the browser answers</message>
+      <message name="IDS_FORK_SITE_PANEL_NO_READING" desc="Interface of the fork.">Nothing read yet</message>
+      <message name="IDS_FORK_SITE_PANEL_CANVAS_CAPTION" desc="Interface of the fork.">Canvas · as the site received it</message>
+      <message name="IDS_FORK_SITE_PANEL_WEBGL_BLOCKED" desc="Interface of the fork.">WebGL blocked</message>
+      <message name="IDS_FORK_SITE_PANEL_WEBGL_NO_IMAGE" desc="Interface of the fork.">WebGL · no image</message>
+      <message name="IDS_FORK_SITE_PANEL_WEBGL_CAPTION" desc="Interface of the fork.">WebGL · as the site received it</message>
+      <message name="IDS_FORK_SITE_PANEL_REMEMBER" desc="Interface of the fork.">Remember this site</message>
+      <message name="IDS_FORK_SITE_PANEL_BLOCKED" desc="Interface of the fork.">Trackers and ads blocked</message>
+      <message name="IDS_FORK_SITE_PANEL_PERMISSIONS" desc="Interface of the fork." meaning="sitePanelPermissions">Permissions</message>
+      <message name="IDS_FORK_SITE_PANEL_ROUTE_VPN" desc="Interface of the fork.">Going out through the personal VPN</message>
+      <message name="IDS_FORK_SITE_PANEL_ROUTE_VPN_CITY" desc="Interface of the fork.">Going out through the personal VPN (<ph name="CITY">$1</ph>)</message>
+      <message name="IDS_FORK_SITE_PANEL_ROUTE_DOWN" desc="Interface of the fork.">The VPN server doesn't answer: no page goes out directly</message>
+      <message name="IDS_FORK_SITE_PANEL_ROUTE_DIRECT" desc="Interface of the fork.">Direct connection: sites see the IP of your home</message>
+      <message name="IDS_FORK_SITE_PANEL_ROUTE_OFF" desc="Interface of the fork.">VPN off: you go out through the normal connection</message>
+      <message name="IDS_FORK_SITE_PANEL_NOT_USED" desc="A fingerprinting category the page didn&#x27;t read.">Not used</message>
+      <message name="IDS_FORK_SITE_PANEL_FP_ONE" desc="Interface of the fork.">1 attempt blocked</message>
+      <message name="IDS_FORK_SITE_PANEL_FP_MANY" desc="Interface of the fork."><ph name="COUNT">$1</ph> attempts blocked</message>
+      <message name="IDS_FORK_SITE_PANEL_FP_NONE" desc="Interface of the fork.">No attempts</message>
+      <message name="IDS_FORK_SITE_PANEL_FP_HINT_USED" desc="Interface of the fork.">The site tried to read these APIs. Here is what the browser answered.</message>
+      <message name="IDS_FORK_SITE_PANEL_FP_HINT_NONE" desc="Interface of the fork.">So far the site hasn't read any of these APIs.</message>
+      <message name="IDS_FORK_SITE_PANEL_SHOW_USED" desc="Interface of the fork.">Show only the ones used</message>
+      <message name="IDS_FORK_SITE_PANEL_SHOW_ALL" desc="Interface of the fork.">Show all <ph name="COUNT">$1</ph> categories</message>
+      <message name="IDS_FORK_SITE_PANEL_OPENED_ON" desc="Interface of the fork.">Opened on <ph name="RESPECTFUL">$1</ph> instead of <ph name="SERVICE">$2</ph></message>
+      <message name="IDS_FORK_SITE_PANEL_ORIGINAL_OF" desc="Interface of the fork.">Original page of <ph name="SERVICE">$1</ph></message>
+      <message name="IDS_FORK_SITE_PANEL_OPEN_ORIGINAL" desc="Interface of the fork.">Open the original</message>
+      <message name="IDS_FORK_SITE_PANEL_OPEN_ON" desc="Interface of the fork.">Open on <ph name="RESPECTFUL">$1</ph></message>
+      <message name="IDS_FORK_SITE_PANEL_REDIRECT_SWITCH" desc="Interface of the fork.">Redirect <ph name="SERVICE">$1</ph></message>
+      <message name="IDS_FORK_SITE_PANEL_TO_SET_UP" desc="Interface of the fork.">To set up</message>
+      <message name="IDS_FORK_SITE_PANEL_SECURE" desc="Interface of the fork.">Connection is secure</message>
+      <message name="IDS_FORK_SITE_PANEL_NOT_SECURE" desc="Interface of the fork.">Connection is not secure</message>
+      <message name="IDS_FORK_SITE_PANEL_BLOCK_WEBGL_AGAIN" desc="Interface of the fork.">Block WebGL on this site again</message>
+      <message name="IDS_FORK_SITE_PANEL_ALLOW_WEBGL" desc="Interface of the fork.">Allow WebGL on this site (randomized)</message>
+      <message name="IDS_FORK_SITE_PANEL_COOKIES_IN_USE" desc="Interface of the fork."><ph name="COUNT">$1</ph> in use</message>
+      <message name="IDS_FORK_SITE_PANEL_NO_COOKIES" desc="Interface of the fork." meaning="sitePanelNoCookies">None</message>
+      <message name="IDS_FORK_SITE_PANEL_NO_PERMISSIONS" desc="Interface of the fork." meaning="sitePanelNoPermissions">None</message>
+      <message name="IDS_FORK_FP_RANDOMIZED" desc="Interface of the fork.">Randomized</message>
+      <message name="IDS_FORK_FP_BLOCKED" desc="Interface of the fork.">Blocked</message>
+      <message name="IDS_FORK_FP_UNIFORM" desc="Interface of the fork.">Uniform</message>
+      <message name="IDS_FORK_FP_LIMITED" desc="Interface of the fork.">Limited</message>
+      <message name="IDS_FORK_FP_ALLOWED" desc="Interface of the fork.">Allowed</message>
+      <message name="IDS_FORK_FP_NOT_COUNTED" desc="Interface of the fork.">Not counted</message>
+      <message name="IDS_FORK_FP_CAT_CANVAS" desc="Interface of the fork.">Canvas</message>
+      <message name="IDS_FORK_FP_CAT_WEBGL" desc="Interface of the fork.">WebGL</message>
+      <message name="IDS_FORK_FP_CAT_AUDIO" desc="Interface of the fork.">Audio</message>
+      <message name="IDS_FORK_FP_CAT_FONTS" desc="Interface of the fork.">Fonts</message>
+      <message name="IDS_FORK_FP_CAT_SCREEN" desc="Interface of the fork.">Screen</message>
+      <message name="IDS_FORK_FP_CAT_NAVIGATOR" desc="Interface of the fork.">Navigator and Client Hints</message>
+      <message name="IDS_FORK_FP_CAT_WEBGPU" desc="Interface of the fork.">WebGPU</message>
+      <message name="IDS_FORK_FP_CAT_CLIENT_RECTS" desc="Interface of the fork.">ClientRects</message>
+      <message name="IDS_FORK_FP_CAT_TIME_ZONE" desc="Interface of the fork.">Time zone</message>
+      <message name="IDS_FORK_FP_CAT_WEBRTC" desc="Interface of the fork.">WebRTC</message>
+      <message name="IDS_FORK_FP_CAT_STORAGE" desc="Interface of the fork.">Storage</message>
+      <message name="IDS_FORK_FP_CAT_PERMISSIONS" desc="Interface of the fork." meaning="fpCatPermissions">Permissions</message>
+      <message name="IDS_FORK_FP_CAT_BATTERY" desc="Interface of the fork.">Battery</message>
+      <message name="IDS_FORK_FP_CAT_EVAL" desc="Interface of the fork.">eval</message>
+      <message name="IDS_FORK_FP_CAT_REFERRER" desc="Interface of the fork.">Referrer</message>
+      <message name="IDS_FORK_SITE_INFO_FP_ONE" desc="Interface of the fork.">Site information: 1 fingerprinting attempt blocked</message>
+      <message name="IDS_FORK_SITE_INFO_FP_MANY" desc="Interface of the fork.">Site information: <ph name="COUNT">$1</ph> fingerprinting attempts blocked</message>
+      <message name="IDS_FORK_PROFILO_LABEL" desc="Interface of the fork.">Profile</message>
+      <message name="IDS_FORK_PROFILO_NOT_SIGNED_IN" desc="Interface of the fork.">You haven't signed in yet</message>
+      <message name="IDS_FORK_PROFILO_INTRO" desc="Interface of the fork.">A single sign-in with your Claude account, for Claude in Chrome and your chats.</message>
+      <message name="IDS_FORK_PROFILO_SIGN_IN" desc="Interface of the fork.">Sign in with Claude</message>
+      <message name="IDS_FORK_PROFILO_ACCOUNT" desc="Interface of the fork.">Claude account</message>
+      <message name="IDS_FORK_PROFILO_SIGNED_IN" desc="Interface of the fork.">Signed in on claude.ai</message>
+      <message name="IDS_FORK_PROFILO_SIGN_OUT" desc="Interface of the fork.">Sign out</message>
+      <message name="IDS_FORK_PROFILO_OTHERS" desc="Interface of the fork.">Other profiles and guest</message>
+      <message name="IDS_FORK_AVATAR_CLAUDE_LINKED" desc="Interface of the fork.">Profile: Claude account linked</message>
+      <message name="IDS_FORK_AVATAR_SIGN_IN" desc="Interface of the fork.">Profile: sign in with Claude</message>
+      <message name="IDS_FORK_SETTINGS_COMPACT_TABS" desc="Interface of the fork.">Tabs in the toolbar</message>
+      <message name="IDS_FORK_SETTINGS_COMPACT_TABS_SUB" desc="Interface of the fork.">Compact, like Safari. Applies to the windows you open afterwards.</message>
+      <message name="IDS_FORK_UBLOCK_INTEGRATED" desc="Interface of the fork."><ph name="NAME">$1</ph>, built into the browser</message>
+      <message name="IDS_FORK_UBLOCK_INTRO" desc="Interface of the fork.">Blocks ads, trackers and dangerous sites on every page. To turn it off on a single site, use the button to the right of the address.</message>
+      <message name="IDS_FORK_UBLOCK_FILTER_COUNT" desc="Interface of the fork."><ph name="NETWORK">$1</ph> network filters and <ph name="COSMETIC">$2</ph> cosmetic filters in use.</message>
+      <message name="IDS_FORK_UBLOCK_NO_ANSWER" desc="Interface of the fork.">uBlock Origin doesn't answer. Try again in a moment, or restart the browser.</message>
+      <message name="IDS_FORK_UBLOCK_STARTING" desc="Interface of the fork.">uBlock Origin is starting…</message>
+      <message name="IDS_FORK_UBLOCK_LISTS" desc="Interface of the fork.">Filter lists</message>
+      <message name="IDS_FORK_UBLOCK_ACTIVE_OF" desc="Interface of the fork."><ph name="ON">$1</ph> active out of <ph name="TOTAL">$2</ph></message>
+      <message name="IDS_FORK_UBLOCK_AUTO_UPDATE" desc="Interface of the fork.">Update the lists by themselves</message>
+      <message name="IDS_FORK_UBLOCK_AUTO_UPDATE_SUB" desc="Interface of the fork.">Each list is downloaded again from its site when it expires.</message>
+      <message name="IDS_FORK_UBLOCK_UPDATE_NOW" desc="Interface of the fork.">Update now</message>
+      <message name="IDS_FORK_UBLOCK_UPDATING" desc="Interface of the fork.">Updating…</message>
+      <message name="IDS_FORK_UBLOCK_LAST_UPDATE" desc="Interface of the fork.">Last updated <ph name="WHEN">$1</ph></message>
+      <message name="IDS_FORK_UBLOCK_LIST_USED" desc="Interface of the fork."><ph name="USED">$1</ph> filters used out of <ph name="TOTAL">$2</ph></message>
+      <message name="IDS_FORK_UBLOCK_LIST_UPDATED" desc="Interface of the fork.">updated <ph name="WHEN">$1</ph></message>
+      <message name="IDS_FORK_UBLOCK_LIST_BUNDLED" desc="Interface of the fork.">copy included in uBlock Origin, to be updated</message>
+      <message name="IDS_FORK_UBLOCK_REMOVE_LIST" desc="Interface of the fork.">Remove the list</message>
+      <message name="IDS_FORK_UBLOCK_ADD_LIST" desc="Interface of the fork.">Add a list</message>
+      <message name="IDS_FORK_UBLOCK_LIST_ADDRESS" desc="Interface of the fork.">Address of the list</message>
+      <message name="IDS_FORK_UBLOCK_LIST_PLACEHOLDER" desc="Interface of the fork.">https://example.org/list.txt</message>
+      <message name="IDS_FORK_UBLOCK_LISTS_APPLYING" desc="Interface of the fork.">Applying the lists…</message>
+      <message name="IDS_FORK_UBLOCK_LISTS_APPLIED" desc="Interface of the fork.">Lists applied.</message>
+      <message name="IDS_FORK_UBLOCK_LIST_BAD_URL" desc="Interface of the fork.">Write the full address of the list, with https://.</message>
+      <message name="IDS_FORK_UBLOCK_GROUP_DEFAULT" desc="Interface of the fork.">Built in</message>
+      <message name="IDS_FORK_UBLOCK_GROUP_ADS" desc="Interface of the fork.">Ads</message>
+      <message name="IDS_FORK_UBLOCK_GROUP_PRIVACY" desc="Interface of the fork.">Privacy</message>
+      <message name="IDS_FORK_UBLOCK_GROUP_MALWARE" desc="Interface of the fork.">Malware and dangerous sites</message>
+      <message name="IDS_FORK_UBLOCK_GROUP_MULTIPURPOSE" desc="Interface of the fork.">Multipurpose</message>
+      <message name="IDS_FORK_UBLOCK_GROUP_COOKIES" desc="Interface of the fork.">Cookie notices</message>
+      <message name="IDS_FORK_UBLOCK_GROUP_SOCIAL" desc="Interface of the fork.">Social buttons</message>
+      <message name="IDS_FORK_UBLOCK_GROUP_ANNOYANCES" desc="Interface of the fork.">Annoyances</message>
+      <message name="IDS_FORK_UBLOCK_GROUP_REGIONS" desc="Interface of the fork.">Regions and languages</message>
+      <message name="IDS_FORK_UBLOCK_GROUP_UNKNOWN" desc="Interface of the fork.">Other</message>
+      <message name="IDS_FORK_UBLOCK_GROUP_CUSTOM" desc="Interface of the fork.">Added by you</message>
+      <message name="IDS_FORK_UBLOCK_AGO_NOW" desc="Interface of the fork.">just now</message>
+      <message name="IDS_FORK_UBLOCK_AGO_MINUTE" desc="Interface of the fork.">1 minute ago</message>
+      <message name="IDS_FORK_UBLOCK_AGO_MINUTES" desc="Interface of the fork."><ph name="COUNT">$1</ph> minutes ago</message>
+      <message name="IDS_FORK_UBLOCK_AGO_HOUR" desc="Interface of the fork.">1 hour ago</message>
+      <message name="IDS_FORK_UBLOCK_AGO_HOURS" desc="Interface of the fork."><ph name="COUNT">$1</ph> hours ago</message>
+      <message name="IDS_FORK_UBLOCK_AGO_YESTERDAY" desc="Interface of the fork.">yesterday</message>
+      <message name="IDS_FORK_UBLOCK_AGO_DAYS" desc="Interface of the fork."><ph name="COUNT">$1</ph> days ago</message>
+      <message name="IDS_FORK_UBLOCK_FILTERS" desc="Interface of the fork.">Personal filters</message>
+      <message name="IDS_FORK_UBLOCK_USE_FILTERS" desc="Interface of the fork.">Use the personal filters</message>
+      <message name="IDS_FORK_UBLOCK_FILTERS_HELP" desc="Interface of the fork.">One filter per line, in the <ph name="BEGIN_LINK">&lt;a href="https://github.com/gorhill/uBlock/wiki/Static-filter-syntax" target="_blank"&gt;</ph>syntax of uBlock Origin<ph name="END_LINK">&lt;/a&gt;</ph>. "Hide an element" adds them here too.</message>
+      <message name="IDS_FORK_UBLOCK_FILTER_ONE" desc="Interface of the fork.">1 filter</message>
+      <message name="IDS_FORK_UBLOCK_FILTER_MANY" desc="Interface of the fork."><ph name="COUNT">$1</ph> filters</message>
+      <message name="IDS_FORK_UBLOCK_NOT_IN_USE" desc="Interface of the fork."><ph name="WHAT">$1</ph>, not in use</message>
+      <message name="IDS_FORK_UBLOCK_SAVING" desc="Interface of the fork.">Saving…</message>
+      <message name="IDS_FORK_UBLOCK_FILTERS_SAVED" desc="Personal filters were saved." meaning="ublockFiltersSaved">Saved.</message>
+      <message name="IDS_FORK_UBLOCK_RULES" desc="Interface of the fork.">Rules</message>
+      <message name="IDS_FORK_UBLOCK_RULES_HELP" desc="Interface of the fork.">Dynamic filtering rules, one per line: source site, destination site, request type and action (<ph name="BEGIN_LINK">&lt;a href="https://github.com/gorhill/uBlock/wiki/Dynamic-filtering:-rule-syntax" target="_blank"&gt;</ph>how to write them<ph name="END_LINK">&lt;/a&gt;</ph>). They apply right away and stay after a restart.</message>
+      <message name="IDS_FORK_UBLOCK_RULE_ONE" desc="Interface of the fork.">1 rule</message>
+      <message name="IDS_FORK_UBLOCK_RULE_MANY" desc="Interface of the fork."><ph name="COUNT">$1</ph> rules</message>
+      <message name="IDS_FORK_UBLOCK_RULES_SAVED" desc="Rules were saved." meaning="ublockRulesSaved">Saved.</message>
+      <message name="IDS_FORK_UBLOCK_RULES_REJECTED" desc="Interface of the fork.">Saved. Not valid, so removed: <ph name="LINES">$1</ph></message>
+      <message name="IDS_FORK_UBLOCK_SITES" desc="Interface of the fork.">Excluded sites</message>
+      <message name="IDS_FORK_UBLOCK_SITES_HELP" desc="Interface of the fork.">Nothing is blocked here. The power button in the "Content blocking" panel adds sites to this list and removes them.</message>
+      <message name="IDS_FORK_UBLOCK_NO_SITES" desc="Interface of the fork.">No excluded sites</message>
+      <message name="IDS_FORK_UBLOCK_SITES_NONE" desc="Interface of the fork." meaning="ublockSitesNone">None</message>
+      <message name="IDS_FORK_UBLOCK_SITE_ONE" desc="Interface of the fork.">1 site</message>
+      <message name="IDS_FORK_UBLOCK_SITE_MANY" desc="Interface of the fork."><ph name="COUNT">$1</ph> sites</message>
+      <message name="IDS_FORK_UBLOCK_REMOVE_SITE" desc="Interface of the fork.">Remove the site</message>
+      <message name="IDS_FORK_UBLOCK_ADD_SITE" desc="Interface of the fork.">Add a site</message>
+      <message name="IDS_FORK_UBLOCK_SITE_LABEL" desc="Interface of the fork.">Site to exclude</message>
+      <message name="IDS_FORK_UBLOCK_SITE_PLACEHOLDER" desc="Interface of the fork.">example.org</message>
+      <message name="IDS_FORK_UBLOCK_MORE" desc="Interface of the fork.">More settings of uBlock Origin</message>
+      <message name="IDS_FORK_UBLOCK_MORE_SUB" desc="Interface of the fork.">Backup, advanced settings and appearance, in the page of uBlock Origin</message>
+      <message name="IDS_FORK_BLOCCO_SUBTITLE" desc="Interface of the fork.">uBlock Origin, built into the browser</message>
+      <message name="IDS_FORK_BLOCCO_ON_AT" desc="Interface of the fork.">On for <ph name="SITE">$1</ph></message>
+      <message name="IDS_FORK_BLOCCO_OFF_AT" desc="Interface of the fork.">Off for <ph name="SITE">$1</ph></message>
+      <message name="IDS_FORK_BLOCCO_HINT_ON" desc="Interface of the fork.">Click to turn it off on this site only</message>
+      <message name="IDS_FORK_BLOCCO_HINT_OFF" desc="Interface of the fork.">Click to turn it back on</message>
+      <message name="IDS_FORK_BLOCCO_BLOCKED_PAGE" desc="Interface of the fork.">blocked on this page</message>
+      <message name="IDS_FORK_BLOCCO_OUT_OF" desc="Interface of the fork.">out of</message>
+      <message name="IDS_FORK_BLOCCO_EXTERNAL" desc="Interface of the fork.">external domains blocked</message>
+      <message name="IDS_FORK_BLOCCO_BLOCKED_HERE" desc="Interface of the fork.">Blocked on this site</message>
+      <message name="IDS_FORK_BLOCCO_ALSO_BLOCK" desc="Interface of the fork.">On this site, also block</message>
+      <message name="IDS_FORK_BLOCCO_POPUPS" desc="Interface of the fork.">Pop-ups</message>
+      <message name="IDS_FORK_BLOCCO_LARGE_MEDIA" desc="Interface of the fork.">Large media</message>
+      <message name="IDS_FORK_BLOCCO_FONTS" desc="Interface of the fork.">Remote fonts</message>
+      <message name="IDS_FORK_BLOCCO_SCRIPTS" desc="Interface of the fork.">JavaScript</message>
+      <message name="IDS_FORK_BLOCCO_PICKER" desc="Interface of the fork.">Hide an element</message>
+      <message name="IDS_FORK_BLOCCO_LOGGER" desc="Interface of the fork.">Logger</message>
+      <message name="IDS_FORK_BLOCCO_SETTINGS" desc="Interface of the fork.">Settings</message>
+      <message name="IDS_FORK_BLOCCO_NOTHING_YET" desc="Interface of the fork.">Nothing to block on this page so far.</message>
+      <message name="IDS_FORK_BLOCCO_OFF_TEXT" desc="Interface of the fork.">Nothing is blocked on this site: ads and trackers can load.</message>
+      <message name="IDS_FORK_UBLOCK_BUTTON_COUNT" desc="Interface of the fork.">Content blocking: <ph name="COUNT">$1</ph> items blocked</message>
+      <message name="IDS_FORK_UBLOCK_BUTTON_OFF" desc="Interface of the fork.">Content blocking off on this site</message>
+      <message name="IDS_FORK_TAB_GROUP" desc="Interface of the fork.">Tab group</message>
+      <message name="IDS_FORK_TAB_GROUP_CLOSED_TIP" desc="Interface of the fork."><ph name="NAME">$1</ph>, collapsed: click to open it; right-click to edit it</message>
+      <message name="IDS_FORK_TAB_GROUP_OPEN_TIP" desc="Interface of the fork."><ph name="NAME">$1</ph>, open: click to collapse it; right-click to edit it</message>
+      <message name="IDS_FORK_SIDEBAR" desc="Interface of the fork.">Sidebar</message>
+      <message name="IDS_FORK_MORE_TABS_ONE" desc="Interface of the fork.">One more tab</message>
+      <message name="IDS_FORK_MORE_TABS_MANY" desc="Interface of the fork."><ph name="COUNT">$1</ph> more tabs</message>
+      <message name="IDS_FORK_UNTITLED_TAB" desc="Interface of the fork.">Tab</message>
+      <message name="IDS_FORK_NEW_TAB" desc="Interface of the fork.">New tab</message>
+      <message name="IDS_FORK_VPN_ERROR_HEADING" desc="Interface of the fork.">The VPN server doesn't answer</message>
+      <message name="IDS_FORK_VPN_ERROR_SUMMARY" desc="Interface of the fork.">So as not to show the IP of your home to sites, the browser doesn't switch to the direct connection by itself.</message>
+      <message name="IDS_FORK_VPN_DIRECT_BUTTON" desc="Interface of the fork.">Browse directly (reserve)</message>
+      <message name="IDS_FORK_INVIDIOUS_ERROR_HEADING" desc="Interface of the fork.">Your Invidious doesn't answer</message>
+      <message name="IDS_FORK_INVIDIOUS_ERROR_SUMMARY" desc="Interface of the fork.">The browser tried the home address and the Tailscale one. YouTube doesn't open by itself: open it yourself if you want.</message>
+      <message name="IDS_FORK_OPEN_ON_YOUTUBE" desc="Interface of the fork.">Open on YouTube</message>
+      <message name="IDS_FORK_DIRECT_BAR_TITLE" desc="Interface of the fork.">Direct connection.</message>
+      <message name="IDS_FORK_DIRECT_BAR_TEXT" desc="Interface of the fork.">Sites see the IP of your home.</message>
+      <message name="IDS_FORK_DIRECT_CONFIRM_TITLE" desc="Interface of the fork.">Browse without the VPN?</message>
+      <message name="IDS_FORK_DIRECT_CONFIRM_BODY" desc="Interface of the fork.">Sites will see the IP of your home. Direct mode ends when the browser closes or after 24 hours, and goes back to the VPN by itself when the server answers.</message>
+      <message name="IDS_FORK_DIRECT_CONFIRM_OK" desc="Interface of the fork.">Browse directly</message>
+      <message name="IDS_FORK_VPN_BACK_NOTICE" desc="Interface of the fork.">The VPN server answers again: the browser went back to going out through the VPN.</message>
+      <message name="IDS_FORK_VPN_OFF" desc="Interface of the fork.">VPN off</message>
+      <message name="IDS_FORK_VPN_OFF_TIP" desc="Interface of the fork.">VPN off: you go out through the normal connection.</message>
+      <message name="IDS_FORK_VPN_ON_TIP" desc="Interface of the fork.">You go out through the VPN of your server.</message>
+      <message name="IDS_FORK_VPN_DOWN" desc="Interface of the fork.">VPN unreachable</message>
+      <message name="IDS_FORK_VPN_DOWN_TIP" desc="Interface of the fork.">The VPN server doesn't answer: no page goes out directly.</message>
+      <message name="IDS_FORK_VPN_DIRECT" desc="Interface of the fork.">Direct · IP visible</message>
+      <message name="IDS_FORK_VPN_DIRECT_TIP" desc="Interface of the fork.">Direct connection: sites see the IP of your home.</message>
+      <message name="IDS_FORK_CLOSE_CLAUDE" desc="Interface of the fork.">Close Claude</message>
+      <message name="IDS_FORK_CLAUDE_PAGE_DESC" desc="Interface of the fork.">Chats and tasks on the page: Claude in Chrome with your claude.ai subscription.</message>
+      <message name="IDS_FORK_CLAUDE_CHATS_DESC" desc="Interface of the fork.">claude.ai with your account: chats, projects and artifacts, as in the app.</message>
+      <message name="IDS_FORK_THIS_PAGE" desc="Interface of the fork.">This page</message>
+    </messages>
+  </release>
+</grit>

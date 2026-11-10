@@ -96,7 +96,8 @@ prepare_source() {
   # Stesse patch dell'ultima volta: niente reset, così i file non cambiano orario e ninja non
   # ricompila quello che dipende da loro (una build interrotta riparte da dove era).
   local stamp
-  stamp="$(cd "$ROOT" && find patches overlay -type f | LC_ALL=C sort | xargs shasum | shasum | cut -c1-40)"
+  # Con le traduzioni di Cromite: forkctl le mette nei .xtb quando applica le patch.
+  stamp="$(cd "$ROOT" && find patches overlay strings/cromite_it.json -type f | LC_ALL=C sort | xargs shasum | shasum | cut -c1-40)"
   if [ "$(cat "$CHECKOUT/.forkctl-applied" 2>/dev/null)" = "$stamp" ]; then
     say "le nostre patch sono già applicate"
     return

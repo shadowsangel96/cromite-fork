@@ -1,0 +1,1778 @@
+{
+  "_comment": "Le scritte delle nostre patch, in inglese (lingua di partenza) e italiano. tools/fork_strings.py genera da qui i file di Chromium (overlay/). {NOME} è un segnaposto: diventa $1, $2... nell'ordine in cui compare in inglese. pages: dove servono (proxy, site_panel, profilo, settings: pagine del browser; ublock: pannello di uBlock; native: solo C++).",
+  "strings": {
+    "close": {
+      "pages": [
+        "site_panel",
+        "ublock"
+      ],
+      "en": "Close",
+      "it": "Chiudi"
+    },
+    "yes": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Yes",
+      "it": "Sì"
+    },
+    "no": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "No",
+      "it": "No"
+    },
+    "cancel": {
+      "pages": [
+        "native",
+        "settings"
+      ],
+      "en": "Cancel",
+      "it": "Annulla"
+    },
+    "save": {
+      "pages": [
+        "proxy",
+        "settings"
+      ],
+      "en": "Save",
+      "it": "Salva"
+    },
+    "add": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Add",
+      "it": "Aggiungi"
+    },
+    "contentBlocking": {
+      "pages": [
+        "native",
+        "settings",
+        "ublock"
+      ],
+      "en": "Content blocking",
+      "it": "Blocco contenuti"
+    },
+    "yourChats": {
+      "pages": [
+        "native",
+        "profilo"
+      ],
+      "en": "Your chats",
+      "it": "Le tue chat"
+    },
+    "cookiesAndSiteData": {
+      "pages": [
+        "proxy",
+        "site_panel"
+      ],
+      "en": "Cookies and site data",
+      "it": "Cookie e dati dei siti"
+    },
+    "backToVpn": {
+      "pages": [
+        "native",
+        "proxy"
+      ],
+      "en": "Back to the VPN",
+      "it": "Torna alla VPN"
+    },
+    "proxyPageTitle": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Network and privacy",
+      "it": "Rete e privacy"
+    },
+    "proxyVpnTitle": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Personal VPN",
+      "it": "VPN personale"
+    },
+    "proxyVpnIntro": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Only the browser goes out through the VPN of your server. If the server doesn't answer, pages show an error: the browser never goes out directly without you knowing. Home networks and Tailscale stay outside the VPN, so the server itself can always be reached.",
+      "it": "Solo il browser esce dalla VPN del tuo server. Se il server non risponde le pagine danno errore: non si esce mai direttamente senza che tu lo sappia. Restano fuori dalla VPN le reti di casa e Tailscale, così il server stesso si raggiunge sempre."
+    },
+    "proxyVpnAddress": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Proxy address",
+      "it": "Indirizzo del proxy"
+    },
+    "proxyAddressPlaceholder": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "address:port",
+      "it": "indirizzo:porta"
+    },
+    "proxyUrlPlaceholder": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "http://address:port",
+      "it": "http://indirizzo:porta"
+    },
+    "proxyVpnCity": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Exit city",
+      "it": "Città di uscita"
+    },
+    "proxyVpnCityPlaceholder": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Rome",
+      "it": "Roma"
+    },
+    "proxyVpnOn": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Turn on",
+      "it": "Attiva"
+    },
+    "proxyVpnOff": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Turn off",
+      "it": "Disattiva"
+    },
+    "proxyDirectTitle": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Sites that go out directly",
+      "it": "Siti che escono diretti"
+    },
+    "proxyDirectIntro": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "One per line: banks and services that block VPN addresses. These sites see the IP address of your home.",
+      "it": "Uno per riga: banche e servizi che bloccano gli indirizzi delle VPN. Questi siti vedono l'indirizzo IP di casa tua."
+    },
+    "proxySaveList": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Save the list",
+      "it": "Salva l'elenco"
+    },
+    "proxySearchTitle": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Personal search engine",
+      "it": "Motore di ricerca personale"
+    },
+    "proxySearchIntro": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Searches from the address bar go to your SearXNG. If it doesn't answer within a few seconds, that search moves to DuckDuckGo Light by itself.",
+      "it": "Le ricerche dalla barra degli indirizzi vanno al tuo SearXNG. Se non risponde entro qualche secondo, quella ricerca passa da sola a DuckDuckGo Light."
+    },
+    "proxySearchAddress": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "SearXNG address",
+      "it": "Indirizzo di SearXNG"
+    },
+    "proxySearchUse": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Use",
+      "it": "Usa"
+    },
+    "proxySearchRemove": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Remove",
+      "it": "Togli"
+    },
+    "proxyTrackersTitle": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Sites that track",
+      "it": "Siti che tracciano"
+    },
+    "proxyTrackersIntro": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "When you open these sites, the browser goes by itself to their version that doesn't track you, from shared links too. From the site panel (the shield in the address bar) you go back to the original when you need it.",
+      "it": "Aprendo questi siti il browser va da solo alla loro versione che non ti traccia, anche dai link condivisi. Dal pannello del sito (lo scudo nella barra degli indirizzi) torni all'originale quando ti serve."
+    },
+    "proxyRedirectYoutube": {
+      "pages": [
+        "proxy"
+      ],
+      "desc": "After the bold word YouTube.",
+      "en": "on your Invidious, videos inside other sites too",
+      "it": "sul tuo Invidious, anche i video dentro gli altri siti"
+    },
+    "proxyInvidiousHome": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Home address",
+      "it": "Indirizzo di casa"
+    },
+    "proxyInvidiousRemote": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Away from home (Tailscale)",
+      "it": "Fuori casa (Tailscale)"
+    },
+    "proxyRedirectInstagram": {
+      "pages": [
+        "proxy"
+      ],
+      "desc": "After the bold word Instagram.",
+      "en": "on imginn",
+      "it": "su imginn"
+    },
+    "proxyRedirectTiktok": {
+      "pages": [
+        "proxy"
+      ],
+      "desc": "After the bold word TikTok.",
+      "en": "on urlebird. A video opens the page of its author: urlebird puts the words of the description in the address of the video, and the TikTok link doesn't have them.",
+      "it": "su urlebird. Un video apre la pagina del suo autore: urlebird mette nell'indirizzo del video le parole della descrizione, che il link di TikTok non ha."
+    },
+    "proxyCookieTempName": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Temporary:",
+      "it": "Temporanei:"
+    },
+    "proxyCookieTemp": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "the data of a site lasts for the visit and is deleted as soon as you leave it.",
+      "it": "i dati di un sito durano la visita e si cancellano appena lo lasci."
+    },
+    "proxyCookieNormalName": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Normal:",
+      "it": "Normale:"
+    },
+    "proxyCookieNormal": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "as in Chrome, with the cookies of each site kept apart.",
+      "it": "come in Chrome, con i cookie separati per sito."
+    },
+    "proxyCookieBlockName": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Block all:",
+      "it": "Blocca tutti:"
+    },
+    "proxyCookieBlock": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "no site saves data, sign-ins don't work. Only the sites to remember can.",
+      "it": "nessun sito salva dati, i login non funzionano. Valgono solo i siti da ricordare."
+    },
+    "proxyRememberedTitle": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Sites to remember",
+      "it": "Siti da ricordare"
+    },
+    "proxyRememberedIntro": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "One per line. Here you stay signed in: their data is never deleted.",
+      "it": "Uno per riga. Qui resti collegato: i loro dati non si cancellano mai."
+    },
+    "proxyClaudeBlockedTitle": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Claude doesn't enter these sites",
+      "it": "Claude non entra in questi siti"
+    },
+    "proxyClaudeBlockedIntro": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "One per line, for example banks and health care. Claude in Chrome can't read or use them.",
+      "it": "Uno per riga, per esempio banche e sanità. Claude in Chrome non può leggerli né usarli."
+    },
+    "proxyVpnReserve": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Direct reserve connection: your IP is visible.",
+      "it": "Connessione diretta di riserva: il tuo IP è visibile."
+    },
+    "proxyVpnActive": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "On: the browser goes out through {ADDRESS}.",
+      "it": "Attiva: il browser esce da {ADDRESS}."
+    },
+    "proxyVpnInactive": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Off: the browser goes out through the normal connection.",
+      "it": "Spenta: il browser esce dalla connessione normale."
+    },
+    "proxyVpnNeedAddress": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Write the proxy address first.",
+      "it": "Scrivi prima l'indirizzo del proxy."
+    },
+    "proxyChecking": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Checking the addresses…",
+      "it": "Controllo gli indirizzi…"
+    },
+    "proxyInvidiousNoAddress": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Without an address, YouTube stays as it is.",
+      "it": "Senza un indirizzo YouTube resta com'è."
+    },
+    "proxyInvidiousOff": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Off: YouTube stays as it is.",
+      "it": "Spento: YouTube resta com'è."
+    },
+    "proxyInvidiousRestart": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Videos inside other sites move to Invidious from the next start of the browser.",
+      "it": "I video dentro gli altri siti passano a Invidious dal prossimo avvio del browser."
+    },
+    "proxyInvidiousHomeAnswers": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "The home one answers: YouTube opens there.",
+      "it": "Risponde quello di casa: YouTube si apre lì."
+    },
+    "proxyInvidiousRemoteAnswers": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "The Tailscale one answers: YouTube opens there.",
+      "it": "Risponde quello di Tailscale: YouTube si apre lì."
+    },
+    "proxyInvidiousNone": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Neither one answers, or it isn't Invidious: YouTube shows an error until you open it yourself from the page.",
+      "it": "Nessuno dei due risponde, o non è Invidious: YouTube dà errore finché non lo apri tu dalla pagina."
+    },
+    "proxyListSaved": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "List saved: {COUNT} sites.",
+      "it": "Elenco salvato: {COUNT} siti."
+    },
+    "proxyClaudeListSaved": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "List saved: {COUNT} sites. It applies to new tabs: close the ones already open on these sites.",
+      "it": "Elenco salvato: {COUNT} siti. Vale per le schede nuove: chiudi quelle già aperte su questi siti."
+    },
+    "proxySearchActive": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "On: searches go to {ADDRESS}.",
+      "it": "Attivo: le ricerche vanno a {ADDRESS}."
+    },
+    "proxySearchInactive": {
+      "pages": [
+        "proxy"
+      ],
+      "en": "Off: searches go to the default engine.",
+      "it": "Spento: le ricerche vanno al motore predefinito."
+    },
+    "personalSearchName": {
+      "pages": [
+        "native"
+      ],
+      "desc": "Name of the user's own search engine in the list of engines.",
+      "en": "Personal SearXNG",
+      "it": "SearXNG personale"
+    },
+    "sitePanelLabel": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Site information",
+      "it": "Informazioni sul sito"
+    },
+    "sitePanelHowAnswers": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "How the browser answers",
+      "it": "Come risponde il browser"
+    },
+    "sitePanelNoReading": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Nothing read yet",
+      "it": "Nessuna lettura"
+    },
+    "sitePanelCanvasCaption": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Canvas · as the site received it",
+      "it": "Canvas · come l'ha ricevuto il sito"
+    },
+    "sitePanelWebglBlocked": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "WebGL blocked",
+      "it": "WebGL bloccato"
+    },
+    "sitePanelWebglNoImage": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "WebGL · no image",
+      "it": "WebGL · nessuna immagine"
+    },
+    "sitePanelWebglCaption": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "WebGL · as the site received it",
+      "it": "WebGL · come l'ha ricevuto il sito"
+    },
+    "sitePanelRemember": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Remember this site",
+      "it": "Ricorda questo sito"
+    },
+    "sitePanelBlocked": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Trackers and ads blocked",
+      "it": "Tracker e pubblicità bloccati"
+    },
+    "sitePanelPermissions": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Permissions",
+      "it": "Autorizzazioni"
+    },
+    "sitePanelRouteVpn": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Going out through the personal VPN",
+      "it": "Esci dalla VPN personale"
+    },
+    "sitePanelRouteVpnCity": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Going out through the personal VPN ({CITY})",
+      "it": "Esci dalla VPN personale ({CITY})"
+    },
+    "sitePanelRouteDown": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "The VPN server doesn't answer: no page goes out directly",
+      "it": "Il server VPN non risponde: nessuna pagina esce diretta"
+    },
+    "sitePanelRouteDirect": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Direct connection: sites see the IP of your home",
+      "it": "Connessione diretta: i siti vedono l'IP di casa"
+    },
+    "sitePanelRouteOff": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "VPN off: you go out through the normal connection",
+      "it": "VPN spenta: esci dalla connessione normale"
+    },
+    "sitePanelNotUsed": {
+      "pages": [
+        "site_panel"
+      ],
+      "desc": "A fingerprinting category the page didn't read.",
+      "en": "Not used",
+      "it": "Non usata"
+    },
+    "sitePanelFpOne": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "1 attempt blocked",
+      "it": "1 tentativo bloccato"
+    },
+    "sitePanelFpMany": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "{COUNT} attempts blocked",
+      "it": "{COUNT} tentativi bloccati"
+    },
+    "sitePanelFpNone": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "No attempts",
+      "it": "Nessun tentativo"
+    },
+    "sitePanelFpHintUsed": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "The site tried to read these APIs. Here is what the browser answered.",
+      "it": "Il sito ha cercato di leggere queste API. Ecco cosa gli ha risposto il browser."
+    },
+    "sitePanelFpHintNone": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "So far the site hasn't read any of these APIs.",
+      "it": "Finora il sito non ha letto nessuna di queste API."
+    },
+    "sitePanelShowUsed": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Show only the ones used",
+      "it": "Mostra solo quelle usate"
+    },
+    "sitePanelShowAll": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Show all {COUNT} categories",
+      "it": "Mostra tutte e {COUNT} le categorie"
+    },
+    "sitePanelOpenedOn": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Opened on {RESPECTFUL} instead of {SERVICE}",
+      "it": "Aperto su {RESPECTFUL} al posto di {SERVICE}"
+    },
+    "sitePanelOriginalOf": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Original page of {SERVICE}",
+      "it": "Pagina originale di {SERVICE}"
+    },
+    "sitePanelOpenOriginal": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Open the original",
+      "it": "Apri l'originale"
+    },
+    "sitePanelOpenOn": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Open on {RESPECTFUL}",
+      "it": "Apri su {RESPECTFUL}"
+    },
+    "sitePanelRedirectSwitch": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Redirect {SERVICE}",
+      "it": "Reindirizza {SERVICE}"
+    },
+    "sitePanelToSetUp": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "To set up",
+      "it": "Da impostare"
+    },
+    "sitePanelSecure": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Connection is secure",
+      "it": "Connessione sicura"
+    },
+    "sitePanelNotSecure": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Connection is not secure",
+      "it": "Connessione non sicura"
+    },
+    "sitePanelBlockWebglAgain": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Block WebGL on this site again",
+      "it": "Blocca di nuovo WebGL su questo sito"
+    },
+    "sitePanelAllowWebgl": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Allow WebGL on this site (randomized)",
+      "it": "Consenti WebGL su questo sito (randomizzato)"
+    },
+    "sitePanelCookiesInUse": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "{COUNT} in use",
+      "it": "{COUNT} in uso"
+    },
+    "sitePanelNoCookies": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "None",
+      "it": "Nessuno"
+    },
+    "sitePanelNoPermissions": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "None",
+      "it": "Nessuna"
+    },
+    "fpRandomized": {
+      "pages": [
+        "native"
+      ],
+      "en": "Randomized",
+      "it": "Randomizzato"
+    },
+    "fpBlocked": {
+      "pages": [
+        "native"
+      ],
+      "en": "Blocked",
+      "it": "Bloccato"
+    },
+    "fpUniform": {
+      "pages": [
+        "native"
+      ],
+      "en": "Uniform",
+      "it": "Uniformato"
+    },
+    "fpLimited": {
+      "pages": [
+        "native"
+      ],
+      "en": "Limited",
+      "it": "Limitato"
+    },
+    "fpAllowed": {
+      "pages": [
+        "native"
+      ],
+      "en": "Allowed",
+      "it": "Consentito"
+    },
+    "fpNotCounted": {
+      "pages": [
+        "native"
+      ],
+      "en": "Not counted",
+      "it": "Non contata"
+    },
+    "fpCatCanvas": {
+      "pages": [
+        "native"
+      ],
+      "en": "Canvas",
+      "it": "Canvas"
+    },
+    "fpCatWebgl": {
+      "pages": [
+        "native"
+      ],
+      "en": "WebGL",
+      "it": "WebGL"
+    },
+    "fpCatAudio": {
+      "pages": [
+        "native"
+      ],
+      "en": "Audio",
+      "it": "Audio"
+    },
+    "fpCatFonts": {
+      "pages": [
+        "native"
+      ],
+      "en": "Fonts",
+      "it": "Font"
+    },
+    "fpCatScreen": {
+      "pages": [
+        "native"
+      ],
+      "en": "Screen",
+      "it": "Schermo"
+    },
+    "fpCatNavigator": {
+      "pages": [
+        "native"
+      ],
+      "en": "Navigator and Client Hints",
+      "it": "Navigator e Client Hints"
+    },
+    "fpCatWebgpu": {
+      "pages": [
+        "native"
+      ],
+      "en": "WebGPU",
+      "it": "WebGPU"
+    },
+    "fpCatClientRects": {
+      "pages": [
+        "native"
+      ],
+      "en": "ClientRects",
+      "it": "ClientRects"
+    },
+    "fpCatTimeZone": {
+      "pages": [
+        "native"
+      ],
+      "en": "Time zone",
+      "it": "Fuso orario"
+    },
+    "fpCatWebrtc": {
+      "pages": [
+        "native"
+      ],
+      "en": "WebRTC",
+      "it": "WebRTC"
+    },
+    "fpCatStorage": {
+      "pages": [
+        "native"
+      ],
+      "en": "Storage",
+      "it": "Storage"
+    },
+    "fpCatPermissions": {
+      "pages": [
+        "native"
+      ],
+      "en": "Permissions",
+      "it": "Permessi"
+    },
+    "fpCatBattery": {
+      "pages": [
+        "native"
+      ],
+      "en": "Battery",
+      "it": "Batteria"
+    },
+    "fpCatEval": {
+      "pages": [
+        "native"
+      ],
+      "en": "eval",
+      "it": "eval"
+    },
+    "fpCatReferrer": {
+      "pages": [
+        "native"
+      ],
+      "en": "Referrer",
+      "it": "Referrer"
+    },
+    "siteInfoFpOne": {
+      "pages": [
+        "native"
+      ],
+      "en": "Site information: 1 fingerprinting attempt blocked",
+      "it": "Informazioni sul sito: 1 tentativo di fingerprinting bloccato"
+    },
+    "siteInfoFpMany": {
+      "pages": [
+        "native"
+      ],
+      "en": "Site information: {COUNT} fingerprinting attempts blocked",
+      "it": "Informazioni sul sito: {COUNT} tentativi di fingerprinting bloccati"
+    },
+    "profiloLabel": {
+      "pages": [
+        "profilo"
+      ],
+      "en": "Profile",
+      "it": "Profilo"
+    },
+    "profiloNotSignedIn": {
+      "pages": [
+        "profilo"
+      ],
+      "en": "You haven't signed in yet",
+      "it": "Non hai ancora fatto l'accesso"
+    },
+    "profiloIntro": {
+      "pages": [
+        "profilo"
+      ],
+      "en": "A single sign-in with your Claude account, for Claude in Chrome and your chats.",
+      "it": "Un solo accesso con il tuo account Claude per Claude in Chrome e le tue chat."
+    },
+    "profiloSignIn": {
+      "pages": [
+        "profilo"
+      ],
+      "en": "Sign in with Claude",
+      "it": "Accedi con Claude"
+    },
+    "profiloAccount": {
+      "pages": [
+        "profilo"
+      ],
+      "en": "Claude account",
+      "it": "Account Claude"
+    },
+    "profiloSignedIn": {
+      "pages": [
+        "profilo"
+      ],
+      "en": "Signed in on claude.ai",
+      "it": "Accesso fatto su claude.ai"
+    },
+    "profiloSignOut": {
+      "pages": [
+        "profilo"
+      ],
+      "en": "Sign out",
+      "it": "Esci"
+    },
+    "profiloOthers": {
+      "pages": [
+        "profilo"
+      ],
+      "en": "Other profiles and guest",
+      "it": "Altri profili e ospite"
+    },
+    "avatarClaudeLinked": {
+      "pages": [
+        "native"
+      ],
+      "en": "Profile: Claude account linked",
+      "it": "Profilo: account Claude collegato"
+    },
+    "avatarSignIn": {
+      "pages": [
+        "native"
+      ],
+      "en": "Profile: sign in with Claude",
+      "it": "Profilo: accedi con Claude"
+    },
+    "settingsCompactTabs": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Tabs in the toolbar",
+      "it": "Schede nella barra degli strumenti"
+    },
+    "settingsCompactTabsSub": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Compact, like Safari. Applies to the windows you open afterwards.",
+      "it": "Compatte, come Safari. Vale per le finestre che apri dopo."
+    },
+    "ublockIntegrated": {
+      "pages": [
+        "settings"
+      ],
+      "en": "{NAME}, built into the browser",
+      "it": "{NAME}, integrato nel browser"
+    },
+    "ublockIntro": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Blocks ads, trackers and dangerous sites on every page. To turn it off on a single site, use the button to the right of the address.",
+      "it": "Blocca pubblicità, tracker e siti pericolosi in tutte le pagine. Per spegnerlo su un solo sito c'è il pulsante a destra dell'indirizzo."
+    },
+    "ublockFilterCount": {
+      "pages": [
+        "settings"
+      ],
+      "en": "{NETWORK} network filters and {COSMETIC} cosmetic filters in use.",
+      "it": "{NETWORK} filtri di rete e {COSMETIC} filtri cosmetici in uso."
+    },
+    "ublockNoAnswer": {
+      "pages": [
+        "settings"
+      ],
+      "en": "uBlock Origin doesn't answer. Try again in a moment, or restart the browser.",
+      "it": "uBlock Origin non risponde. Riprova tra poco o riavvia il browser."
+    },
+    "ublockStarting": {
+      "pages": [
+        "settings"
+      ],
+      "en": "uBlock Origin is starting…",
+      "it": "uBlock Origin si sta avviando…"
+    },
+    "ublockLists": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Filter lists",
+      "it": "Liste di filtri"
+    },
+    "ublockActiveOf": {
+      "pages": [
+        "settings"
+      ],
+      "en": "{ON} active out of {TOTAL}",
+      "it": "{ON} attive su {TOTAL}"
+    },
+    "ublockAutoUpdate": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Update the lists by themselves",
+      "it": "Aggiorna le liste da sole"
+    },
+    "ublockAutoUpdateSub": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Each list is downloaded again from its site when it expires.",
+      "it": "Ogni lista si scarica di nuovo dal suo sito quando scade."
+    },
+    "ublockUpdateNow": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Update now",
+      "it": "Aggiorna adesso"
+    },
+    "ublockUpdating": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Updating…",
+      "it": "Aggiornamento in corso…"
+    },
+    "ublockLastUpdate": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Last updated {WHEN}",
+      "it": "Ultimo aggiornamento {WHEN}"
+    },
+    "ublockListUsed": {
+      "pages": [
+        "settings"
+      ],
+      "en": "{USED} filters used out of {TOTAL}",
+      "it": "{USED} filtri usati su {TOTAL}"
+    },
+    "ublockListUpdated": {
+      "pages": [
+        "settings"
+      ],
+      "en": "updated {WHEN}",
+      "it": "aggiornata {WHEN}"
+    },
+    "ublockListBundled": {
+      "pages": [
+        "settings"
+      ],
+      "en": "copy included in uBlock Origin, to be updated",
+      "it": "copia inclusa in uBlock Origin, da aggiornare"
+    },
+    "ublockRemoveList": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Remove the list",
+      "it": "Togli la lista"
+    },
+    "ublockAddList": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Add a list",
+      "it": "Aggiungi una lista"
+    },
+    "ublockListAddress": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Address of the list",
+      "it": "Indirizzo della lista"
+    },
+    "ublockListPlaceholder": {
+      "pages": [
+        "settings"
+      ],
+      "en": "https://example.org/list.txt",
+      "it": "https://esempio.org/lista.txt"
+    },
+    "ublockListsApplying": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Applying the lists…",
+      "it": "Applico le liste…"
+    },
+    "ublockListsApplied": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Lists applied.",
+      "it": "Liste applicate."
+    },
+    "ublockListBadUrl": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Write the full address of the list, with https://.",
+      "it": "Scrivi l'indirizzo completo della lista, con https://."
+    },
+    "ublockGroupDefault": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Built in",
+      "it": "Integrate"
+    },
+    "ublockGroupAds": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Ads",
+      "it": "Pubblicità"
+    },
+    "ublockGroupPrivacy": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Privacy",
+      "it": "Privacy"
+    },
+    "ublockGroupMalware": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Malware and dangerous sites",
+      "it": "Malware e siti pericolosi"
+    },
+    "ublockGroupMultipurpose": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Multipurpose",
+      "it": "Multiuso"
+    },
+    "ublockGroupCookies": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Cookie notices",
+      "it": "Avvisi sui cookie"
+    },
+    "ublockGroupSocial": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Social buttons",
+      "it": "Pulsanti dei social"
+    },
+    "ublockGroupAnnoyances": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Annoyances",
+      "it": "Elementi fastidiosi"
+    },
+    "ublockGroupRegions": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Regions and languages",
+      "it": "Regioni e lingue"
+    },
+    "ublockGroupUnknown": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Other",
+      "it": "Altre"
+    },
+    "ublockGroupCustom": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Added by you",
+      "it": "Aggiunte da te"
+    },
+    "ublockAgoNow": {
+      "pages": [
+        "settings"
+      ],
+      "en": "just now",
+      "it": "adesso"
+    },
+    "ublockAgoMinute": {
+      "pages": [
+        "settings"
+      ],
+      "en": "1 minute ago",
+      "it": "1 minuto fa"
+    },
+    "ublockAgoMinutes": {
+      "pages": [
+        "settings"
+      ],
+      "en": "{COUNT} minutes ago",
+      "it": "{COUNT} minuti fa"
+    },
+    "ublockAgoHour": {
+      "pages": [
+        "settings"
+      ],
+      "en": "1 hour ago",
+      "it": "1 ora fa"
+    },
+    "ublockAgoHours": {
+      "pages": [
+        "settings"
+      ],
+      "en": "{COUNT} hours ago",
+      "it": "{COUNT} ore fa"
+    },
+    "ublockAgoYesterday": {
+      "pages": [
+        "settings"
+      ],
+      "en": "yesterday",
+      "it": "ieri"
+    },
+    "ublockAgoDays": {
+      "pages": [
+        "settings"
+      ],
+      "en": "{COUNT} days ago",
+      "it": "{COUNT} giorni fa"
+    },
+    "ublockFilters": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Personal filters",
+      "it": "Filtri personali"
+    },
+    "ublockUseFilters": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Use the personal filters",
+      "it": "Usa i filtri personali"
+    },
+    "ublockFiltersHelp": {
+      "pages": [
+        "settings"
+      ],
+      "en": "One filter per line, in the {BEGIN_LINK}syntax of uBlock Origin{END_LINK}. \"Hide an element\" adds them here too.",
+      "it": "Un filtro per riga, nella {BEGIN_LINK}sintassi di uBlock Origin{END_LINK}. Anche \"Nascondi un elemento\" li aggiunge qui.",
+      "ph": {
+        "BEGIN_LINK": "<a href=\"https://github.com/gorhill/uBlock/wiki/Static-filter-syntax\" target=\"_blank\">",
+        "END_LINK": "</a>"
+      }
+    },
+    "ublockFilterOne": {
+      "pages": [
+        "settings"
+      ],
+      "en": "1 filter",
+      "it": "1 filtro"
+    },
+    "ublockFilterMany": {
+      "pages": [
+        "settings"
+      ],
+      "en": "{COUNT} filters",
+      "it": "{COUNT} filtri"
+    },
+    "ublockNotInUse": {
+      "pages": [
+        "settings"
+      ],
+      "en": "{WHAT}, not in use",
+      "it": "{WHAT}, non in uso"
+    },
+    "ublockSaving": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Saving…",
+      "it": "Salvo…"
+    },
+    "ublockFiltersSaved": {
+      "pages": [
+        "settings"
+      ],
+      "desc": "Personal filters were saved.",
+      "en": "Saved.",
+      "it": "Salvati."
+    },
+    "ublockRules": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Rules",
+      "it": "Regole"
+    },
+    "ublockRulesHelp": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Dynamic filtering rules, one per line: source site, destination site, request type and action ({BEGIN_LINK}how to write them{END_LINK}). They apply right away and stay after a restart.",
+      "it": "Regole di filtraggio dinamico, una per riga: sito di partenza, sito di destinazione, tipo di richiesta e azione ({BEGIN_LINK}come si scrivono{END_LINK}). Valgono subito e restano dopo il riavvio.",
+      "ph": {
+        "BEGIN_LINK": "<a href=\"https://github.com/gorhill/uBlock/wiki/Dynamic-filtering:-rule-syntax\" target=\"_blank\">",
+        "END_LINK": "</a>"
+      }
+    },
+    "ublockRuleOne": {
+      "pages": [
+        "settings"
+      ],
+      "en": "1 rule",
+      "it": "1 regola"
+    },
+    "ublockRuleMany": {
+      "pages": [
+        "settings"
+      ],
+      "en": "{COUNT} rules",
+      "it": "{COUNT} regole"
+    },
+    "ublockRulesSaved": {
+      "pages": [
+        "settings"
+      ],
+      "desc": "Rules were saved.",
+      "en": "Saved.",
+      "it": "Salvate."
+    },
+    "ublockRulesRejected": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Saved. Not valid, so removed: {LINES}",
+      "it": "Salvate. Non valide, quindi tolte: {LINES}"
+    },
+    "ublockSites": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Excluded sites",
+      "it": "Siti esclusi"
+    },
+    "ublockSitesHelp": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Nothing is blocked here. The power button in the \"Content blocking\" panel adds sites to this list and removes them.",
+      "it": "Qui non si blocca niente. Il pulsante di accensione nel pannello \"Blocco contenuti\" aggiunge e toglie i siti da questo elenco."
+    },
+    "ublockNoSites": {
+      "pages": [
+        "settings"
+      ],
+      "en": "No excluded sites",
+      "it": "Nessun sito escluso"
+    },
+    "ublockSitesNone": {
+      "pages": [
+        "settings"
+      ],
+      "en": "None",
+      "it": "Nessuno"
+    },
+    "ublockSiteOne": {
+      "pages": [
+        "settings"
+      ],
+      "en": "1 site",
+      "it": "1 sito"
+    },
+    "ublockSiteMany": {
+      "pages": [
+        "settings"
+      ],
+      "en": "{COUNT} sites",
+      "it": "{COUNT} siti"
+    },
+    "ublockRemoveSite": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Remove the site",
+      "it": "Togli il sito"
+    },
+    "ublockAddSite": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Add a site",
+      "it": "Aggiungi un sito"
+    },
+    "ublockSiteLabel": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Site to exclude",
+      "it": "Sito da escludere"
+    },
+    "ublockSitePlaceholder": {
+      "pages": [
+        "settings"
+      ],
+      "en": "example.org",
+      "it": "esempio.org"
+    },
+    "ublockMore": {
+      "pages": [
+        "settings"
+      ],
+      "en": "More settings of uBlock Origin",
+      "it": "Altre impostazioni di uBlock Origin"
+    },
+    "ublockMoreSub": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Backup, advanced settings and appearance, in the page of uBlock Origin",
+      "it": "Backup, impostazioni avanzate e aspetto, nella pagina di uBlock Origin"
+    },
+    "bloccoSubtitle": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "uBlock Origin, built into the browser",
+      "it": "uBlock Origin, integrato nel browser"
+    },
+    "bloccoOnAt": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "On for {SITE}",
+      "it": "Attivo su {SITE}"
+    },
+    "bloccoOffAt": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "Off for {SITE}",
+      "it": "Spento su {SITE}"
+    },
+    "bloccoHintOn": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "Click to turn it off on this site only",
+      "it": "Tocca per spegnerlo solo su questo sito"
+    },
+    "bloccoHintOff": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "Click to turn it back on",
+      "it": "Tocca per riattivarlo"
+    },
+    "bloccoBlockedPage": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "blocked on this page",
+      "it": "bloccati in questa pagina"
+    },
+    "bloccoOutOf": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "out of",
+      "it": "su"
+    },
+    "bloccoExternal": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "external domains blocked",
+      "it": "domini esterni bloccati"
+    },
+    "bloccoBlockedHere": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "Blocked on this site",
+      "it": "Bloccati su questo sito"
+    },
+    "bloccoAlsoBlock": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "On this site, also block",
+      "it": "Su questo sito blocca anche"
+    },
+    "bloccoPopups": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "Pop-ups",
+      "it": "Popup"
+    },
+    "bloccoLargeMedia": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "Large media",
+      "it": "Media grandi"
+    },
+    "bloccoFonts": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "Remote fonts",
+      "it": "Font esterni"
+    },
+    "bloccoScripts": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "JavaScript",
+      "it": "JavaScript"
+    },
+    "bloccoPicker": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "Hide an element",
+      "it": "Nascondi un elemento"
+    },
+    "bloccoLogger": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "Logger",
+      "it": "Registro"
+    },
+    "bloccoSettings": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "Settings",
+      "it": "Impostazioni"
+    },
+    "bloccoNothingYet": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "Nothing to block on this page so far.",
+      "it": "Finora niente da bloccare in questa pagina."
+    },
+    "bloccoOffText": {
+      "pages": [
+        "ublock"
+      ],
+      "en": "Nothing is blocked on this site: ads and trackers can load.",
+      "it": "Su questo sito non blocchiamo niente: pubblicità e tracker possono caricarsi."
+    },
+    "ublockButtonCount": {
+      "pages": [
+        "native"
+      ],
+      "en": "Content blocking: {COUNT} items blocked",
+      "it": "Blocco contenuti: {COUNT} elementi bloccati"
+    },
+    "ublockButtonOff": {
+      "pages": [
+        "native"
+      ],
+      "en": "Content blocking off on this site",
+      "it": "Blocco contenuti spento su questo sito"
+    },
+    "tabGroup": {
+      "pages": [
+        "native"
+      ],
+      "en": "Tab group",
+      "it": "Gruppo di schede"
+    },
+    "tabGroupClosedTip": {
+      "pages": [
+        "native"
+      ],
+      "en": "{NAME}, collapsed: click to open it; right-click to edit it",
+      "it": "{NAME}, chiuso: clic per aprirlo; tasto destro per modificarlo"
+    },
+    "tabGroupOpenTip": {
+      "pages": [
+        "native"
+      ],
+      "en": "{NAME}, open: click to collapse it; right-click to edit it",
+      "it": "{NAME}, aperto: clic per chiuderlo; tasto destro per modificarlo"
+    },
+    "sidebar": {
+      "pages": [
+        "native"
+      ],
+      "en": "Sidebar",
+      "it": "Barra laterale"
+    },
+    "moreTabsOne": {
+      "pages": [
+        "native"
+      ],
+      "en": "One more tab",
+      "it": "Un'altra scheda"
+    },
+    "moreTabsMany": {
+      "pages": [
+        "native"
+      ],
+      "en": "{COUNT} more tabs",
+      "it": "Altre {COUNT} schede"
+    },
+    "untitledTab": {
+      "pages": [
+        "native"
+      ],
+      "en": "Tab",
+      "it": "Scheda"
+    },
+    "newTab": {
+      "pages": [
+        "native"
+      ],
+      "en": "New tab",
+      "it": "Nuova scheda"
+    },
+    "vpnErrorHeading": {
+      "pages": [
+        "native"
+      ],
+      "en": "The VPN server doesn't answer",
+      "it": "Il server VPN non risponde"
+    },
+    "vpnErrorSummary": {
+      "pages": [
+        "native"
+      ],
+      "en": "So as not to show the IP of your home to sites, the browser doesn't switch to the direct connection by itself.",
+      "it": "Per non mostrare l'IP di casa ai siti, il browser non passa da solo alla connessione diretta."
+    },
+    "vpnDirectButton": {
+      "pages": [
+        "native"
+      ],
+      "en": "Browse directly (reserve)",
+      "it": "Naviga diretto (riserva)"
+    },
+    "invidiousErrorHeading": {
+      "pages": [
+        "native"
+      ],
+      "en": "Your Invidious doesn't answer",
+      "it": "Il tuo Invidious non risponde"
+    },
+    "invidiousErrorSummary": {
+      "pages": [
+        "native"
+      ],
+      "en": "The browser tried the home address and the Tailscale one. YouTube doesn't open by itself: open it yourself if you want.",
+      "it": "Il browser ha provato l'indirizzo di casa e quello di Tailscale. YouTube non si apre da solo: se vuoi, aprilo tu."
+    },
+    "openOnYoutube": {
+      "pages": [
+        "native"
+      ],
+      "en": "Open on YouTube",
+      "it": "Apri su YouTube"
+    },
+    "directBarTitle": {
+      "pages": [
+        "native"
+      ],
+      "en": "Direct connection.",
+      "it": "Connessione diretta."
+    },
+    "directBarText": {
+      "pages": [
+        "native"
+      ],
+      "en": "Sites see the IP of your home.",
+      "it": "I siti vedono l'IP di casa."
+    },
+    "directConfirmTitle": {
+      "pages": [
+        "native"
+      ],
+      "en": "Browse without the VPN?",
+      "it": "Navigare senza VPN?"
+    },
+    "directConfirmBody": {
+      "pages": [
+        "native"
+      ],
+      "en": "Sites will see the IP of your home. Direct mode ends when the browser closes or after 24 hours, and goes back to the VPN by itself when the server answers.",
+      "it": "I siti vedranno l'IP di casa. La modalità diretta scade alla chiusura del browser o dopo 24 ore, e torna da sola alla VPN quando il server risponde."
+    },
+    "directConfirmOk": {
+      "pages": [
+        "native"
+      ],
+      "en": "Browse directly",
+      "it": "Naviga diretto"
+    },
+    "vpnBackNotice": {
+      "pages": [
+        "native"
+      ],
+      "en": "The VPN server answers again: the browser went back to going out through the VPN.",
+      "it": "Il server VPN risponde di nuovo: il browser è tornato a uscire dalla VPN."
+    },
+    "vpnOff": {
+      "pages": [
+        "native"
+      ],
+      "en": "VPN off",
+      "it": "VPN spenta"
+    },
+    "vpnOffTip": {
+      "pages": [
+        "native"
+      ],
+      "en": "VPN off: you go out through the normal connection.",
+      "it": "VPN spenta: esci dalla connessione normale."
+    },
+    "vpnOnTip": {
+      "pages": [
+        "native"
+      ],
+      "en": "You go out through the VPN of your server.",
+      "it": "Esci dalla VPN del tuo server."
+    },
+    "vpnDown": {
+      "pages": [
+        "native"
+      ],
+      "en": "VPN unreachable",
+      "it": "VPN non raggiungibile"
+    },
+    "vpnDownTip": {
+      "pages": [
+        "native"
+      ],
+      "en": "The VPN server doesn't answer: no page goes out directly.",
+      "it": "Il server VPN non risponde: nessuna pagina esce diretta."
+    },
+    "vpnDirect": {
+      "pages": [
+        "native"
+      ],
+      "en": "Direct · IP visible",
+      "it": "Diretto · IP visibile"
+    },
+    "vpnDirectTip": {
+      "pages": [
+        "native"
+      ],
+      "en": "Direct connection: sites see the IP of your home.",
+      "it": "Connessione diretta: i siti vedono l'IP di casa."
+    },
+    "closeClaude": {
+      "pages": [
+        "native"
+      ],
+      "en": "Close Claude",
+      "it": "Chiudi Claude"
+    },
+    "claudePageDesc": {
+      "pages": [
+        "native"
+      ],
+      "en": "Chats and tasks on the page: Claude in Chrome with your claude.ai subscription.",
+      "it": "Chat e \"Fallo tu\": Claude in Chrome con il tuo abbonamento claude.ai."
+    },
+    "claudeChatsDesc": {
+      "pages": [
+        "native"
+      ],
+      "en": "claude.ai with your account: chats, projects and artifacts, as in the app.",
+      "it": "claude.ai con il tuo account: chat, progetti e artifact come nell'app."
+    },
+    "thisPage": {
+      "pages": [
+        "native"
+      ],
+      "en": "This page",
+      "it": "Questa pagina"
+    }
+  }
+}

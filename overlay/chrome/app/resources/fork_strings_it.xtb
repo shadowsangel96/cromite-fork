@@ -1,0 +1,254 @@
+<?xml version="1.0" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="it">
+<translation id="6040143037577758943">Chiudi</translation>
+<translation id="1426410128494586442">Sì</translation>
+<translation id="4250680216510889253">No</translation>
+<translation id="7658239707568436148">Annulla</translation>
+<translation id="5317780077021120954">Salva</translation>
+<translation id="7791543448312431591">Aggiungi</translation>
+<translation id="5156555743898067993">Blocco contenuti</translation>
+<translation id="2644115636972932058">Le tue chat</translation>
+<translation id="2546283357679194313">Cookie e dati dei siti</translation>
+<translation id="2443959318655994103">Torna alla VPN</translation>
+<translation id="8635725168678248466">Rete e privacy</translation>
+<translation id="8135275630838802520">VPN personale</translation>
+<translation id="308474495189085859">Solo il browser esce dalla VPN del tuo server. Se il server non risponde le pagine danno errore: non si esce mai direttamente senza che tu lo sappia. Restano fuori dalla VPN le reti di casa e Tailscale, così il server stesso si raggiunge sempre.</translation>
+<translation id="3704746408166944497">Indirizzo del proxy</translation>
+<translation id="8198241958841181600">indirizzo:porta</translation>
+<translation id="9083340530674725485">http://indirizzo:porta</translation>
+<translation id="3862222575545576528">Città di uscita</translation>
+<translation id="2254605151799527494">Roma</translation>
+<translation id="5860491529813859533">Attiva</translation>
+<translation id="1036348656032585052">Disattiva</translation>
+<translation id="6508220432342277278">Siti che escono diretti</translation>
+<translation id="4555711741541409270">Uno per riga: banche e servizi che bloccano gli indirizzi delle VPN. Questi siti vedono l'indirizzo IP di casa tua.</translation>
+<translation id="8595358816937168646">Salva l'elenco</translation>
+<translation id="6479700714768069818">Motore di ricerca personale</translation>
+<translation id="7688201022318573720">Le ricerche dalla barra degli indirizzi vanno al tuo SearXNG. Se non risponde entro qualche secondo, quella ricerca passa da sola a DuckDuckGo Light.</translation>
+<translation id="434281278434166554">Indirizzo di SearXNG</translation>
+<translation id="3280734926621805458">Usa</translation>
+<translation id="1181037720776840403">Togli</translation>
+<translation id="1988282151495288254">Siti che tracciano</translation>
+<translation id="3790733112231720673">Aprendo questi siti il browser va da solo alla loro versione che non ti traccia, anche dai link condivisi. Dal pannello del sito (lo scudo nella barra degli indirizzi) torni all'originale quando ti serve.</translation>
+<translation id="7408448990175454119">sul tuo Invidious, anche i video dentro gli altri siti</translation>
+<translation id="5679086391497468752">Indirizzo di casa</translation>
+<translation id="8368577706451965659">Fuori casa (Tailscale)</translation>
+<translation id="2493594355836281720">su imginn</translation>
+<translation id="1233974619822054452">su urlebird. Un video apre la pagina del suo autore: urlebird mette nell'indirizzo del video le parole della descrizione, che il link di TikTok non ha.</translation>
+<translation id="4055308316470957341">Temporanei:</translation>
+<translation id="4932593099860824457">i dati di un sito durano la visita e si cancellano appena lo lasci.</translation>
+<translation id="8165203699604444387">Normale:</translation>
+<translation id="6951291922811854778">come in Chrome, con i cookie separati per sito.</translation>
+<translation id="6379067041319439639">Blocca tutti:</translation>
+<translation id="6268874255637431088">nessun sito salva dati, i login non funzionano. Valgono solo i siti da ricordare.</translation>
+<translation id="4410630789114939416">Siti da ricordare</translation>
+<translation id="1472244992334242296">Uno per riga. Qui resti collegato: i loro dati non si cancellano mai.</translation>
+<translation id="5704470470786447572">Claude non entra in questi siti</translation>
+<translation id="624148745353689861">Uno per riga, per esempio banche e sanità. Claude in Chrome non può leggerli né usarli.</translation>
+<translation id="7920826491689411430">Connessione diretta di riserva: il tuo IP è visibile.</translation>
+<translation id="6405303356523289994">Attiva: il browser esce da <ph name="ADDRESS"/>.</translation>
+<translation id="4969890603082537650">Spenta: il browser esce dalla connessione normale.</translation>
+<translation id="894950886513612381">Scrivi prima l'indirizzo del proxy.</translation>
+<translation id="2047521472966596221">Controllo gli indirizzi…</translation>
+<translation id="1973143823829437797">Senza un indirizzo YouTube resta com'è.</translation>
+<translation id="4360403407020177893">Spento: YouTube resta com'è.</translation>
+<translation id="2872408640460364195">I video dentro gli altri siti passano a Invidious dal prossimo avvio del browser.</translation>
+<translation id="2144491402478705247">Risponde quello di casa: YouTube si apre lì.</translation>
+<translation id="9018799065770732168">Risponde quello di Tailscale: YouTube si apre lì.</translation>
+<translation id="5678963517632525043">Nessuno dei due risponde, o non è Invidious: YouTube dà errore finché non lo apri tu dalla pagina.</translation>
+<translation id="3099325466993348851">Elenco salvato: <ph name="COUNT"/> siti.</translation>
+<translation id="3673715916930276768">Elenco salvato: <ph name="COUNT"/> siti. Vale per le schede nuove: chiudi quelle già aperte su questi siti.</translation>
+<translation id="6063498660173008451">Attivo: le ricerche vanno a <ph name="ADDRESS"/>.</translation>
+<translation id="4670984014043760906">Spento: le ricerche vanno al motore predefinito.</translation>
+<translation id="7783555545415719917">SearXNG personale</translation>
+<translation id="3328801116991980348">Informazioni sul sito</translation>
+<translation id="3711381520041054801">Come risponde il browser</translation>
+<translation id="5182351884554831239">Nessuna lettura</translation>
+<translation id="4094336228974674727">Canvas · come l'ha ricevuto il sito</translation>
+<translation id="7257924304028256009">WebGL bloccato</translation>
+<translation id="9141966764309122775">WebGL · nessuna immagine</translation>
+<translation id="4976184754075494700">WebGL · come l'ha ricevuto il sito</translation>
+<translation id="8300427768242483190">Ricorda questo sito</translation>
+<translation id="8339721406542812579">Tracker e pubblicità bloccati</translation>
+<translation id="1637273283927712720">Autorizzazioni</translation>
+<translation id="6243700214048848419">Esci dalla VPN personale</translation>
+<translation id="8003996918021053881">Esci dalla VPN personale (<ph name="CITY"/>)</translation>
+<translation id="2650108869274356731">Il server VPN non risponde: nessuna pagina esce diretta</translation>
+<translation id="3047167900953138279">Connessione diretta: i siti vedono l'IP di casa</translation>
+<translation id="8109098325852856926">VPN spenta: esci dalla connessione normale</translation>
+<translation id="3088131115270438050">Non usata</translation>
+<translation id="2975100616012982960">1 tentativo bloccato</translation>
+<translation id="3737751323928703764"><ph name="COUNT"/> tentativi bloccati</translation>
+<translation id="5960335065368519027">Nessun tentativo</translation>
+<translation id="7064417062102848382">Il sito ha cercato di leggere queste API. Ecco cosa gli ha risposto il browser.</translation>
+<translation id="6441089398190114159">Finora il sito non ha letto nessuna di queste API.</translation>
+<translation id="1932865148286118084">Mostra solo quelle usate</translation>
+<translation id="2454406049175180319">Mostra tutte e <ph name="COUNT"/> le categorie</translation>
+<translation id="8722612310427176420">Aperto su <ph name="RESPECTFUL"/> al posto di <ph name="SERVICE"/></translation>
+<translation id="2165379013937874641">Pagina originale di <ph name="SERVICE"/></translation>
+<translation id="1772350678780984387">Apri l'originale</translation>
+<translation id="1116493873360144848">Apri su <ph name="RESPECTFUL"/></translation>
+<translation id="2108157389744416017">Reindirizza <ph name="SERVICE"/></translation>
+<translation id="7737515880040904801">Da impostare</translation>
+<translation id="8211406090763984747">Connessione sicura</translation>
+<translation id="2149968176347646218">Connessione non sicura</translation>
+<translation id="1998250021940166333">Blocca di nuovo WebGL su questo sito</translation>
+<translation id="4938442338393315110">Consenti WebGL su questo sito (randomizzato)</translation>
+<translation id="8494296445725514131"><ph name="COUNT"/> in uso</translation>
+<translation id="2255001020879042681">Nessuno</translation>
+<translation id="5616722655173625532">Nessuna</translation>
+<translation id="5817768431796547577">Randomizzato</translation>
+<translation id="5677928146339483299">Bloccato</translation>
+<translation id="8184472985242519288">Uniformato</translation>
+<translation id="8944485226638699751">Limitato</translation>
+<translation id="4278390842282768270">Consentito</translation>
+<translation id="7329017456190376548">Non contata</translation>
+<translation id="7972837668077967426">Canvas</translation>
+<translation id="4910021444507283344">WebGL</translation>
+<translation id="3616113530831147358">Audio</translation>
+<translation id="6468485451923838994">Font</translation>
+<translation id="3441653493275994384">Schermo</translation>
+<translation id="2220791502146563060">Navigator e Client Hints</translation>
+<translation id="7108831373089538108">WebGPU</translation>
+<translation id="2125523437429715516">ClientRects</translation>
+<translation id="2059913712424898428">Fuso orario</translation>
+<translation id="6368671810229507360">WebRTC</translation>
+<translation id="885701979325669005">Storage</translation>
+<translation id="1859419095971616236">Permessi</translation>
+<translation id="6232017090690406397">Batteria</translation>
+<translation id="3381393945836050036">eval</translation>
+<translation id="3958767829706206307">Referrer</translation>
+<translation id="2036657462443771687">Informazioni sul sito: 1 tentativo di fingerprinting bloccato</translation>
+<translation id="5345037342474285740">Informazioni sul sito: <ph name="COUNT"/> tentativi di fingerprinting bloccati</translation>
+<translation id="5542132724887566711">Profilo</translation>
+<translation id="8834419122625765073">Non hai ancora fatto l'accesso</translation>
+<translation id="200519121329895339">Un solo accesso con il tuo account Claude per Claude in Chrome e le tue chat.</translation>
+<translation id="1547182868293481880">Accedi con Claude</translation>
+<translation id="3253392025008686290">Account Claude</translation>
+<translation id="9155825693962425868">Accesso fatto su claude.ai</translation>
+<translation id="5222676887888702881">Esci</translation>
+<translation id="2375547028593399388">Altri profili e ospite</translation>
+<translation id="922877251124409327">Profilo: account Claude collegato</translation>
+<translation id="773438923336720439">Profilo: accedi con Claude</translation>
+<translation id="1703414897960241371">Schede nella barra degli strumenti</translation>
+<translation id="173666255494793386">Compatte, come Safari. Vale per le finestre che apri dopo.</translation>
+<translation id="4809667394477755111"><ph name="NAME"/>, integrato nel browser</translation>
+<translation id="6228324901909974185">Blocca pubblicità, tracker e siti pericolosi in tutte le pagine. Per spegnerlo su un solo sito c'è il pulsante a destra dell'indirizzo.</translation>
+<translation id="1624108739569780787"><ph name="NETWORK"/> filtri di rete e <ph name="COSMETIC"/> filtri cosmetici in uso.</translation>
+<translation id="816454734472592442">uBlock Origin non risponde. Riprova tra poco o riavvia il browser.</translation>
+<translation id="4676141700813218527">uBlock Origin si sta avviando…</translation>
+<translation id="4516904298421534459">Liste di filtri</translation>
+<translation id="1475890381945434499"><ph name="ON"/> attive su <ph name="TOTAL"/></translation>
+<translation id="7324933948058178132">Aggiorna le liste da sole</translation>
+<translation id="1309061444155798597">Ogni lista si scarica di nuovo dal suo sito quando scade.</translation>
+<translation id="6745592621698551453">Aggiorna adesso</translation>
+<translation id="25436473744628215">Aggiornamento in corso…</translation>
+<translation id="8233688319337842342">Ultimo aggiornamento <ph name="WHEN"/></translation>
+<translation id="1993356928993598063"><ph name="USED"/> filtri usati su <ph name="TOTAL"/></translation>
+<translation id="5999002763284387792">aggiornata <ph name="WHEN"/></translation>
+<translation id="2077335717190218207">copia inclusa in uBlock Origin, da aggiornare</translation>
+<translation id="551788288901798926">Togli la lista</translation>
+<translation id="1350189949292903547">Aggiungi una lista</translation>
+<translation id="4854178985083984690">Indirizzo della lista</translation>
+<translation id="1433634454202412970">https://esempio.org/lista.txt</translation>
+<translation id="5103811338837282705">Applico le liste…</translation>
+<translation id="133606984837358194">Liste applicate.</translation>
+<translation id="8566455503449142622">Scrivi l'indirizzo completo della lista, con https://.</translation>
+<translation id="51520427986102715">Integrate</translation>
+<translation id="1919345977826869612">Pubblicità</translation>
+<translation id="5040262127954254034">Privacy</translation>
+<translation id="1386882441763283">Malware e siti pericolosi</translation>
+<translation id="4053324128739224711">Multiuso</translation>
+<translation id="2870621968504248388">Avvisi sui cookie</translation>
+<translation id="856161732294019687">Pulsanti dei social</translation>
+<translation id="7826433876512742578">Elementi fastidiosi</translation>
+<translation id="5933312186115853600">Regioni e lingue</translation>
+<translation id="7138678301420049075">Altre</translation>
+<translation id="7529797402130597940">Aggiunte da te</translation>
+<translation id="2762000892062317888">adesso</translation>
+<translation id="1387489728427477606">1 minuto fa</translation>
+<translation id="2158058447903669808"><ph name="COUNT"/> minuti fa</translation>
+<translation id="5998083377113054312">1 ora fa</translation>
+<translation id="8624818128906305642"><ph name="COUNT"/> ore fa</translation>
+<translation id="7694937476463719623">ieri</translation>
+<translation id="9134398277445524806"><ph name="COUNT"/> giorni fa</translation>
+<translation id="8520065292021966437">Filtri personali</translation>
+<translation id="692809776091570165">Usa i filtri personali</translation>
+<translation id="51975139597405969">Un filtro per riga, nella <ph name="BEGIN_LINK"/>sintassi di uBlock Origin<ph name="END_LINK"/>. Anche "Nascondi un elemento" li aggiunge qui.</translation>
+<translation id="3907298696642403188">1 filtro</translation>
+<translation id="7346250754187816776"><ph name="COUNT"/> filtri</translation>
+<translation id="7326635448618859662"><ph name="WHAT"/>, non in uso</translation>
+<translation id="7989222512959629388">Salvo…</translation>
+<translation id="2140345669273356862">Salvati.</translation>
+<translation id="2255645239520441902">Regole</translation>
+<translation id="4705379824798086161">Regole di filtraggio dinamico, una per riga: sito di partenza, sito di destinazione, tipo di richiesta e azione (<ph name="BEGIN_LINK"/>come si scrivono<ph name="END_LINK"/>). Valgono subito e restano dopo il riavvio.</translation>
+<translation id="6048626506955742681">1 regola</translation>
+<translation id="5091537343776506482"><ph name="COUNT"/> regole</translation>
+<translation id="5349023266008834363">Salvate.</translation>
+<translation id="169024329537606291">Salvate. Non valide, quindi tolte: <ph name="LINES"/></translation>
+<translation id="2758152636296207744">Siti esclusi</translation>
+<translation id="4636930799203385526">Qui non si blocca niente. Il pulsante di accensione nel pannello "Blocco contenuti" aggiunge e toglie i siti da questo elenco.</translation>
+<translation id="9029660951366790005">Nessun sito escluso</translation>
+<translation id="3070359419723767340">Nessuno</translation>
+<translation id="2093323119042612791">1 sito</translation>
+<translation id="4862175324745459058"><ph name="COUNT"/> siti</translation>
+<translation id="3529527442603409515">Togli il sito</translation>
+<translation id="7366415735885268578">Aggiungi un sito</translation>
+<translation id="855859084605696483">Sito da escludere</translation>
+<translation id="2008450266527649992">esempio.org</translation>
+<translation id="5625522821261230184">Altre impostazioni di uBlock Origin</translation>
+<translation id="7726651705096555175">Backup, impostazioni avanzate e aspetto, nella pagina di uBlock Origin</translation>
+<translation id="7150943923279306024">uBlock Origin, integrato nel browser</translation>
+<translation id="215557420370407177">Attivo su <ph name="SITE"/></translation>
+<translation id="5936357016180767994">Spento su <ph name="SITE"/></translation>
+<translation id="5368591565764830657">Tocca per spegnerlo solo su questo sito</translation>
+<translation id="4322452325259075402">Tocca per riattivarlo</translation>
+<translation id="891388627459822763">bloccati in questa pagina</translation>
+<translation id="7367826357714603425">su</translation>
+<translation id="919389250911816756">domini esterni bloccati</translation>
+<translation id="3783484320349797935">Bloccati su questo sito</translation>
+<translation id="652556357749902129">Su questo sito blocca anche</translation>
+<translation id="6409731863280057959">Popup</translation>
+<translation id="3580074047078597638">Media grandi</translation>
+<translation id="3374324623085959014">Font esterni</translation>
+<translation id="7521387064766892559">JavaScript</translation>
+<translation id="6245843589405523906">Nascondi un elemento</translation>
+<translation id="1554044167741230049">Registro</translation>
+<translation id="8428213095426709021">Impostazioni</translation>
+<translation id="4883085517375268300">Finora niente da bloccare in questa pagina.</translation>
+<translation id="820876694567430733">Su questo sito non blocchiamo niente: pubblicità e tracker possono caricarsi.</translation>
+<translation id="4093509958689902486">Blocco contenuti: <ph name="COUNT"/> elementi bloccati</translation>
+<translation id="1626076685526869814">Blocco contenuti spento su questo sito</translation>
+<translation id="5683916195767086779">Gruppo di schede</translation>
+<translation id="952966918986087907"><ph name="NAME"/>, chiuso: clic per aprirlo; tasto destro per modificarlo</translation>
+<translation id="379370152305274024"><ph name="NAME"/>, aperto: clic per chiuderlo; tasto destro per modificarlo</translation>
+<translation id="2422927186524098759">Barra laterale</translation>
+<translation id="5564629529517783948">Un'altra scheda</translation>
+<translation id="6541456372638804973">Altre <ph name="COUNT"/> schede</translation>
+<translation id="6659594942844771486">Scheda</translation>
+<translation id="5233638681132016545">Nuova scheda</translation>
+<translation id="7273445249251661630">Il server VPN non risponde</translation>
+<translation id="3575171597934906021">Per non mostrare l'IP di casa ai siti, il browser non passa da solo alla connessione diretta.</translation>
+<translation id="340209678110224915">Naviga diretto (riserva)</translation>
+<translation id="6382283965542963418">Il tuo Invidious non risponde</translation>
+<translation id="1509505262644738703">Il browser ha provato l'indirizzo di casa e quello di Tailscale. YouTube non si apre da solo: se vuoi, aprilo tu.</translation>
+<translation id="6726666338252497999">Apri su YouTube</translation>
+<translation id="44889364964454237">Connessione diretta.</translation>
+<translation id="927270566341458189">I siti vedono l'IP di casa.</translation>
+<translation id="4831729793938016502">Navigare senza VPN?</translation>
+<translation id="6311821975133341452">I siti vedranno l'IP di casa. La modalità diretta scade alla chiusura del browser o dopo 24 ore, e torna da sola alla VPN quando il server risponde.</translation>
+<translation id="1287350593895949569">Naviga diretto</translation>
+<translation id="706247015785222194">Il server VPN risponde di nuovo: il browser è tornato a uscire dalla VPN.</translation>
+<translation id="8724499333320585266">VPN spenta</translation>
+<translation id="227085175797007296">VPN spenta: esci dalla connessione normale.</translation>
+<translation id="3975333719129791711">Esci dalla VPN del tuo server.</translation>
+<translation id="4989243964515295980">VPN non raggiungibile</translation>
+<translation id="3810986451774830151">Il server VPN non risponde: nessuna pagina esce diretta.</translation>
+<translation id="2575802419730444892">Diretto · IP visibile</translation>
+<translation id="2563301876774193221">Connessione diretta: i siti vedono l'IP di casa.</translation>
+<translation id="3670390213897592456">Chiudi Claude</translation>
+<translation id="4045691066051619628">Chat e "Fallo tu": Claude in Chrome con il tuo abbonamento claude.ai.</translation>
+<translation id="3900307697381726547">claude.ai con il tuo account: chat, progetti e artifact come nell'app.</translation>
+<translation id="6794469945030154569">Questa pagina</translation>
+</translationbundle>

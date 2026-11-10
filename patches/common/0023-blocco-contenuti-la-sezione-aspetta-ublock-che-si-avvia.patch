@@ -1,0 +1,160 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 19:15:30 +0100
+Subject: [PATCH] Blocco contenuti: la sezione aspetta uBlock che si avvia
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+uBlock risponde alle letture della dashboard solo quando ha caricato le liste: a
+freddo, su un computer lento, ci vuole più di un minuto, e la sezione restava vuota.
+Ogni parte (liste, filtri, regole, siti) riprova finché uBlock risponde, con la
+scritta "uBlock Origin si sta avviando…" nel frattempo. In un frame uBlock spegne
+anche la sua messaggistica se la connessione cade: il ponte la chiude come nella
+pagina principale e riprova le letture; le richieste hanno un tempo massimo.
+
+Fork-Patch: common/0023-blocco-contenuti-la-sezione-aspetta-ublock-che-si-avvia.patch
+
+diff --git a/chrome/browser/resources/settings/ublock_page/ublock_page.ts b/chrome/browser/resources/settings/ublock_page/ublock_page.ts
+index fae7be418b0b3ab0019cbf806f21617662e6ade0..ab5f198503dcc6a67adb722f9ee298d1e748876b 100644
+--- a/chrome/browser/resources/settings/ublock_page/ublock_page.ts
++++ b/chrome/browser/resources/settings/ublock_page/ublock_page.ts
+@@ -305,28 +305,59 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
+     return new Promise(resolve => {
+       this.pending_.set(id, resolve);
+       frame.contentWindow!.postMessage({id, message}, UBLOCK_ORIGIN);
++      // The bridge reloads itself if uBlock shut it down: what it had
++      // pending gets no answer.
++      setTimeout(() => {
++        if (this.pending_.delete(id)) {
++          resolve(undefined);
++        }
++      }, 40000);
+     });
+   }
+ 
+   private async loadAll_() {
+-    const app = await this.send_({what: 'getAppData'}) as AppData|undefined;
+-    if (app && app.name) {
+-      this.appName_ = `${app.name} ${app.version}`;
++    // While uBlock starts the bridge may get no answer: it tries again for a
++    // while, and so does this.
++    let app: AppData|undefined;
++    for (let attempt = 0; attempt < 3 && !app; attempt++) {
++      app = await this.send_({what: 'getAppData'}) as AppData|undefined;
++    }
++    if (!app || !app.name) {
++      this.problem_ = loadTimeData.getString('forkUblockNoAnswer');
++      return;
++    }
++    this.problem_ = '';
++    this.appName_ = `${app.name} ${app.version}`;
++    // uBlock answers the reads of the dashboard only once its lists are
++    // loaded: from cold, on a slow computer, that can take more than a minute.
++    // Each part tries again until it gets an answer.
++    let parts = [
++      () => this.loadLists_(),
++      () => this.loadFilters_(),
++      () => this.loadRules_(),
++      () => this.loadSites_(),
++    ];
++    for (let attempt = 0; attempt < 60 && parts.length; attempt++) {
++      const done = await Promise.all(parts.map(load => load()));
++      parts = parts.filter((_load, i) => !done[i]);
++      if (parts.length) {
++        if (!this.lists_) {
++          this.filterCountText_ = loadTimeData.getString('forkUblockStarting');
++        }
++        await new Promise(resolve => setTimeout(resolve, 3000));
++      }
++    }
++    if (parts.length) {
++      this.problem_ = loadTimeData.getString('forkUblockNoAnswer');
+     }
+-    await Promise.all([
+-      this.loadLists_(),
+-      this.loadFilters_(),
+-      this.loadRules_(),
+-      this.loadSites_(),
+-    ]);
+   }
+ 
+   // Lists of filters.
+ 
+-  private async loadLists_() {
++  private async loadLists_(): Promise<boolean> {
+     const lists = await this.send_({what: 'getLists'}) as UblockLists|undefined;
+     if (!lists || !lists.available) {
+-      return;
++      return false;
+     }
+     this.lists_ = lists;
+     this.autoUpdate_ = lists.autoUpdate === true;
+@@ -397,6 +428,7 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
+     if (this.updating_) {
+       setTimeout(() => this.loadLists_(), 2000);
+     }
++    return true;
+   }
+ 
+   private onListChange_(e: Event) {
+@@ -468,11 +500,11 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
+ 
+   // Personal filters.
+ 
+-  private async loadFilters_() {
++  private async loadFilters_(): Promise<boolean> {
+     const filters =
+         await this.send_({what: 'readUserFilters'}) as UserFilters|undefined;
+     if (!filters) {
+-      return;
++      return false;
+     }
+     this.savedFilters_ = filters.content || '';
+     this.filtersEnabled_ = filters.enabled === true;
+@@ -480,6 +512,7 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
+     this.filtersText_ = this.savedFilters_;
+     this.onFiltersEdited_();
+     this.updateFiltersSummary_();
++    return true;
+   }
+ 
+   private updateFiltersSummary_() {
+@@ -537,12 +570,13 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
+ 
+   // Rules of dynamic filtering.
+ 
+-  private async loadRules_() {
++  private async loadRules_(): Promise<boolean> {
+     const rules = await this.send_({what: 'getRules'}) as Rules|undefined;
+     if (!rules) {
+-      return;
++      return false;
+     }
+     this.showRules_(rules.permanentRules || []);
++    return true;
+   }
+ 
+   private showRules_(rules: string[]) {
+@@ -592,11 +626,11 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
+ 
+   // Sites where uBlock blocks nothing.
+ 
+-  private async loadSites_() {
++  private async loadSites_(): Promise<boolean> {
+     const sites =
+         await this.send_({what: 'getWhitelist'}) as TrustedSites|undefined;
+     if (!sites) {
+-      return;
++      return false;
+     }
+     this.trustedDefault_ = sites.whitelistDefault || [];
+     this.trusted_ = sites.whitelist || [];
+@@ -607,6 +641,7 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
+     this.sitesSummary_ = count === 0 ? loadTimeData.getString('forkUblockSitesNone') :
+         (count === 1 ? loadTimeData.getString('forkUblockSiteOne') :
+                        loadTimeData.getStringF('forkUblockSiteMany', String(count)));
++    return true;
+   }
+ 
+   private async saveSites_(sites: string[]) {

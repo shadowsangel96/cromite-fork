@@ -3,6 +3,16 @@
   'use strict';
 
   const $ = (id) => document.getElementById(id);
+  // Le scritte vengono da _locales di uBlock, dove forkctl aggiunge le nostre (fork-messages.json).
+  const t = (key, ...subs) => chrome.i18n.getMessage('fork_' + key, subs.map(String));
+
+  document.documentElement.lang = chrome.i18n.getUILanguage();
+  for (const el of document.querySelectorAll('[data-fork-i18n]')) {
+    el.textContent = chrome.i18n.getMessage(el.dataset.forkI18n);
+  }
+  for (const el of document.querySelectorAll('[data-fork-i18n-label]')) {
+    el.setAttribute('aria-label', chrome.i18n.getMessage(el.dataset.forkI18nLabel));
+  }
   const send = (message) => vAPI.messaging.send('popupPanel', message);
 
   let data = null;
@@ -32,9 +42,7 @@
     box.textContent = '';
     if (!on || rows.length === 0) {
       const text = document.createElement('p');
-      text.textContent = on ?
-          'Finora niente da bloccare in questa pagina.' :
-          'Su questo sito non blocchiamo niente: pubblicità e tracker possono caricarsi.';
+      text.textContent = on ? t('bloccoNothingYet') : t('bloccoOffText');
       box.append(text);
       return;
     }
@@ -55,9 +63,9 @@
     const on = data.netFilteringSwitch === true;
     document.body.classList.toggle('off', !on);
     $('power').setAttribute('aria-pressed', String(on));
-    $('power-title').textContent = (on ? 'Attivo su ' : 'Spento su ') + data.pageHostname;
-    $('power-hint').textContent =
-        on ? 'Tocca per spegnerlo solo su questo sito' : 'Tocca per riattivarlo';
+    $('power-title').textContent =
+        t(on ? 'bloccoOnAt' : 'bloccoOffAt', data.pageHostname);
+    $('power-hint').textContent = t(on ? 'bloccoHintOn' : 'bloccoHintOff');
     const {rows, blockedExternal, external} = summarize(data);
     $('blocked').textContent = String(on && data.pageCounts ? data.pageCounts.blocked.any : 0);
     $('domains-blocked').textContent = String(on ? blockedExternal : 0);

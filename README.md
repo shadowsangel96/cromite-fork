@@ -51,11 +51,13 @@ patches/windows/     patch solo Windows      (titolo del commit "win: ...")
 patches/macos/       patch solo macOS        (titolo del commit "mac: ...")
 patches/ios/         patch solo iOS          (titolo del commit "ios: ...")
 patches/retired/     patch ritirate (già contenute upstream o tolte di proposito)
-overlay/             file binari copiati sopra i sorgenti (icone, ecc.)
+overlay/             file copiati sopra i sorgenti (icone, file delle scritte generati, ecc.)
+strings/             le scritte delle nostre patch, in inglese e italiano
 gn_args/             argomenti di build nostri, sopra quelli di Cromite
 state/rr-cache/      memoria delle risoluzioni dei conflitti
 reports/             report di ogni aggiornamento
 tools/forkctl.py     lo strumento che gestisce tutto
+tools/fork_strings.py  dalle scritte di strings/ ai file di traduzione di Chromium
 tools/build/         script di build completa per piattaforma
 tests/               test offline di forkctl
 ```
@@ -82,6 +84,25 @@ python3 tools/forkctl.py verify
 Altri file da toccare a workspace aperto: `python3 tools/forkctl.py add percorso/file`.
 Per modificare una patch esistente: correggi il suo commit in `.work` (`git commit --fixup` +
 `git rebase -i --autosquash` o simili) e riesporta.
+
+### Scritte dell'interfaccia
+
+Le scritte delle nostre patch non stanno nel codice: stanno in `strings/fork_strings.json`, ognuna
+con l'inglese (lingua di partenza) e l'italiano, e con le pagine che la usano. `{NOME}` è un
+segnaposto. Dopo averle cambiate:
+
+```bash
+python3 tools/fork_strings.py          # rigenera i file in overlay/
+python3 tools/fork_strings.py --check  # i file in overlay/ corrispondono al JSON?
+```
+
+Il comando scrive `chrome/app/fork_strings.grd` (inglese) e `resources/fork_strings_it.xtb`
+(italiano, con gli ID calcolati da grit), gli elenchi per le pagine del browser
+(`chrome/browser/fork/fork_webui_strings.h`) e le scritte del pannello di uBlock, che forkctl
+aggiunge ai `_locales` di uBlock. Nel codice: `l10n_util::GetStringUTF16(IDS_FORK_...)` in C++,
+`$i18n{forkChiave}` nell'HTML e `loadTimeData.getString('forkChiave')` nel JavaScript. Serve un
+albero di Chromium per grit: `--chromium`, `CHROMIUM_SRC`, oppure quello in `FORK_BUILD_DIR`.
+Le altre lingue usano l'inglese.
 
 ### Aggiornare a mano (la CI lo fa da sola)
 
