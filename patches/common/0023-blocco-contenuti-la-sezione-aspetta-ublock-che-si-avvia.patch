@@ -16,10 +16,10 @@ pagina principale e riprova le letture; le richieste hanno un tempo massimo.
 Fork-Patch: common/0023-blocco-contenuti-la-sezione-aspetta-ublock-che-si-avvia.patch
 
 diff --git a/chrome/browser/resources/settings/ublock_page/ublock_page.ts b/chrome/browser/resources/settings/ublock_page/ublock_page.ts
-index fae7be418b0b3ab0019cbf806f21617662e6ade0..ab5f198503dcc6a67adb722f9ee298d1e748876b 100644
+index fae7be418b0b3ab0019cbf806f21617662e6ade0..4ce0a75b04e14a0491f71b5dd43d663b4a79f30c 100644
 --- a/chrome/browser/resources/settings/ublock_page/ublock_page.ts
 +++ b/chrome/browser/resources/settings/ublock_page/ublock_page.ts
-@@ -305,28 +305,59 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
+@@ -305,28 +305,64 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
      return new Promise(resolve => {
        this.pending_.set(id, resolve);
        frame.contentWindow!.postMessage({id, message}, UBLOCK_ORIGIN);
@@ -49,20 +49,25 @@ index fae7be418b0b3ab0019cbf806f21617662e6ade0..ab5f198503dcc6a67adb722f9ee298d1
 +    }
 +    this.problem_ = '';
 +    this.appName_ = `${app.name} ${app.version}`;
-+    // uBlock answers the reads of the dashboard only once its lists are
-+    // loaded: from cold, on a slow computer, that can take more than a minute.
-+    // Each part tries again until it gets an answer.
-+    let parts = [
-+      () => this.loadLists_(),
++    // uBlock answers getLists only once it has loaded its state: from cold,
++    // on a slow computer, that can take more than a minute. The other reads
++    // answer at once, with the state still empty: they come after the lists.
++    let parts = [() => this.loadLists_()];
++    const rest = [
 +      () => this.loadFilters_(),
 +      () => this.loadRules_(),
 +      () => this.loadSites_(),
 +    ];
 +    for (let attempt = 0; attempt < 60 && parts.length; attempt++) {
 +      const done = await Promise.all(parts.map(load => load()));
++      const listsLoaded = !!this.lists_;
 +      parts = parts.filter((_load, i) => !done[i]);
++      if (listsLoaded && rest.length) {
++        parts.push(...rest.splice(0));
++        continue;
++      }
 +      if (parts.length) {
-+        if (!this.lists_) {
++        if (!listsLoaded) {
 +          this.filterCountText_ = loadTimeData.getString('forkUblockStarting');
 +        }
 +        await new Promise(resolve => setTimeout(resolve, 3000));
@@ -90,7 +95,7 @@ index fae7be418b0b3ab0019cbf806f21617662e6ade0..ab5f198503dcc6a67adb722f9ee298d1
      }
      this.lists_ = lists;
      this.autoUpdate_ = lists.autoUpdate === true;
-@@ -397,6 +428,7 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
+@@ -397,6 +433,7 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
      if (this.updating_) {
        setTimeout(() => this.loadLists_(), 2000);
      }
@@ -98,7 +103,7 @@ index fae7be418b0b3ab0019cbf806f21617662e6ade0..ab5f198503dcc6a67adb722f9ee298d1
    }
  
    private onListChange_(e: Event) {
-@@ -468,11 +500,11 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
+@@ -468,11 +505,11 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
  
    // Personal filters.
  
@@ -112,7 +117,7 @@ index fae7be418b0b3ab0019cbf806f21617662e6ade0..ab5f198503dcc6a67adb722f9ee298d1
      }
      this.savedFilters_ = filters.content || '';
      this.filtersEnabled_ = filters.enabled === true;
-@@ -480,6 +512,7 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
+@@ -480,6 +517,7 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
      this.filtersText_ = this.savedFilters_;
      this.onFiltersEdited_();
      this.updateFiltersSummary_();
@@ -120,7 +125,7 @@ index fae7be418b0b3ab0019cbf806f21617662e6ade0..ab5f198503dcc6a67adb722f9ee298d1
    }
  
    private updateFiltersSummary_() {
-@@ -537,12 +570,13 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
+@@ -537,12 +575,13 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
  
    // Rules of dynamic filtering.
  
@@ -136,7 +141,7 @@ index fae7be418b0b3ab0019cbf806f21617662e6ade0..ab5f198503dcc6a67adb722f9ee298d1
    }
  
    private showRules_(rules: string[]) {
-@@ -592,11 +626,11 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
+@@ -592,11 +631,11 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
  
    // Sites where uBlock blocks nothing.
  
@@ -150,7 +155,7 @@ index fae7be418b0b3ab0019cbf806f21617662e6ade0..ab5f198503dcc6a67adb722f9ee298d1
      }
      this.trustedDefault_ = sites.whitelistDefault || [];
      this.trusted_ = sites.whitelist || [];
-@@ -607,6 +641,7 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
+@@ -607,6 +646,7 @@ export class SettingsUblockPageElement extends SettingsUblockPageElementBase
      this.sitesSummary_ = count === 0 ? loadTimeData.getString('forkUblockSitesNone') :
          (count === 1 ? loadTimeData.getString('forkUblockSiteOne') :
                         loadTimeData.getStringF('forkUblockSiteMany', String(count)));
