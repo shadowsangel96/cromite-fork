@@ -106,6 +106,7 @@ inline constexpr webui::LocalizedString kForkSitePanelStrings[] = {
     {"forkSitePanelCookiesInUse", IDS_FORK_SITE_PANEL_COOKIES_IN_USE},
     {"forkSitePanelNoCookies", IDS_FORK_SITE_PANEL_NO_COOKIES},
     {"forkSitePanelNoPermissions", IDS_FORK_SITE_PANEL_NO_PERMISSIONS},
+    {"forkSitePanelSiteDark", IDS_FORK_SITE_PANEL_SITE_DARK},
 };
 
 // The strings of the page "profilo", for loadTimeData and $i18n{}.
@@ -129,6 +130,11 @@ inline constexpr webui::LocalizedString kForkSettingsStrings[] = {
     {"forkContentBlocking", IDS_FORK_CONTENT_BLOCKING},
     {"forkSettingsCompactTabs", IDS_FORK_SETTINGS_COMPACT_TABS},
     {"forkSettingsCompactTabsSub", IDS_FORK_SETTINGS_COMPACT_TABS_SUB},
+    {"forkSettingsSiteDark", IDS_FORK_SETTINGS_SITE_DARK},
+    {"forkSettingsSiteDarkSub", IDS_FORK_SETTINGS_SITE_DARK_SUB},
+    {"forkSiteDarkAutomatic", IDS_FORK_SITE_DARK_AUTOMATIC},
+    {"forkSiteDarkAlways", IDS_FORK_SITE_DARK_ALWAYS},
+    {"forkSiteDarkNever", IDS_FORK_SITE_DARK_NEVER},
     {"forkUblockIntegrated", IDS_FORK_UBLOCK_INTEGRATED},
     {"forkUblockIntro", IDS_FORK_UBLOCK_INTRO},
     {"forkUblockFilterCount", IDS_FORK_UBLOCK_FILTER_COUNT},

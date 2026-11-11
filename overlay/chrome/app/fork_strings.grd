@@ -239,6 +239,14 @@
       <message name="IDS_FORK_AVATAR_SIGN_IN" desc="Interface of the fork.">Profile: sign in with Claude</message>
       <message name="IDS_FORK_SETTINGS_COMPACT_TABS" desc="Interface of the fork.">Tabs in the toolbar</message>
       <message name="IDS_FORK_SETTINGS_COMPACT_TABS_SUB" desc="Interface of the fork.">Compact, like Safari. Applies to the windows you open afterwards.</message>
+      <message name="IDS_FORK_SETTINGS_SITE_DARK" desc="Interface of the fork.">Dark theme for sites</message>
+      <message name="IDS_FORK_SETTINGS_SITE_DARK_SUB" desc="Interface of the fork.">Sites without a dark theme of their own turn dark: with Automatic, only when the browser is dark. Photos and videos stay as they are.</message>
+      <message name="IDS_FORK_SITE_DARK_AUTOMATIC" desc="Interface of the fork.">Automatic</message>
+      <message name="IDS_FORK_SITE_DARK_ALWAYS" desc="Interface of the fork.">Always</message>
+      <message name="IDS_FORK_SITE_DARK_NEVER" desc="Interface of the fork.">Never</message>
+      <message name="IDS_FORK_SITE_PANEL_SITE_DARK" desc="Interface of the fork.">Site dark theme</message>
+      <message name="IDS_FORK_SITE_DARK_ON_HERE" desc="Interface of the fork.">On for this site</message>
+      <message name="IDS_FORK_SITE_DARK_OFF_HERE" desc="Interface of the fork.">Off for this site</message>
       <message name="IDS_FORK_UBLOCK_INTEGRATED" desc="Interface of the fork."><ph name="NAME">$1</ph>, built into the browser</message>
       <message name="IDS_FORK_UBLOCK_INTRO" desc="Interface of the fork.">Blocks ads, trackers and dangerous sites on every page. To turn it off on a single site, use the button to the right of the address.</message>
       <message name="IDS_FORK_UBLOCK_FILTER_COUNT" desc="Interface of the fork."><ph name="NETWORK">$1</ph> network filters and <ph name="COSMETIC">$2</ph> cosmetic filters in use.</message>

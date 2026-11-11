@@ -1,0 +1,466 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Wed, 11 Nov 2026 09:59:46 +0100
+Subject: [PATCH] Tema scuro dei siti: Automatico, Sempre o Mai, con le
+ eccezioni per sito
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In Aspetto, "Tema scuro dei siti": con Automatico (predefinito) i siti diventano scuri quando
+il browser è scuro. Lo fa il motore di Blink mentre disegna la pagina: la pagina non lo vede,
+foto e video restano come sono, e i siti con un tema scuro loro (color-scheme o
+prefers-color-scheme) tengono il loro. Nel pannello del sito, "Tema scuro del sito" lo spegne
+o lo accende solo lì (impostazione AUTO_DARK_WEB_CONTENT, accesa anche su desktop). Vale solo
+per le pagine web, non per quelle del browser e delle estensioni.
+
+Fork-Patch: common/0025-tema-scuro-dei-siti-automatico-sempre-o-mai-con-le-eccezioni.patch
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index edb87acc6b437ebb9f4ad7990c6e670481f80764..d41a5d44dc0f396efb13972cda66ba589b7c6cc1 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -846,6 +846,8 @@ source_set("core") {
+     "fork/personal_search.h",
+     "fork/personal_search_tab_helper.cc",
+     "fork/personal_search_tab_helper.h",
++    "fork/site_dark_mode.cc",
++    "fork/site_dark_mode.h",
+     "fork/site_redirect.cc",
+     "fork/site_redirect.h",
+     "fork/temporary_site_data_service.cc",
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index 0ab9146634a4268f867fe975014694b33787a92e..4ad9a485630291b75b4b1604a8cdaaf2efe769a2 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "chrome/browser/fork/vpn_status.h"
+ #include "chrome/browser/fork/site_redirect.h"
++#include "chrome/browser/fork/site_dark_mode.h"
+ #include "chrome/browser/chrome_content_browser_client.h"
+ 
+ #include <algorithm>
+@@ -4912,6 +4913,15 @@ void ChromeContentBrowserClient::OverrideWebPreferences(
+       GetPreferredColorScheme(
+           *web_prefs, main_frame_site.GetSecurityPrincipal(), web_contents);
+ 
++#if !BUILDFLAG(IS_ANDROID)
++  // Fork: dark theme for sites, from the setting, the site's exception and the
++  // browser's color mode.
++  web_prefs->force_dark_mode_enabled = browser_fork::ShouldDarkenSite(
++      profile, web_contents->GetLastCommittedURL(),
++      web_prefs->preferred_color_scheme ==
++          blink::mojom::PreferredColorScheme::kDark);
++#endif
++
+   web_prefs->root_scrollbar_theme_color =
+       GetRootScrollbarThemeColor(web_contents);
+ 
+@@ -5035,6 +5045,19 @@ bool ChromeContentBrowserClient::OverrideWebPreferencesAfterNavigation(
+       web_prefs->preferred_root_scrollbar_color_scheme !=
+           old_preferred_root_scrollbar_color_scheme;
+ 
++#if !BUILDFLAG(IS_ANDROID)
++  // Fork: dark theme for sites, again for the page that has just committed.
++  {
++    const bool force_dark = browser_fork::ShouldDarkenSite(
++        Profile::FromBrowserContext(web_contents->GetBrowserContext()),
++        web_contents->GetLastCommittedURL(),
++        web_prefs->preferred_color_scheme ==
++            blink::mojom::PreferredColorScheme::kDark);
++    prefs_changed |= web_prefs->force_dark_mode_enabled != force_dark;
++    web_prefs->force_dark_mode_enabled = force_dark;
++  }
++#endif
++
+ #if BUILDFLAG(IS_ANDROID)
+   if (auto* theme_client =
+           night_mode::WebContentsThemeClient::FromWebContents(web_contents)) {
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index 430b8040ff1c98660a62655cc202fb8bcf124cab..db770ccd7d2c0435b039d7674f6b8ec7d80b74c1 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -37,6 +37,7 @@
+ #include "chrome/common/chrome_features.h"
+ #include "chrome/common/extensions/api/settings_private.h"
+ #include "chrome/browser/fork/compact_tabs.h"
++#include "chrome/browser/fork/site_dark_mode.h"
+ #include "chrome/common/pref_names.h"
+ #include "components/adblock/core/common/adblock_prefs.h"
+ #include "components/autofill/core/common/autofill_prefs.h"
+@@ -288,6 +289,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+   }
+   (*s_allowlist)[browser_fork::kCompactTabsPref] =
+       settings_api::PrefType::kBoolean;
++  (*s_allowlist)[browser_fork::kSiteDarkModePref] =
++      settings_api::PrefType::kNumber;
+   (*s_allowlist)[bookmarks::prefs::kShowBookmarkBar] =
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[bookmarks::prefs::kBookmarkBarVisibilityState] =
+diff --git a/chrome/browser/fork/site_dark_mode.cc b/chrome/browser/fork/site_dark_mode.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..2350cf13aa86b7d1184b4e26c852736bbc8e1fbc
+--- /dev/null
++++ b/chrome/browser/fork/site_dark_mode.cc
+@@ -0,0 +1,98 @@
++#include "chrome/browser/fork/site_dark_mode.h"
++
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/content_settings/core/common/content_settings.h"
++#include "components/content_settings/core/common/content_settings_pattern.h"
++#include "components/content_settings/core/common/content_settings_types.h"
++#include "components/pref_registry/pref_registry_syncable.h"
++#include "components/prefs/pref_service.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/web_contents.h"
++#include "url/gurl.h"
++
++namespace browser_fork {
++
++void RegisterSiteDarkModePrefs(user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterIntegerPref(kSiteDarkModePref,
++                                static_cast<int>(SiteDarkMode::kAutomatic));
++}
++
++SiteDarkMode GetSiteDarkMode(Profile* profile) {
++  switch (profile->GetPrefs()->GetInteger(kSiteDarkModePref)) {
++    case static_cast<int>(SiteDarkMode::kAlways):
++      return SiteDarkMode::kAlways;
++    case static_cast<int>(SiteDarkMode::kNever):
++      return SiteDarkMode::kNever;
++    default:
++      return SiteDarkMode::kAutomatic;
++  }
++}
++
++SiteDarkException GetSiteDarkException(Profile* profile, const GURL& url) {
++  if (!url.SchemeIsHTTPOrHTTPS()) {
++    return SiteDarkException::kNone;
++  }
++  content_settings::SettingInfo info;
++  const ContentSetting setting =
++      HostContentSettingsMapFactory::GetForProfile(profile)->GetContentSetting(
++          url, url, ContentSettingsType::AUTO_DARK_WEB_CONTENT, &info);
++  // The default value is not an exception.
++  if (info.primary_pattern.MatchesAllHosts()) {
++    return SiteDarkException::kNone;
++  }
++  return setting == CONTENT_SETTING_BLOCK ? SiteDarkException::kOff
++                                          : SiteDarkException::kOn;
++}
++
++void SetSiteDarkException(Profile* profile,
++                          const GURL& url,
++                          SiteDarkException exception) {
++  if (!url.SchemeIsHTTPOrHTTPS()) {
++    return;
++  }
++  ContentSetting setting = CONTENT_SETTING_DEFAULT;
++  if (exception == SiteDarkException::kOn) {
++    setting = CONTENT_SETTING_ALLOW;
++  } else if (exception == SiteDarkException::kOff) {
++    setting = CONTENT_SETTING_BLOCK;
++  }
++  HostContentSettingsMapFactory::GetForProfile(profile)
++      ->SetContentSettingDefaultScope(
++          url, url, ContentSettingsType::AUTO_DARK_WEB_CONTENT, setting);
++  // The pages already open on the site change right away, without reloading.
++  tabs::ForEachTabInterface([profile](tabs::TabInterface* tab) {
++    content::WebContents* contents = tab->GetContents();
++    if (contents &&
++        Profile::FromBrowserContext(contents->GetBrowserContext()) == profile) {
++      contents->NotifyPreferencesChanged();
++    }
++    return true;
++  });
++}
++
++bool ShouldDarkenSite(Profile* profile, const GURL& url, bool browser_is_dark) {
++  if (!url.SchemeIsHTTPOrHTTPS()) {
++    return false;
++  }
++  switch (GetSiteDarkException(profile, url)) {
++    case SiteDarkException::kOn:
++      return true;
++    case SiteDarkException::kOff:
++      return false;
++    case SiteDarkException::kNone:
++      break;
++  }
++  switch (GetSiteDarkMode(profile)) {
++    case SiteDarkMode::kAlways:
++      return true;
++    case SiteDarkMode::kNever:
++      return false;
++    case SiteDarkMode::kAutomatic:
++      return browser_is_dark;
++  }
++}
++
++}  // namespace browser_fork
+diff --git a/chrome/browser/fork/site_dark_mode.h b/chrome/browser/fork/site_dark_mode.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..0c13073481a4f0e94b7eef0fddcc06be9acc8efe
+--- /dev/null
++++ b/chrome/browser/fork/site_dark_mode.h
+@@ -0,0 +1,48 @@
++#ifndef CHROME_BROWSER_FORK_SITE_DARK_MODE_H_
++#define CHROME_BROWSER_FORK_SITE_DARK_MODE_H_
++
++class GURL;
++class Profile;
++
++namespace user_prefs {
++class PrefRegistrySyncable;
++}
++
++namespace browser_fork {
++
++// "Dark theme for sites" in the appearance settings. Blink's own engine darkens
++// the page while painting it: the page cannot see it, and sites that already
++// have a dark theme (color-scheme or prefers-color-scheme) keep theirs.
++inline constexpr char kSiteDarkModePref[] = "fork.site_dark_mode";
++
++enum class SiteDarkMode {
++  kAutomatic = 0,  // Only when the browser is dark.
++  kAlways = 1,
++  kNever = 2,
++};
++
++// The choice for one site, from the site panel. Stored as the
++// AUTO_DARK_WEB_CONTENT content setting: allow = on, block = off.
++enum class SiteDarkException {
++  kNone,
++  kOn,
++  kOff,
++};
++
++void RegisterSiteDarkModePrefs(user_prefs::PrefRegistrySyncable* registry);
++
++SiteDarkMode GetSiteDarkMode(Profile* profile);
++SiteDarkException GetSiteDarkException(Profile* profile, const GURL& url);
++
++// Sets the exception for the site of `url` and updates the open tabs.
++void SetSiteDarkException(Profile* profile,
++                          const GURL& url,
++                          SiteDarkException exception);
++
++// Whether the pages of `url` are darkened. Only web pages: the browser's own
++// pages and the extensions' have their own themes.
++bool ShouldDarkenSite(Profile* profile, const GURL& url, bool browser_is_dark);
++
++}  // namespace browser_fork
++
++#endif  // CHROME_BROWSER_FORK_SITE_DARK_MODE_H_
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index 6f9760e29a8da0bdf07383ed7d112e27564c4957..8b9dbff311b25a0f7d276ee216b655cdf3ed7564 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -33,6 +33,7 @@
+ #include "chrome/browser/enterprise/reporting/prefs.h"
+ #include "chrome/browser/enterprise/util/managed_browser_utils.h"
+ #include "chrome/browser/external_protocol/external_protocol_handler.h"
++#include "chrome/browser/fork/site_dark_mode.h"
+ #include "chrome/browser/fork/site_redirect.h"
+ #include "chrome/browser/fork/temporary_site_data_service.h"
+ #include "chrome/browser/fork/vpn_status.h"
+@@ -1766,6 +1767,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+   browser_fork::TemporarySiteDataService::RegisterProfilePrefs(registry);
+   browser_fork::VpnStatus::RegisterProfilePrefs(registry);
+   browser_fork::RegisterSiteRedirectPrefs(registry);
++  browser_fork::RegisterSiteDarkModePrefs(registry);
+   AccessibilityUIMessageHandler::RegisterProfilePrefs(registry);
+   accessibility_annotator::prefs::RegisterProfilePrefs(registry);
+   AimEligibilityService::RegisterProfilePrefs(registry);
+diff --git a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
+index 21edfa610492f212ce08eed8e0e8ffb897921b75..dc2076f8e4416d392e365618a4ee09350ffffa63 100644
+--- a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
+@@ -80,6 +80,21 @@ export function getHtml(this: SettingsAppearancePageElement) {
+         `)}
+       </select>
+     </div>
++    <div class="cr-row" id="forkSiteDarkRow">
++      <div class="flex cr-padded-text" aria-hidden="true">
++        <div>$i18n{forkSettingsSiteDark}</div>
++        <div class="secondary">$i18n{forkSettingsSiteDarkSub}</div>
++      </div>
++      <settings-dropdown-menu id="forkSiteDark"
++          label="$i18n{forkSettingsSiteDark}"
++          pref-key="fork.site_dark_mode"
++          .menuOptions="${[
++            {value: 0, name: this.i18n('forkSiteDarkAutomatic')},
++            {value: 1, name: this.i18n('forkSiteDarkAlways')},
++            {value: 2, name: this.i18n('forkSiteDarkNever')},
++          ]}">
++      </settings-dropdown-menu>
++    </div>
+     <div class="hr" ?hidden="${!this.showHr_(
+         this.pageVisibility_.setTheme, this.pageVisibility_.homeButton)}">
+     </div>
+diff --git a/chrome/browser/resources/site_panel.html b/chrome/browser/resources/site_panel.html
+index 5c63e7c767fad2955613d322cc1196cbed45394d..a2b5a54fddeb79a042bb11bff40c58fd58735ed1 100644
+--- a/chrome/browser/resources/site_panel.html
++++ b/chrome/browser/resources/site_panel.html
+@@ -46,6 +46,7 @@ h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--sub); }
+ .group { border-radius: 12px; background: var(--group); }
+ .row { width: 100%; min-height: 30px; padding: 0 10px; box-sizing: border-box; border: 0; background: transparent; color: var(--text); font-size: 13px; display: flex; align-items: center; gap: 8px; text-align: left; }
+ .row + .row { border-top: 1px solid var(--sep); }
++.row[hidden] + .row { border-top: 0; }
+ .row > span:first-child { flex: 1; min-width: 0; }
+ .chip { padding: 2px 8px; border-radius: 9px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+ .rand { background: var(--accent-bg); color: var(--accent); }
+@@ -112,6 +113,7 @@ figcaption { margin-top: 4px; font-size: 11px; color: var(--sub); }
+     <button id="webgl"></button>
+   </div>
+   <div class="group">
++    <button class="row" id="dark" hidden><span>$i18n{forkSitePanelSiteDark}</span><span class="value" id="dark-value"></span></button>
+     <button class="row" id="remember"><span>$i18n{forkSitePanelRemember}</span><span class="value" id="remember-value"></span></button>
+     <button class="row" id="cookies"><span>$i18n{forkCookiesAndSiteData}</span><span class="value" id="cookies-value"></span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"></path></svg></button>
+     <button class="row" id="blocking"><span>$i18n{forkSitePanelBlocked}</span><span class="value" id="blocking-value"></span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"></path></svg></button>
+diff --git a/chrome/browser/resources/site_panel.js b/chrome/browser/resources/site_panel.js
+index fc9cc3deec934422aae63d82c32a4df24b5b664f..896e8499759d4e89ff3d19f0f4c8baeefb50af8a 100644
+--- a/chrome/browser/resources/site_panel.js
++++ b/chrome/browser/resources/site_panel.js
+@@ -104,6 +104,8 @@ window.SitePanel = (function() {
+     $('webgl').classList.toggle('on', s.webgl);
+     $('webgl').textContent = s.webgl ? loadTimeData.getString('forkSitePanelBlockWebglAgain') :
+                                        loadTimeData.getString('forkSitePanelAllowWebgl');
++    $('dark').hidden = !s.dark;
++    $('dark-value').textContent = s.dark || '';
+     $('remember-value').textContent = s.remembered ? loadTimeData.getString('forkYes') : loadTimeData.getString('forkNo');
+     $('cookies-value').textContent = s.cookies ?
+         loadTimeData.getStringF('forkSitePanelCookiesInUse', String(s.cookies)) :
+@@ -126,6 +128,7 @@ window.SitePanel = (function() {
+       showAll = !showAll;
+       showFingerprinting(state);
+     };
++    $('dark').onclick = () => chrome.send('toggleSiteDark');
+     $('remember').onclick = () => chrome.send('setRemembered', [!state.remembered]);
+     $('cookies').onclick = () => chrome.send('openPageInfo');
+     $('blocking').onclick = () => chrome.send('openBlocking');
+diff --git a/chrome/browser/ui/prefs/pref_watcher.cc b/chrome/browser/ui/prefs/pref_watcher.cc
+index b6c44caf81a8505534ea552b0012e62d0375e63d..d321ea9080c262122d11ef408b6370541db5288a 100644
+--- a/chrome/browser/ui/prefs/pref_watcher.cc
++++ b/chrome/browser/ui/prefs/pref_watcher.cc
+@@ -17,6 +17,7 @@
+ #include "base/no_destructor.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/browser_process.h"
++#include "chrome/browser/fork/site_dark_mode.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/profiles/profile_keyed_service_factory.h"
+ #include "chrome/browser/profiles/profile_selections.h"
+@@ -80,6 +81,7 @@ const char* const kWebPrefsToObserve[] = {
+     prefs::kWebKitPasswordEchoEnabledTouch,
+ #endif
+     prefs::kWebKitForceDarkModeEnabled,
++    browser_fork::kSiteDarkModePref,
+     prefs::kWebKitJavascriptEnabled,
+     prefs::kWebKitLoadsImagesAutomatically,
+     prefs::kWebKitMinimumFontSize,
+diff --git a/chrome/browser/ui/webui/site_panel_ui.cc b/chrome/browser/ui/webui/site_panel_ui.cc
+index b1c9eedec39079b416ddd4798508c21099ab69f2..b820e1d1e84026b16b0a4e5ddc768e0b2afa6493 100644
+--- a/chrome/browser/ui/webui/site_panel_ui.cc
++++ b/chrome/browser/ui/webui/site_panel_ui.cc
+@@ -11,6 +11,7 @@
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/browser/fork/fingerprinting_counter.h"
++#include "chrome/browser/fork/site_dark_mode.h"
+ #include "chrome/browser/fork/site_redirect.h"
+ #include "chrome/browser/fork/temporary_site_data_service.h"
+ #include "chrome/browser/fork/ublock_extension.h"
+@@ -38,6 +39,7 @@
+ #include "content/public/browser/web_ui.h"
+ #include "content/public/browser/web_ui_data_source.h"
+ #include "content/public/browser/web_ui_message_handler.h"
++#include "third_party/blink/public/common/web_preferences/web_preferences.h"
+ #include "extensions/browser/extension_action.h"
+ #include "extensions/browser/extension_action_manager.h"
+ #include "extensions/browser/extension_registry.h"
+@@ -106,6 +108,7 @@ class SitePanelHandler : public content::WebUIMessageHandler {
+     add("openVpnSettings", &SitePanelHandler::OnOpenVpnSettings);
+     add("openBlocking", &SitePanelHandler::OnOpenBlocking);
+     add("setRemembered", &SitePanelHandler::OnSetRemembered);
++    add("toggleSiteDark", &SitePanelHandler::OnToggleSiteDark);
+     add("setWebgl", &SitePanelHandler::OnSetWebgl);
+     add("openOriginal", &SitePanelHandler::OnOpenOriginal);
+     add("openRespectful", &SitePanelHandler::OnOpenRespectful);
+@@ -191,6 +194,7 @@ class SitePanelHandler : public content::WebUIMessageHandler {
+     state.Set("cookies", cookies);
+     state.Set("permissions", permissions);
+     state.Set("remembered", IsRemembered(url));
++    state.Set("dark", SiteDarkLabel(url));
+     state.Set("blocked", BlockedCount(contents));
+     state.Set("webgl", map->GetContentSetting(url, url,
+                                               ContentSettingsType::WEBGL) ==
+@@ -306,6 +310,49 @@ class SitePanelHandler : public content::WebUIMessageHandler {
+     }
+   }
+ 
++  // Empty for the pages that are not web pages: there the row is hidden.
++  std::u16string SiteDarkLabel(const GURL& url) {
++    if (!url.SchemeIsHTTPOrHTTPS()) {
++      return std::u16string();
++    }
++    switch (browser_fork::GetSiteDarkException(GetProfile(), url)) {
++      case browser_fork::SiteDarkException::kOn:
++        return l10n_util::GetStringUTF16(IDS_FORK_SITE_DARK_ON_HERE);
++      case browser_fork::SiteDarkException::kOff:
++        return l10n_util::GetStringUTF16(IDS_FORK_SITE_DARK_OFF_HERE);
++      case browser_fork::SiteDarkException::kNone:
++        break;
++    }
++    switch (browser_fork::GetSiteDarkMode(GetProfile())) {
++      case browser_fork::SiteDarkMode::kAlways:
++        return l10n_util::GetStringUTF16(IDS_FORK_SITE_DARK_ALWAYS);
++      case browser_fork::SiteDarkMode::kNever:
++        return l10n_util::GetStringUTF16(IDS_FORK_SITE_DARK_NEVER);
++      case browser_fork::SiteDarkMode::kAutomatic:
++        return l10n_util::GetStringUTF16(IDS_FORK_SITE_DARK_AUTOMATIC);
++    }
++  }
++
++  // Without an exception the click does the opposite of what the page shows
++  // now; with one it goes back to the general setting.
++  void OnToggleSiteDark(const base::ListValue& args) {
++    content::WebContents* contents = GetSiteContents();
++    if (!contents) {
++      return;
++    }
++    const GURL url = contents->GetLastCommittedURL();
++    browser_fork::SiteDarkException next =
++        browser_fork::SiteDarkException::kNone;
++    if (browser_fork::GetSiteDarkException(GetProfile(), url) ==
++        browser_fork::SiteDarkException::kNone) {
++      next = contents->GetOrCreateWebPreferences().force_dark_mode_enabled
++                 ? browser_fork::SiteDarkException::kOff
++                 : browser_fork::SiteDarkException::kOn;
++    }
++    browser_fork::SetSiteDarkException(GetProfile(), url, next);
++    SendState();
++  }
++
+   void OnSetRemembered(const base::ListValue& args) {
+     content::WebContents* contents = GetSiteContents();
+     if (!contents || args.size() != 1 || !args[0].is_bool()) {
+diff --git a/components/content_settings/core/browser/content_settings_registry.cc b/components/content_settings/core/browser/content_settings_registry.cc
+index 4755f4947b3bb96e93466e955a8ca499f9eb6db4..45f41b0e2085b225a7d7883695617a70a97bcddd 100644
+--- a/components/content_settings/core/browser/content_settings_registry.cc
++++ b/components/content_settings/core/browser/content_settings_registry.cc
+@@ -612,7 +612,9 @@ void ContentSettingsRegistry::Init() {
+ #if BUILDFLAG(USE_BLINK)
+                | WebsiteSettingsRegistry::PLATFORM_IOS
+ #endif
+-           ,
++               // Fork: the site's choice for the dark theme, from the site
++               // panel (chrome/browser/fork/site_dark_mode.h).
++               | WebsiteSettingsRegistry::DESKTOP,
+            ContentSettingsInfo::INHERIT_IN_INCOGNITO,
+            PermissionSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
+ 

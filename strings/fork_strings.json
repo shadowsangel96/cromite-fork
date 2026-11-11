@@ -938,6 +938,65 @@
       "en": "Compact, like Safari. Applies to the windows you open afterwards.",
       "it": "Compatte, come Safari. Vale per le finestre che apri dopo."
     },
+    "settingsSiteDark": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Dark theme for sites",
+      "it": "Tema scuro dei siti"
+    },
+    "settingsSiteDarkSub": {
+      "pages": [
+        "settings"
+      ],
+      "en": "Sites without a dark theme of their own turn dark: with Automatic, only when the browser is dark. Photos and videos stay as they are.",
+      "it": "I siti che non hanno un tema scuro loro diventano scuri: con Automatico, solo quando il browser è scuro. Foto e video restano come sono."
+    },
+    "siteDarkAutomatic": {
+      "pages": [
+        "native",
+        "settings"
+      ],
+      "en": "Automatic",
+      "it": "Automatico"
+    },
+    "siteDarkAlways": {
+      "pages": [
+        "native",
+        "settings"
+      ],
+      "en": "Always",
+      "it": "Sempre"
+    },
+    "siteDarkNever": {
+      "pages": [
+        "native",
+        "settings"
+      ],
+      "en": "Never",
+      "it": "Mai"
+    },
+    "sitePanelSiteDark": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Site dark theme",
+      "it": "Tema scuro del sito"
+    },
+    "siteDarkOnHere": {
+      "pages": [
+        "native"
+      ],
+      "en": "On for this site",
+      "it": "Acceso su questo sito"
+    },
+    "siteDarkOffHere": {
+      "pages": [
+        "native"
+      ],
+      "en": "Off for this site",
+      "it": "Spento su questo sito"
+    },
     "ublockIntegrated": {
       "pages": [
         "settings"

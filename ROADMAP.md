@@ -1,7 +1,11 @@
 # Roadmap
 
 Ordine deciso: interfaccia Mac come negli schizzi, voce 3 (privacy e pannello), redirect (12b) e
-uBlock al posto dell'adblock (12), nome e traduzioni (12c) sono fatti; adesso Windows. Ordine indicativo per il resto. Ogni voce diventa una o più patch in `patches/` (titolo del commit con
+uBlock al posto dell'adblock (12), nome e traduzioni (12c) sono fatti. Adesso le funzioni comuni a tutte le piattaforme, prima di
+Windows, così Windows si compila e si prova una volta sola con tutto: tema scuro dei siti (8),
+assistente all'accesso (10), password di Apple (11, serve alla sync per custodire il codice),
+sync sul proprio server (5) con i cookie centralizzati, solo estensioni approvate (12). Poi
+Windows, poi iOS. Ordine indicativo per il resto. Ogni voce diventa una o più patch in `patches/` (titolo del commit con
 `win:`, `mac:` o `ios:` per quelle di una sola piattaforma), quindi sopravvive agli
 aggiornamenti di Cromite come tutto il resto.
 
@@ -421,7 +425,7 @@ condiviso con altri utenti della VPN.
   (`WKWebsiteDataStore.proxyConfigurations`).
 - **Limite:** la VPN nasconde l'IP, non l'identità quando si fa login a un account.
 
-## 8. Tema scuro dei siti (come Dark Reader)
+## 8. Tema scuro dei siti (come Dark Reader): fatto sul Mac
 
 Con il browser in modalità scura, i siti che non hanno un tema scuro diventano scuri da soli;
 quelli che ce l'hanno usano il loro. Vale per tutte e tre le piattaforme.
@@ -431,9 +435,12 @@ quelli che ce l'hanno usano il loro. Vale per tutte e tre le piattaforme.
   sito ("Tema scuro del sito").
 - **Mac e Windows:** Chromium ha già un motore nativo (Blink, flag `#enable-force-dark`, "Auto
   Dark Mode for Web Contents") che scurisce la pagina mentre la disegna e lascia stare foto e
-  video. La patch lo trasforma in un'impostazione vera, legata al tema del browser, con le
-  eccezioni per sito. Da verificare sulla build che salti davvero i siti che dichiarano un tema
-  scuro (`color-scheme` o `prefers-color-scheme`); se non lo fa, quel controllo lo aggiungiamo noi.
+  video. La patch (`common/0025`) lo trasforma in un'impostazione vera in Aspetto, legata al tema
+  del browser (segue anche il passaggio automatico chiaro/scuro del Mac), con le eccezioni per
+  sito dal pannello del sito ("Tema scuro del sito", impostazione `AUTO_DARK_WEB_CONTENT` accesa
+  anche su desktop). Verificato: i siti che dichiarano un tema scuro, con `color-scheme` o anche
+  solo con `prefers-color-scheme`, tengono il loro; le pagine del browser e delle estensioni non
+  si toccano. Su Windows è lo stesso codice, da provare con la prima build.
 - **Privacy:** il motore nativo lavora in fase di disegno, quindi la pagina non vede stili
   aggiunti. Un'estensione come Dark Reader invece inserisce i suoi stili nella pagina, e un sito
   può accorgersene: è un piccolo segnale di fingerprinting in più.
