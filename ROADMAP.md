@@ -1,7 +1,7 @@
 # Roadmap
 
 Ordine deciso: interfaccia Mac come negli schizzi, voce 3 (privacy e pannello), redirect (12b) e
-uBlock al posto dell'adblock (12) sono fatti; adesso nome e traduzioni (12c), poi Windows. Ordine indicativo per il resto. Ogni voce diventa una o più patch in `patches/` (titolo del commit con
+uBlock al posto dell'adblock (12), nome e traduzioni (12c) sono fatti; adesso Windows. Ordine indicativo per il resto. Ogni voce diventa una o più patch in `patches/` (titolo del commit con
 `win:`, `mac:` o `ios:` per quelle di una sola piattaforma), quindi sopravvive agli
 aggiornamenti di Cromite come tutto il resto.
 
@@ -294,7 +294,8 @@ la voce 2). Il fuso orario resta "Consentito": il browser non lo cambia.
 senza italiano. 98 sono tradotte in `strings/cromite_it.json`: forkctl le mette nei `.xtb` di
 Chromium quando applica le patch, con gli ID calcolati da grit sui sorgenti di quel momento (niente
 patch sui `.xtb`, che cambiano a ogni versione), e segnala quelle il cui inglese è cambiato. Le
-altre 3 contengono il nome "Cromite" e arrivano con il nome nuovo (12c). Da rifare il conto per
+altre 3 contengono il nome "Cromite": ora ci sono anche loro, con il nome scritto come
+nell'inglese, che grit cambia in Shannon. Da rifare il conto per
 Windows quando torniamo lì (qualche scritta può valere solo lì).
 
 Chromium è già tradotto in italiano, ma le stringhe aggiunte da Cromite no: delle 343 che le sue
@@ -618,9 +619,19 @@ spento come già in Cromite (`Do-not-store-passwords-by-default.patch`,
 
 ## 12c. Nome del browser e traduzioni inglesi
 
-- **Scegliere il nome definitivo** (oggi "NomeBrowser") e sostituirlo ovunque compare "Cromite":
-  stringhe dell'interfaccia ("Your Cromite", "Cromite didn't shut down correctly", il chip sulle
-  pagine chrome://, la pagina Informazioni), icone e nomi dei file.
+- **Nome: Shannon** (fatto). Cromite cambiava Chrome e Chromium in "Cromite" mentre grit leggeva i
+  `.grd`: l'ID delle scritte cambiava e circa mille scritte di Chromium perdevano la traduzione
+  (in italiano "About Cromite", "Your Cromite"...). La patch `common/0024` cambia il nome sul testo
+  finale, in ogni lingua: le traduzioni di Chromium tornano ("Informazioni su Shannon", "Il tuo
+  Shannon"). Restano Google Chrome, il Chrome Web Store, gli autori e il progetto Chromium, e le
+  nostre scritte. Bundle id `io.github.shadowsangel96.shannon`; sul Mac la cartella
+  `NomeBrowser` e la voce "NomeBrowser Safe Storage" del Portachiavi passano a Shannon al primo
+  avvio (`macos/0017`); su Windows la cartella dei dati è `Shannon` (con Cromite era la stessa di
+  un Cromite installato). Lo user agent non cambia: resta quello di Chrome.
+- **Icona** (fatto): la bussola con l'anello argilla (idea A della tela). Sul Mac un'icona di Icon
+  Composer (macOS 26: chiara, scura, colorata e trasparente, con il vetro del sistema) compilata in
+  `Assets.car`, più `app.icns` per i macOS vecchi; la stessa bussola nelle pagine del browser, nel
+  logo di `chrome://version` e in `chromium.ico` per Windows. Tutto da `tools/genera_icona.py`.
 - **Traduzioni inglesi** delle stringhe delle nostre patch (fatto): le 249 scritte stanno in
   `strings/fork_strings.json` con inglese e italiano e passano dalle risorse di Chromium (un nostro
   `fork_strings.grd` con il suo `.xtb` italiano, generati da `tools/fork_strings.py`). La lingua

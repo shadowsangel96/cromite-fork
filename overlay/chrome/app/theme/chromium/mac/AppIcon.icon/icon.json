@@ -1,0 +1,116 @@
+{
+  "fill-specializations": [
+    {
+      "value": {
+        "linear-gradient": [
+          "srgb:1.00000,1.00000,1.00000,1.00000",
+          "srgb:0.93333,0.92157,0.88627,1.00000"
+        ]
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "linear-gradient": [
+          "srgb:0.20000,0.19608,0.18431,1.00000",
+          "srgb:0.10588,0.10588,0.09804,1.00000"
+        ]
+      }
+    }
+  ],
+  "groups": [
+    {
+      "name": "ago",
+      "layers": [
+        {
+          "name": "perno",
+          "glass": false,
+          "image-name-specializations": [
+            {
+              "value": "perno_chiaro.svg"
+            },
+            {
+              "appearance": "dark",
+              "value": "perno_scuro.svg"
+            }
+          ]
+        },
+        {
+          "name": "nord",
+          "glass": false,
+          "image-name": "nord.svg"
+        },
+        {
+          "name": "sud",
+          "glass": false,
+          "image-name-specializations": [
+            {
+              "value": "sud_chiaro.svg"
+            },
+            {
+              "appearance": "dark",
+              "value": "sud_scuro.svg"
+            }
+          ]
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    },
+    {
+      "name": "quadrante",
+      "layers": [
+        {
+          "name": "punti",
+          "glass": false,
+          "image-name-specializations": [
+            {
+              "value": "punti_chiaro.svg"
+            },
+            {
+              "appearance": "dark",
+              "value": "punti_scuro.svg"
+            }
+          ]
+        },
+        {
+          "name": "anello",
+          "glass": false,
+          "image-name": "anello.svg"
+        },
+        {
+          "name": "faccia",
+          "glass": false,
+          "image-name-specializations": [
+            {
+              "value": "faccia_chiaro.svg"
+            },
+            {
+              "appearance": "dark",
+              "value": "faccia_scuro.svg"
+            }
+          ]
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.3
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
+}

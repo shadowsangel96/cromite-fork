@@ -1,9 +1,11 @@
-# NomeBrowser
+# Shannon
 
 Il nostro browser basato su [Cromite](https://github.com/uazo/cromite) (di uazo), a sua volta
 basato su Chromium, per **Windows, macOS e iOS**. Dove Cromite non arriva (macOS, iOS) lo
-implementiamo noi. `NomeBrowser` è un nome provvisorio: si cambia in `fork.json` e nella patch
-di branding.
+implementiamo noi. Il nome viene da Claude Shannon, il padre della teoria dell'informazione e
+della crittografia moderna. Sta in `fork.json`, nella patch di branding e in grit
+(`common/0024`), che lo mette al posto di Chromium e Cromite in tutte le scritte e in ogni lingua.
+L'icona (la bussola con l'anello argilla, chiara e scura) si rigenera con `tools/genera_icona.py`.
 
 Cosa viene dopo (anti-fingerprinting come Brave, pannello delle API bloccate, sync, tema
 Liquid Glass su macOS e iOS): [ROADMAP.md](ROADMAP.md).
@@ -58,6 +60,7 @@ state/rr-cache/      memoria delle risoluzioni dei conflitti
 reports/             report di ogni aggiornamento
 tools/forkctl.py     lo strumento che gestisce tutto
 tools/fork_strings.py  dalle scritte di strings/ ai file di traduzione di Chromium
+tools/genera_icona.py  l'icona (Mac chiara e scura, pagine del browser, Windows) in overlay/
 tools/build/         script di build completa per piattaforma
 tests/               test offline di forkctl
 ```

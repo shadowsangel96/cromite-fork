@@ -3,12 +3,13 @@ From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
 Date: Wed, 28 Oct 2026 10:37:38 +0100
 Subject: [PATCH] Branding: nome del fork e bundle id per macOS/iOS
 
-Nome provvisorio: sostituire NomeBrowser e org.nomebrowser quando scegliamo il nome definitivo.
+Il browser si chiama Shannon, con il bundle id io.github.shadowsangel96.shannon.
+Su Windows la cartella dei dati diventa Shannon: con Cromite era la stessa di un Cromite installato.
 
 Fork-Patch: common/0001-branding-nome-del-fork-e-bundle-id-per-macos-ios.patch
 
 diff --git a/chrome/app/theme/chromium/BRANDING b/chrome/app/theme/chromium/BRANDING
-index 9f98aa4bf543920b9d4c9916df7f6b71928ca933..576b3937d39f8bc742ff97e2efae322623742708 100644
+index 9f98aa4bf543920b9d4c9916df7f6b71928ca933..41cbc2ac5fbeb96caca648f793735bb79bdfcb40 100644
 --- a/chrome/app/theme/chromium/BRANDING
 +++ b/chrome/app/theme/chromium/BRANDING
 @@ -1,10 +1,10 @@
@@ -18,12 +19,25 @@ index 9f98aa4bf543920b9d4c9916df7f6b71928ca933..576b3937d39f8bc742ff97e2efae3226
 -PRODUCT_SHORTNAME=Cromite
 -PRODUCT_INSTALLER_FULLNAME=Cromite Installer
 -PRODUCT_INSTALLER_SHORTNAME=Cromite Installer
-+PRODUCT_FULLNAME=NomeBrowser
-+PRODUCT_SHORTNAME=NomeBrowser
-+PRODUCT_INSTALLER_FULLNAME=NomeBrowser Installer
-+PRODUCT_INSTALLER_SHORTNAME=NomeBrowser Installer
++PRODUCT_FULLNAME=Shannon
++PRODUCT_SHORTNAME=Shannon
++PRODUCT_INSTALLER_FULLNAME=Shannon Installer
++PRODUCT_INSTALLER_SHORTNAME=Shannon Installer
  COPYRIGHT=Copyright @LASTCHANGE_YEAR@ The Chromium Authors. All rights reserved.
 -MAC_BUNDLE_ID=org.chromium.Chromium
-+MAC_BUNDLE_ID=org.nomebrowser.NomeBrowser
++MAC_BUNDLE_ID=io.github.shadowsangel96.shannon
  MAC_CREATOR_CODE=Cr24
  MAC_TEAM_ID=
+diff --git a/chrome/install_static/chromium_install_modes.h b/chrome/install_static/chromium_install_modes.h
+index 25811d2fe70632ae0b5b2005d287d132dec389fe..fd59493e60e6915f466bcec673d56d29011e7b61 100644
+--- a/chrome/install_static/chromium_install_modes.h
++++ b/chrome/install_static/chromium_install_modes.h
+@@ -21,7 +21,7 @@ inline constexpr wchar_t kCompanyPathName[] = L"";
+ 
+ // The brand-specific product name to be included as a component of the install
+ // and user data directory paths.
+-inline constexpr wchar_t kProductPathName[] = L"Cromite";
++inline constexpr wchar_t kProductPathName[] = L"Shannon";
+ 
+ // The brand-specific safe browsing client name.
+ inline constexpr char kSafeBrowsingName[] = "chromium";

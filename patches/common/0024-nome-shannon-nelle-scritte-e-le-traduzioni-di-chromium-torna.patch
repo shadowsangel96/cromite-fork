@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 21:54:57 +0100
+Subject: [PATCH] Nome: Shannon nelle scritte, e le traduzioni di Chromium
+ tornano
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Cromite cambiava Chrome e Chromium in Cromite mentre grit leggeva i .grd: l'ID delle scritte cambiava e le loro traduzioni non valevano più (546 scritte di chromium_strings in inglese anche in italiano). Ora il nome si cambia sul testo finale, in ogni lingua; restano Google Chrome, il Chrome Web Store, gli autori e il progetto Chromium, e le nostre scritte IDS_FORK_*.
+
+Fork-Patch: common/0024-nome-shannon-nelle-scritte-e-le-traduzioni-di-chromium-torna.patch
+
+diff --git a/tools/grit/grit/grd_reader.py b/tools/grit/grit/grd_reader.py
+index 46b1b31bc8f41689448d608f5a615e27fa20ef69..2af6b742d4c7dc6a6a335326e9c66e2df77bbe67 100755
+--- a/tools/grit/grit/grd_reader.py
++++ b/tools/grit/grit/grd_reader.py
+@@ -139,7 +139,12 @@ class GrdContentHandler(xml.sax.handler.ContentHandler):
+   def characters(self, content):
+     if self.ignore_depth == 0:
+       if self.stack[-1]:
+-        content = self.replace_browser(content)
++        # Fork: il nome del browser si mette in node/message.py, sul testo finale. Qui si
++        # tolgono solo i segni "dontreplace" di Cromite, così l'ID della scritta resta quello
++        # di Chromium e le sue traduzioni valgono.
++        content = (content.replace("Chromiumdontreplace", "Chromium")
++                   .replace("Chromedontreplace", "Chrome")
++                   .replace("chromedontreplace", "chrome"))
+         self.stack[-1].AppendContent(content)
+ 
+   def ignorableWhitespace(self, whitespace):
+diff --git a/tools/grit/grit/node/message.py b/tools/grit/grit/node/message.py
+index 74413e10aaeef9a863af3b0a6087f62ae4abcada..b61453b8eb69accbf981cb74951a79a6e61c4c4e 100644
+--- a/tools/grit/grit/node/message.py
++++ b/tools/grit/grit/node/message.py
+@@ -54,6 +54,28 @@ _HTMLTOKEN = re.compile(r'<[/]?[a-z][a-z0-9]*[^>]*>', re.I)
+ # Finds HTML entities.
+ _HTMLENTITY = re.compile(r'&[^\s]*;')
+ 
++# Fork: il nome del browser nelle scritte di Chromium e di Cromite, in ogni lingua. Cromite lo
++# cambiava leggendo il .grd: l'ID della scritta cambiava e le traduzioni di Chromium andavano
++# perse. Qui si cambia il testo finale, inglese e tradotto. Restano i nomi che parlano d'altro
++# (Google Chrome, il Chrome Web Store, gli autori e il progetto Chromium) e le nostre scritte
++# (IDS_FORK_*), che il nome lo prendono da IDS_PRODUCT_NAME.
++_BROWSER_NAME = 'Shannon'
++_BROWSER_KEEP = re.compile(
++  r'Google Chrome|Chrome Web Store|Chrome OS|Chromium Authors|Chromium open source'
++  r'|open source Chromium|progetto Chromium|Chromium project'
++)
++_BROWSER_WORD = re.compile(r'\b(?:Chromium|Chrome|Cromite|Bromite)\b')
++
++
++def _BrandText(text):
++  out, pos = [], 0
++  for keep in _BROWSER_KEEP.finditer(text):
++    out.append(_BROWSER_WORD.sub(_BROWSER_NAME, text[pos:keep.start()]))
++    out.append(keep.group(0))
++    pos = keep.end()
++  out.append(_BROWSER_WORD.sub(_BROWSER_NAME, text[pos:]))
++  return ''.join(out)
++
+ 
+ class MessageNode(base.ContentNode):
+   '''A <message> element.'''
+@@ -291,6 +313,8 @@ class MessageNode(base.ContentNode):
+       msg = _ELLIPSIS_PATTERN.sub(_ELLIPSIS_SYMBOL, msg)
+     # Always remove all byte order marks (\uFEFF) https://crbug.com/1033305
+     msg = msg.replace('\ufeff', '')
++    if not self.attrs.get('name', '').startswith('IDS_FORK_'):
++      msg = _BrandText(msg)
+     return msg.replace('[GRITLANGCODE]', lang)
+ 
+   def NameOrOffset(self):

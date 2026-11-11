@@ -39,13 +39,13 @@
 <translation id="4055308316470957341">Temporanei:</translation>
 <translation id="4932593099860824457">i dati di un sito durano la visita e si cancellano appena lo lasci.</translation>
 <translation id="8165203699604444387">Normale:</translation>
-<translation id="6951291922811854778">come in Chrome, con i cookie separati per sito.</translation>
+<translation id="5556524513930455093">come in Chrome, con i cookie separati per sito.</translation>
 <translation id="6379067041319439639">Blocca tutti:</translation>
 <translation id="6268874255637431088">nessun sito salva dati, i login non funzionano. Valgono solo i siti da ricordare.</translation>
 <translation id="4410630789114939416">Siti da ricordare</translation>
 <translation id="1472244992334242296">Uno per riga. Qui resti collegato: i loro dati non si cancellano mai.</translation>
 <translation id="5704470470786447572">Claude non entra in questi siti</translation>
-<translation id="624148745353689861">Uno per riga, per esempio banche e sanità. Claude in Chrome non può leggerli né usarli.</translation>
+<translation id="8502975165516496025">Uno per riga, per esempio banche e sanità. Claude in Chrome non può leggerli né usarli.</translation>
 <translation id="7920826491689411430">Connessione diretta di riserva: il tuo IP è visibile.</translation>
 <translation id="6405303356523289994">Attiva: il browser esce da <ph name="ADDRESS"/>.</translation>
 <translation id="4969890603082537650">Spenta: il browser esce dalla connessione normale.</translation>
@@ -123,7 +123,7 @@
 <translation id="5345037342474285740">Informazioni sul sito: <ph name="COUNT"/> tentativi di fingerprinting bloccati</translation>
 <translation id="5542132724887566711">Profilo</translation>
 <translation id="8834419122625765073">Non hai ancora fatto l'accesso</translation>
-<translation id="200519121329895339">Un solo accesso con il tuo account Claude per Claude in Chrome e le tue chat.</translation>
+<translation id="2783201428390486782">Un solo accesso con il tuo account Claude per Claude in Chrome e le tue chat.</translation>
 <translation id="1547182868293481880">Accedi con Claude</translation>
 <translation id="3253392025008686290">Account Claude</translation>
 <translation id="9155825693962425868">Accesso fatto su claude.ai</translation>
@@ -248,7 +248,7 @@
 <translation id="2575802419730444892">Diretto · IP visibile</translation>
 <translation id="2563301876774193221">Connessione diretta: i siti vedono l'IP di casa.</translation>
 <translation id="3670390213897592456">Chiudi Claude</translation>
-<translation id="4045691066051619628">Chat e "Fallo tu": Claude in Chrome con il tuo abbonamento claude.ai.</translation>
+<translation id="3031915649483901749">Chat e "Fallo tu": Claude in Chrome con il tuo abbonamento claude.ai.</translation>
 <translation id="3900307697381726547">claude.ai con il tuo account: chat, progetti e artifact come nell'app.</translation>
 <translation id="6794469945030154569">Questa pagina</translation>
 </translationbundle>

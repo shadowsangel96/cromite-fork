@@ -1,5 +1,5 @@
 {
- "_comment": "Traduzioni italiane delle scritte che Cromite aggiunge senza italiano. forkctl le aggiunge ai .xtb di Chromium quando applica le patch, con gli ID calcolati da grit; una scritta il cui inglese è cambiato si salta. {NOME}: un segnaposto della scritta. Le tre che contengono il nome \"Cromite\" arrivano con il nome nuovo.",
+ "_comment": "Traduzioni italiane delle scritte che Cromite aggiunge senza italiano. forkctl le aggiunge ai .xtb di Chromium quando applica le patch, con gli ID calcolati da grit; una scritta il cui inglese è cambiato si salta. {NOME}: un segnaposto della scritta. Il nome del browser si scrive come nell'inglese (Cromite, Bromite): grit lo cambia in Shannon nel testo finale, in ogni lingua.",
  "strings": {
   "IDS_SETTINGS_ENABLE_GPC": {
    "grd": "chrome/app/generated_resources.grd",
@@ -490,6 +490,21 @@
    "grd": "components/components_strings.grd",
    "en": "Do you want to install this user script from following location?\n\nFILE\n\nNOTE: only install user scripts that you have verified are secure, user scripts can steal your credentials and data.",
    "it": "Vuoi installare questo script utente da questo indirizzo?\n\n{FILE}\n\nNOTA: installa solo script utente che hai verificato come sicuri: gli script utente possono rubare le tue credenziali e i tuoi dati."
+  },
+  "IDS_SETTINGS_CLEAR_BROWSING_DATA_AT_CLOSE": {
+   "grd": "chrome/app/generated_resources.grd",
+   "en": "Clear browsing data when closing Cromite",
+   "it": "Cancella i dati di navigazione quando chiudi Cromite"
+  },
+  "IDS_SETTINGS_CLEAR_DATA_AT_CLOSE_DESCRIPTION": {
+   "grd": "chrome/app/generated_resources.grd",
+   "en": "Choose what to automatically delete when you close Cromite",
+   "it": "Scegli cosa eliminare in automatico quando chiudi Cromite"
+  },
+  "IDS_POLICY_SOURCE_COMMAND_LINE": {
+   "grd": "components/components_strings.grd",
+   "en": "Bromite default",
+   "it": "Predefinito di Bromite"
   }
  }
 }
