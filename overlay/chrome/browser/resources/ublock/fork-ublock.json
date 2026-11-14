@@ -1,6 +1,6 @@
 {
-  "version": "1.76.0",
-  "url": "https://github.com/gorhill/uBlock/releases/download/1.76.0/uBlock0_1.76.0.chromium.zip",
-  "sha256": "e76a1912426caa7b8679ad11dd140d1529c23db22ddbe892b6f901e9b7763456",
+  "version": "1.76.2",
+  "url": "https://github.com/gorhill/uBlock/releases/download/1.76.2/uBlock0_1.76.2.chromium.zip",
+  "sha256": "c62f5521953c1a1534fea684c7d57095c782fa8e433cb972f6b5b6c2cea5bc1c",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuuz6yvmRXteB5MWfOuMbN6Bl4QtoNi/FN+WI1GIHHmRlfvIi2UZRk6yVrSYSQjoyT3/TuXvF+06HGs5jMLq2M01s+5aIWr6JHOs62nkVpGs1UrVqPYYOwEYQ9C/wcQDBrMS0eJ0PnRJsS/k6bnMxVtK4fI7amRKUMZxSaHKVBoqTsIDR1OkVW9DiDwYhYXY7Ri0fxRKCdbKOuGY65JA4raG+zvAPLw1AaBvTT9O75y9w4bD00MkodmrC5kP+sOZRMstgFnc1PRG6WH0w6xLhtHsgR2iGkWc0vLTQh+kLbsYoFbCaxjnlJ8x7aA3hTaVT+CClrx5Jo0WykRyxpEggmQIDAQAB"
 }
