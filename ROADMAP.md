@@ -507,10 +507,13 @@ collegato, con un giudizio e il perché.
   di Chromium).
 - **Come valuta, tutto in locale** (nessun sito visitato esce dal browser):
   - indirizzo simile a un marchio noto ma diverso (i controlli "lookalike" che Chromium ha già):
-    possibile sito falso, quindi sconsigliato e con avviso. Il servizio di Chromium si ferma senza
-    la configurazione Safety Tips, che arriva dagli aggiornamenti dei componenti spenti in
-    Cromite: l'assistente chiama direttamente i controlli con una configurazione vuota. Per lo
-    stesso motivo in Shannon manca anche l'avviso di Chromium aprendo un indirizzo simile;
+    possibile sito falso, quindi sconsigliato e con avviso. Gli stessi controlli fanno anche
+    l'avviso di Chromium aprendo un indirizzo simile, che Cromite aveva spento: lo riaccende la
+    patch `common/0027`, con una configurazione Safety Tips vuota al posto di quella scaricata,
+    che qui non arriva. Pagina "Forse intendevi paypal.com?" per le imitazioni difficili da
+    vedere (pаypal.com con la "а" cirillica, paypal.com dentro un altro indirizzo), suggerimento
+    di sicurezza per le lettere scambiate (googel.com). Una sola lettera diversa (paypa1.com) per
+    Chromium dà troppi falsi allarmi e non avvisa: la segnala solo l'assistente, dopo l'accesso;
   - il sito è anche una rete di tracciamento presente su molti altri siti: si può ricordare,
     perché da noi i cookie restano separati per sito, ma l'assistente lo segnala. Gli elenchi
     pronti (Disconnect, Ghostery, DuckDuckGo Tracker Radar) sono tutti CC BY-NC-SA 4.0, quindi

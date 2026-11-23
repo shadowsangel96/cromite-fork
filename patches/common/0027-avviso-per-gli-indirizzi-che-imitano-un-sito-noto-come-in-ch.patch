@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 17:23:01 +0100
+Subject: [PATCH] Avviso per gli indirizzi che imitano un sito noto, come in
+ Chromium
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Chromium avvisa quando apri un indirizzo che imita un sito noto: con la pagina "Forse intendevi
+paypal.com?" quando l'imitazione si vede a fatica (pаypal.com con una "а" cirillica, oppure
+paypal.com dentro un altro indirizzo), con un suggerimento di sicurezza nei casi più leggeri
+(lettere scambiate, come googel.com). Come in Chromium, una sola lettera diversa (paypa1.com)
+non fa uscire avvisi, perché darebbe troppi falsi allarmi. In Cromite non succedeva per due
+motivi: la patch delle metriche toglieva il controllo dalla navigazione, e i controlli si
+fermavano senza la configurazione Safety Tips, che arriva solo con il component updater e qui
+non arriva mai. Ora il controllo è di nuovo nella navigazione e, senza la configurazione
+scaricata, si usa una configurazione vuota: valgono l'elenco dei siti noti incluso in Chromium
+e i siti che usi spesso, manca solo l'elenco remoto delle eccezioni. Tutto avviene nel browser,
+senza chiedere niente a nessun server; le metriche restano spente come prima.
+
+Fork-Patch: common/0027-avviso-per-gli-indirizzi-che-imitano-un-sito-noto-come-in-ch.patch
+
+diff --git a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
+index 8ddbade9e2832db492fc665e8782607c65bd9c8b..fb8670b9a5fc756339fb6de9ec818333a3f9a096 100644
+--- a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
++++ b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
+@@ -19,6 +19,7 @@
+ #include "chrome/browser/glic/glic_navigation_throttle.h"
+ #include "chrome/browser/history/history_service_factory.h"
+ #include "chrome/browser/interstitials/enterprise_util.h"
++#include "chrome/browser/lookalikes/lookalike_url_navigation_throttle.h"
+ #include "chrome/browser/omnibox/geolocation_navigation_throttle.h"
+ #include "chrome/browser/plugins/pdf_iframe_navigation_throttle.h"
+ #include "chrome/browser/policy/chrome_policy_blocklist_service_factory.h"
+@@ -394,6 +395,10 @@ void CreateAndAddChromeThrottlesForNavigation(
+     throttle_manager->MaybeCreateAndAddNavigationThrottles(registry);
+   }
+ 
++  // Fork: Cromite removed this together with the metrics; it is what warns
++  // before opening an address that imitates a well-known site.
++  LookalikeUrlNavigationThrottle::MaybeCreateAndAdd(registry);
++
+   PDFIFrameNavigationThrottle::MaybeCreateAndAdd(registry);
+ 
+ #if BUILDFLAG(ENABLE_PDF)
+diff --git a/components/lookalikes/core/safety_tips_config.cc b/components/lookalikes/core/safety_tips_config.cc
+index 95f11bb37089b6ad9cde8f8e78a6b5fd3b2493c7..b0403533426e1e5e545acc56fc37f9a9889b7434 100644
+--- a/components/lookalikes/core/safety_tips_config.cc
++++ b/components/lookalikes/core/safety_tips_config.cc
+@@ -121,7 +121,17 @@ void SetSafetyTipsRemoteConfigProto(
+ }
+ 
+ const reputation::SafetyTipsConfig* GetSafetyTipsRemoteConfigProto() {
+-  return SafetyTipsConfigSingleton::GetInstance().GetProto();
++  const reputation::SafetyTipsConfig* proto =
++      SafetyTipsConfigSingleton::GetInstance().GetProto();
++  if (proto) {
++    return proto;
++  }
++  // Fork: the Safety Tips component is never downloaded here, and without it
++  // the lookalike checks gave up. An empty configuration keeps them working
++  // with the built-in top domains and the sites the user engages with; only
++  // the remote allowlist is missing.
++  static const base::NoDestructor<reputation::SafetyTipsConfig> kEmptyConfig;
++  return kEmptyConfig.get();
+ }
+ 
+ bool IsUrlAllowlistedBySafetyTipsComponent(
