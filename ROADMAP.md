@@ -538,12 +538,24 @@ Le password restano nell'app Password di Apple (portachiavi iCloud). Il gestore 
 spento come già in Cromite (`Do-not-store-passwords-by-default.patch`,
 `Disable-privacy-issues-in-password-manager.patch`), così non ci sono doppioni.
 
+- **Prima serve Apple (verificato il 23 novembre 2026 su macOS 27):** il programma di Apple ha
+  dei vincoli di avvio nella firma e macOS lo lascia partire solo se lo avvia un'app con il
+  permesso `com.apple.developer.web-browser.public-key-credential` (quello che Apple concede ai
+  browser, serve anche per le passkey) oppure uno dei browser che Apple elenca per nome e team
+  (Chrome, Edge, Firefox, Brave, Vivaldi, Arc, Helium, ungoogled-chromium e altri). Avviato da
+  chiunque altro viene chiuso subito (codice 137). Quindi Shannon deve essere firmato con il
+  Developer ID e avere quel permesso, da chiedere ad Apple con il modulo "Request the macOS Web
+  Browser Public Key Credential Entitlement" (lo apre solo il titolare dell'account Developer).
+  Finché non c'è, non funziona nemmeno la riserva con l'estensione ufficiale: il programma
+  partirebbe sempre da Shannon.
 - **macOS, integrazione nativa:** il browser parla direttamente con il programma di Apple che fa
   da ponte verso le password (`PasswordManagerBrowserExtensionHelper`), lo stesso che usa
   l'estensione ufficiale "Password di iCloud". Le password compaiono nel menu di compilazione di
   Chromium, quelle nuove si salvano nell'app Password, e la prima volta macOS mostra un codice di
   6 cifre da inserire nel browser. Il protocollo non è documentato: il riferimento è il progetto
-  open source `au2001/icloud-passwords-firefox` (Apache-2.0).
+  open source `au2001/icloud-passwords-firefox` (Apache-2.0): SRP a 3072 bit con SHA-256 e
+  messaggi in AES-GCM. Il codice va reinserito a ogni nuovo avvio del programma di Apple, cioè a
+  ogni riavvio del browser, e il salvataggio di password nuove lì non è ancora ricostruito.
 - **Windows:** iCloud per Windows ha un ponte analogo, da verificare.
 - **Riserva:** se Apple cambia il protocollo, l'estensione ufficiale "Password di iCloud",
   configurata in automatico. Il browser registra da solo il programma di Apple, cosa che su
