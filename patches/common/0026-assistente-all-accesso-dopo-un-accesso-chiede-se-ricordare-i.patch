@@ -1,0 +1,1198 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: shadowsangel96 <188833096+shadowsangel96@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 10:20:18 +0100
+Subject: [PATCH] Assistente all'accesso: dopo un accesso chiede se ricordare
+ il sito, con un giudizio
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Con i cookie temporanei, dopo un accesso riuscito a un sito non ricordato esce dallo scudo il
+fumetto "Vuoi restare collegato?", come nella tavola "Fumetto Ricorda". Riconosce l'accesso con
+la password (il gestore delle password di Chromium lo vede anche con il salvataggio spento), con
+un account esterno (il rilevatore OAuth di Chromium) e con una passkey (WebAuthn). Il giudizio
+si calcola nel browser: indirizzo che imita un sito noto (controllo lookalike di Chromium:
+sconsigliato); sito che è anche una grande rete di tracciamento (elenco nostro), tracker
+bloccati da uBlock sulla pagina, cookie di analisi o pubblicitari riconosciuti con Open Cookie
+Database (con attenzione). "Ricorda" lo mette tra i siti ricordati; "Non ricordare" non lo
+chiede più su quel sito.
+
+Fork-Patch: common/0026-assistente-all-accesso-dopo-un-accesso-chiede-se-ricordare-i.patch
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index d41a5d44dc0f396efb13972cda66ba589b7c6cc1..fa92c1b737f59a1efa65cd631d284ba84d377397 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -846,6 +846,8 @@ source_set("core") {
+     "fork/personal_search.h",
+     "fork/personal_search_tab_helper.cc",
+     "fork/personal_search_tab_helper.h",
++    "fork/login_assistant.cc",
++    "fork/login_assistant.h",
+     "fork/site_dark_mode.cc",
+     "fork/site_dark_mode.h",
+     "fork/site_redirect.cc",
+diff --git a/chrome/browser/browser_resources.grd b/chrome/browser/browser_resources.grd
+index e19029ccca7d2a30b15898c78578f03cb9a29551..f7615668c3e6d68eac5b8d8a33d0c2fb81929b59 100644
+--- a/chrome/browser/browser_resources.grd
++++ b/chrome/browser/browser_resources.grd
+@@ -203,6 +203,8 @@
+       <include name="IDR_PROFILO_PANEL_JS" file="resources\profilo_panel.js" type="BINDATA" />
+       <include name="IDR_SITE_PANEL_HTML" file="resources\site_panel.html" type="BINDATA" />
+       <include name="IDR_SITE_PANEL_JS" file="resources\site_panel.js" type="BINDATA" />
++      <include name="IDR_LOGIN_ASSISTANT_HTML" file="resources\login_assistant.html" type="BINDATA" />
++      <include name="IDR_LOGIN_ASSISTANT_JS" file="resources\login_assistant.js" type="BINDATA" />
+       <if expr="not is_android or enable_extensions_core">
+         <!-- Page not available for guest. -->
+         <include name="IDR_PAGE_NOT_AVAILABLE_FOR_GUEST_APP_HTML" file="resources\page_not_available_for_guest\app.html" type="BINDATA" />
+diff --git a/chrome/browser/fork/login_assistant.cc b/chrome/browser/fork/login_assistant.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..6caa4bb1963daf66ee17ff685744cfe23c872d3a
+--- /dev/null
++++ b/chrome/browser/fork/login_assistant.cc
+@@ -0,0 +1,496 @@
++#include "chrome/browser/fork/login_assistant.h"
++
++#include <algorithm>
++#include <iterator>
++#include <string_view>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/no_destructor.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_util.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/values.h"
++#include "chrome/browser/extensions/extension_tab_util.h"
++#include "chrome/browser/fork/temporary_site_data_service.h"
++#include "chrome/browser/fork/ublock_extension.h"
++#include "chrome/browser/lookalikes/lookalike_url_service.h"
++#include "chrome/browser/lookalikes/lookalike_url_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/grit/fork_strings.h"
++#include "components/pref_registry/pref_registry_syncable.h"
++#include "components/prefs/pref_service.h"
++#include "components/lookalikes/core/lookalike_url_util.h"
++#include "components/lookalikes/core/safety_tips_config.h"
++#include "components/prefs/scoped_user_pref_update.h"
++#include "content/public/browser/browser_context.h"
++#include "content/public/browser/page.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/web_contents.h"
++#include "components/url_formatter/url_formatter.h"
++#include "net/base/url_util.h"
++#include "extensions/browser/extension_action.h"
++#include "extensions/browser/extension_action_manager.h"
++#include "extensions/browser/extension_registry.h"
++#include "services/network/public/mojom/cookie_manager.mojom.h"
++#include "ui/base/l10n/l10n_util.h"
++
++namespace browser_fork {
++
++namespace {
++
++// After the sign-in the site usually sets its cookies and moves to the next
++// page: the verdict waits for that.
++constexpr base::TimeDelta kSettleDelay = base::Milliseconds(1500);
++
++// With this many trackers blocked on the page the site is "with care".
++constexpr int kManyTrackers = 10;
++
++ShowLoginAssistantCallback& ShowCallback() {
++  static base::NoDestructor<ShowLoginAssistantCallback> callback;
++  return *callback;
++}
++
++enum class CookieKind {
++  kSite,
++  kAnalytics,
++  kAdvertising,
++};
++
++struct KnownCookie {
++  std::string_view name;
++  CookieKind kind;
++};
++
++struct VendorCookie {
++  std::string_view name;
++  std::string_view domain;
++  CookieKind kind;
++  bool prefix;
++};
++
++// The analytics and advertising cookies of the Open Cookie Database
++// (Apache-2.0), converted by tools/dati_accesso.py of the fork.
++#include "chrome/browser/fork/login_cookie_data.inc"
++
++bool InDomain(std::string_view domain, std::string_view site) {
++  return domain == site ||
++         (domain.size() > site.size() && domain.ends_with(site) &&
++          domain[domain.size() - site.size() - 1] == '.');
++}
++
++// What a cookie of `site` is for. Names that only mean something on the
++// domain of a company (SID on google.com) count only there.
++CookieKind ClassifyCookie(std::string_view name, std::string_view site) {
++  const auto* it = std::ranges::lower_bound(kGenericCookies, name, {},
++                                            &KnownCookie::name);
++  if (it != std::end(kGenericCookies) && it->name == name) {
++    return it->kind;
++  }
++  for (const KnownCookie& known : kGenericCookiePrefixes) {
++    if (name.starts_with(known.name)) {
++      return known.kind;
++    }
++  }
++  for (const VendorCookie& known : kVendorCookies) {
++    if ((known.prefix ? name.starts_with(known.name) : name == known.name) &&
++        InDomain(known.domain, site)) {
++      return known.kind;
++    }
++  }
++  return CookieKind::kSite;
++}
++
++// The big tracking networks, with the company: present on many other sites
++// with their pixels and scripts. A list of our own: the ready-made ones
++// (Disconnect, Ghostery, DuckDuckGo) are not under a free license.
++struct TrackingNetwork {
++  std::string_view domain;
++  std::string_view company;
++};
++constexpr TrackingNetwork kTrackingNetworks[] = {
++    {"facebook.com", "Meta"},        {"instagram.com", "Meta"},
++    {"messenger.com", "Meta"},       {"meta.com", "Meta"},
++    {"threads.net", "Meta"},         {"threads.com", "Meta"},
++    {"google.com", "Google"},        {"google.it", "Google"},
++    {"youtube.com", "Google"},       {"blogger.com", "Google"},
++    {"microsoft.com", "Microsoft"},  {"live.com", "Microsoft"},
++    {"outlook.com", "Microsoft"},    {"bing.com", "Microsoft"},
++    {"msn.com", "Microsoft"},        {"linkedin.com", "Microsoft"},
++    {"x.com", "X"},                  {"twitter.com", "X"},
++    {"tiktok.com", "TikTok"},        {"amazon.com", "Amazon"},
++    {"amazon.it", "Amazon"},         {"amazon.de", "Amazon"},
++    {"amazon.fr", "Amazon"},         {"amazon.es", "Amazon"},
++    {"amazon.co.uk", "Amazon"},      {"pinterest.com", "Pinterest"},
++    {"pinterest.it", "Pinterest"},   {"snapchat.com", "Snap"},
++    {"reddit.com", "Reddit"},        {"yahoo.com", "Yahoo"},
++    {"adobe.com", "Adobe"},          {"criteo.com", "Criteo"},
++    {"taboola.com", "Taboola"},      {"outbrain.com", "Outbrain"},
++    {"yandex.ru", "Yandex"},         {"yandex.com", "Yandex"},
++    {"baidu.com", "Baidu"},
++};
++
++std::optional<std::string_view> TrackingCompany(std::string_view site) {
++  for (const TrackingNetwork& network : kTrackingNetworks) {
++    if (InDomain(site, network.domain)) {
++      return network.company;
++    }
++  }
++  return std::nullopt;
++}
++
++// The domain that `url` imitates, if any. LookalikeUrlService stops when the
++// Safety Tips configuration is missing, and it comes from the component
++// updater, which Cromite turns off: the checks themselves (skeletons of the
++// top domains, edit distance, character swaps) are in the browser and work
++// with an empty configuration.
++std::optional<std::string> LookalikeOf(Profile* profile, const GURL& url) {
++  const std::string host(url.host());
++  if (!url.SchemeIsHTTPOrHTTPS() || net::HostStringIsLocalhost(host) ||
++      net::IsHostnameNonUnique(host) ||
++      lookalikes::GetETLDPlusOne(host).empty() ||
++      lookalikes::IsSafeTLD(host) || url_formatter::IsTopDomain(url)) {
++    return std::nullopt;
++  }
++  LookalikeUrlService* service =
++      LookalikeUrlServiceFactory::GetForProfile(profile);
++  // DomainInfo cannot be assigned: the list is built once, here.
++  const std::vector<lookalikes::DomainInfo> engaged =
++      service ? service->GetLatestEngagedSites()
++              : std::vector<lookalikes::DomainInfo>();
++  const lookalikes::DomainInfo navigated = lookalikes::GetDomainInfo(url);
++  // A site the user uses a lot is not a fake one.
++  if (std::ranges::contains(engaged, navigated.domain_and_registry,
++                            &lookalikes::DomainInfo::domain_and_registry)) {
++    return std::nullopt;
++  }
++  static const base::NoDestructor<reputation::SafetyTipsConfig> kEmptyConfig;
++  const reputation::SafetyTipsConfig* config =
++      lookalikes::GetSafetyTipsRemoteConfigProto();
++  if (!config) {
++    config = kEmptyConfig.get();
++  }
++  std::string matched;
++  lookalikes::LookalikeUrlMatchType match_type;
++  if (lookalikes::GetMatchingDomain(
++          navigated, engaged,
++          base::BindRepeating(
++              &lookalikes::IsTargetHostAllowlistedBySafetyTipsComponent,
++              config),
++          config, &matched, &match_type) &&
++      !matched.empty()) {
++    return matched;
++  }
++  return std::nullopt;
++}
++
++bool CookieBelongsToSite(const net::CanonicalCookie& cookie,
++                         const std::string& site) {
++  std::string_view domain = cookie.Domain();
++  if (domain.starts_with('.')) {
++    domain.remove_prefix(1);
++  }
++  return domain == site || domain.ends_with("." + site);
++}
++
++// The number on the uBlock Origin icon for the tab: "12", "1k"...
++int BlockedTrackers(Profile* profile, content::WebContents* contents) {
++  const extensions::Extension* extension =
++      extensions::ExtensionRegistry::Get(profile)
++          ->enabled_extensions()
++          .GetByID(kUBlockExtensionId);
++  extensions::ExtensionAction* action =
++      extension ? extensions::ExtensionActionManager::Get(profile)
++                      ->GetExtensionAction(*extension)
++                : nullptr;
++  if (!action) {
++    return 0;
++  }
++  const std::string badge = action->GetDisplayBadgeText(
++      extensions::ExtensionTabUtil::GetTabId(contents));
++  size_t digits = 0;
++  while (digits < badge.size() && base::IsAsciiDigit(badge[digits])) {
++    ++digits;
++  }
++  int count = 0;
++  if (!base::StringToInt(std::string_view(badge).substr(0, digits), &count)) {
++    return 0;
++  }
++  if (digits < badge.size() && (badge[digits] == 'k' || badge[digits] == 'K')) {
++    count *= 1000;
++  }
++  return count;
++}
++
++std::u16string Count(int n) {
++  return base::NumberToString16(n);
++}
++
++}  // namespace
++
++LoginAssessment::LoginAssessment() = default;
++LoginAssessment::LoginAssessment(const LoginAssessment&) = default;
++LoginAssessment::~LoginAssessment() = default;
++
++void RegisterLoginAssistantPrefs(user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterListPref(kLoginAssistantDeclinedPref);
++}
++
++void SetShowLoginAssistantCallback(ShowLoginAssistantCallback callback) {
++  ShowCallback() = std::move(callback);
++}
++
++bool IsSiteRemembered(Profile* profile, const std::string& site) {
++  for (const base::Value& entry :
++       profile->GetPrefs()->GetList(kRememberedSitesPref)) {
++    if (!entry.is_string()) {
++      continue;
++    }
++    const std::string& text = entry.GetString();
++    const GURL url(text.find("://") == std::string::npos ? "https://" + text
++                                                          : text);
++    if (TemporarySiteDataService::SiteForUrl(url) == site) {
++      return true;
++    }
++  }
++  return false;
++}
++
++void OnLoginDetected(content::WebContents* contents,
++                     const GURL& url,
++                     LoginKind kind) {
++  if (!contents) {
++    return;
++  }
++  // An external sign-in in a popup: the popup shows the provider, and the
++  // question goes to the tab that opened it, the one of the site.
++  const std::string site = TemporarySiteDataService::SiteForUrl(url);
++  if (TemporarySiteDataService::SiteForUrl(contents->GetLastCommittedURL()) !=
++      site) {
++    content::RenderFrameHost* opener = contents->GetOpener();
++    content::WebContents* opener_contents =
++        opener ? content::WebContents::FromRenderFrameHost(opener) : nullptr;
++    if (!opener_contents ||
++        TemporarySiteDataService::SiteForUrl(
++            opener_contents->GetLastCommittedURL()) != site) {
++      return;
++    }
++    contents = opener_contents;
++  }
++  LoginAssistantTabHelper::CreateForWebContents(contents);
++  LoginAssistantTabHelper::FromWebContents(contents)->OnLoginDetected(url,
++                                                                      kind);
++}
++
++LoginAssistantTabHelper::LoginAssistantTabHelper(content::WebContents* contents)
++    : content::WebContentsObserver(contents),
++      content::WebContentsUserData<LoginAssistantTabHelper>(*contents) {}
++
++LoginAssistantTabHelper::~LoginAssistantTabHelper() = default;
++
++Profile* LoginAssistantTabHelper::GetProfile() {
++  return Profile::FromBrowserContext(web_contents()->GetBrowserContext());
++}
++
++void LoginAssistantTabHelper::OnLoginDetected(const GURL& url, LoginKind kind) {
++  Profile* profile = GetProfile();
++  if (profile->IsOffTheRecord()) {
++    return;
++  }
++  // Only temporary cookies forget the sign-in when the site is left.
++  if (profile->GetPrefs()->GetInteger(kCookieModePref) !=
++      static_cast<int>(CookieMode::kTemporary)) {
++    return;
++  }
++  const std::string site = TemporarySiteDataService::SiteForUrl(url);
++  if (site.empty() || asked_.contains(site) ||
++      IsSiteRemembered(profile, site)) {
++    return;
++  }
++  for (const base::Value& entry :
++       profile->GetPrefs()->GetList(kLoginAssistantDeclinedPref)) {
++    if (entry.is_string() && entry.GetString() == site) {
++      return;
++    }
++  }
++  asked_.insert(site);
++  pending_site_ = site;
++  pending_url_ = url;
++  pending_kind_ = kind;
++  timer_.Start(FROM_HERE, kSettleDelay,
++               base::BindOnce(&LoginAssistantTabHelper::Evaluate,
++                              weak_factory_.GetWeakPtr()));
++}
++
++void LoginAssistantTabHelper::Evaluate() {
++  // The user went to another site in the meantime.
++  if (TemporarySiteDataService::SiteForUrl(
++          web_contents()->GetLastCommittedURL()) != pending_site_) {
++    return;
++  }
++  web_contents()
++      ->GetBrowserContext()
++      ->GetDefaultStoragePartition()
++      ->GetCookieManagerForBrowserProcess()
++      ->GetAllCookies(base::BindOnce(&LoginAssistantTabHelper::OnCookies,
++                                     weak_factory_.GetWeakPtr(),
++                                     pending_site_));
++}
++
++void LoginAssistantTabHelper::OnCookies(
++    const std::string& site,
++    const std::vector<net::CanonicalCookie>& cookies) {
++  if (site != pending_site_ || TemporarySiteDataService::SiteForUrl(
++                                   web_contents()->GetLastCommittedURL()) !=
++                                   site) {
++    return;
++  }
++  Profile* profile = GetProfile();
++  LoginAssessment assessment;
++  assessment.site = site;
++  assessment.kind = pending_kind_;
++
++  std::vector<LoginReason> bad, warn, good;
++
++  // 1. An address that imitates a known one: possibly a fake site.
++  bool lookalike = false;
++  if (std::optional<std::string> imitated = LookalikeOf(profile, pending_url_)) {
++    lookalike = true;
++    bad.push_back({l10n_util::GetStringFUTF16(IDS_FORK_LOGIN_REASON_LOOKALIKE,
++                                              base::UTF8ToUTF16(*imitated)),
++                   ReasonTone::kBad});
++  }
++
++  // 2. The site is also a tracking network present on many other sites: it can
++  // be remembered (here cookies stay separate per site), with care.
++  if (std::optional<std::string_view> company = TrackingCompany(site)) {
++    warn.push_back({l10n_util::GetStringFUTF16(
++                        IDS_FORK_LOGIN_REASON_TRACKER_NETWORK,
++                        base::UTF8ToUTF16(*company)),
++                    ReasonTone::kWarn});
++  }
++
++  // 3. The trackers that the page tried to load (blocked by uBlock Origin).
++  const int trackers = BlockedTrackers(profile, web_contents());
++  if (trackers == 0) {
++    good.push_back({l10n_util::GetStringUTF16(IDS_FORK_LOGIN_REASON_NO_TRACKERS),
++                    lookalike ? ReasonTone::kNeutral : ReasonTone::kGood});
++  } else {
++    LoginReason reason{
++        trackers == 1
++            ? l10n_util::GetStringUTF16(IDS_FORK_LOGIN_REASON_ONE_TRACKER)
++            : l10n_util::GetStringFUTF16(IDS_FORK_LOGIN_REASON_TRACKERS,
++                                         Count(trackers)),
++        trackers >= kManyTrackers ? ReasonTone::kWarn : ReasonTone::kNeutral};
++    (trackers >= kManyTrackers ? warn : good).push_back(std::move(reason));
++  }
++
++  // 4. The cookies the site saved, by kind.
++  int own = 0, analytics = 0, advertising = 0;
++  for (const net::CanonicalCookie& cookie : cookies) {
++    if (!CookieBelongsToSite(cookie, site)) {
++      continue;
++    }
++    switch (ClassifyCookie(cookie.Name(), site)) {
++      case CookieKind::kSite:
++        ++own;
++        break;
++      case CookieKind::kAnalytics:
++        ++analytics;
++        break;
++      case CookieKind::kAdvertising:
++        ++advertising;
++        break;
++    }
++  }
++  if (own + analytics + advertising == 0) {
++    good.push_back({l10n_util::GetStringUTF16(IDS_FORK_LOGIN_REASON_NO_COOKIES),
++                    ReasonTone::kNeutral});
++  } else {
++    std::vector<std::u16string> parts;
++    if (own) {
++      parts.push_back(
++          l10n_util::GetStringFUTF16(IDS_FORK_LOGIN_COOKIES_SITE, Count(own)));
++    }
++    if (analytics) {
++      parts.push_back(l10n_util::GetStringFUTF16(
++          IDS_FORK_LOGIN_COOKIES_ANALYTICS, Count(analytics)));
++    }
++    if (advertising) {
++      parts.push_back(
++          advertising == 1
++              ? l10n_util::GetStringUTF16(IDS_FORK_LOGIN_COOKIES_ONE_AD)
++              : l10n_util::GetStringFUTF16(IDS_FORK_LOGIN_COOKIES_ADS,
++                                           Count(advertising)));
++    } else {
++      parts.push_back(l10n_util::GetStringUTF16(IDS_FORK_LOGIN_COOKIES_NO_ADS));
++    }
++    LoginReason reason{
++        l10n_util::GetStringFUTF16(IDS_FORK_LOGIN_REASON_COOKIES,
++                                   base::JoinString(parts, u", ")),
++        advertising ? ReasonTone::kWarn : ReasonTone::kGood};
++    (advertising ? warn : good).push_back(std::move(reason));
++  }
++
++  if (!lookalike) {
++    good.push_back({l10n_util::GetStringUTF16(IDS_FORK_LOGIN_REASON_REGULAR),
++                    ReasonTone::kGood});
++  }
++
++  if (lookalike) {
++    assessment.verdict = LoginVerdict::kNotRecommended;
++  } else if (!warn.empty()) {
++    assessment.verdict = LoginVerdict::kCaution;
++  } else {
++    assessment.verdict = LoginVerdict::kSafe;
++  }
++  // The worst reasons first, as in the board.
++  for (auto* list : {&bad, &warn, &good}) {
++    std::ranges::move(*list, std::back_inserter(assessment.reasons));
++  }
++  assessment_ = std::move(assessment);
++
++  if (ShowCallback()) {
++    ShowCallback().Run(web_contents());
++  }
++}
++
++void LoginAssistantTabHelper::Remember() {
++  if (!assessment_) {
++    return;
++  }
++  Profile* profile = GetProfile();
++  if (!IsSiteRemembered(profile, assessment_->site)) {
++    ScopedListPrefUpdate update(profile->GetPrefs(), kRememberedSitesPref);
++    update->Append(assessment_->site);
++  }
++  assessment_.reset();
++}
++
++void LoginAssistantTabHelper::Decline() {
++  if (!assessment_) {
++    return;
++  }
++  ScopedListPrefUpdate update(GetProfile()->GetPrefs(),
++                              kLoginAssistantDeclinedPref);
++  update->Append(assessment_->site);
++  assessment_.reset();
++}
++
++void LoginAssistantTabHelper::Dismiss() {
++  assessment_.reset();
++}
++
++void LoginAssistantTabHelper::PrimaryPageChanged(content::Page& page) {
++  // A question about a site that is no longer in the tab is stale.
++  if (assessment_ && TemporarySiteDataService::SiteForUrl(
++                         page.GetMainDocument().GetLastCommittedURL()) !=
++                         assessment_->site) {
++    assessment_.reset();
++  }
++}
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(LoginAssistantTabHelper);
++
++}  // namespace browser_fork
+diff --git a/chrome/browser/fork/login_assistant.h b/chrome/browser/fork/login_assistant.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..8fbcd017e8d4e62eb6b7744a676bb5b4197af4e9
+--- /dev/null
++++ b/chrome/browser/fork/login_assistant.h
+@@ -0,0 +1,132 @@
++#ifndef CHROME_BROWSER_FORK_LOGIN_ASSISTANT_H_
++#define CHROME_BROWSER_FORK_LOGIN_ASSISTANT_H_
++
++#include <optional>
++#include <set>
++#include <string>
++#include <vector>
++
++#include "base/functional/callback.h"
++#include "base/memory/weak_ptr.h"
++#include "base/timer/timer.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "content/public/browser/web_contents_user_data.h"
++#include "net/cookies/canonical_cookie.h"
++#include "url/gurl.h"
++
++class Profile;
++
++namespace user_prefs {
++class PrefRegistrySyncable;
++}
++
++namespace browser_fork {
++
++// The login assistant: with temporary cookies, after a successful sign-in on a
++// site that is not remembered, a bubble from the shield asks whether to stay
++// signed in there, with a verdict computed locally (ROADMAP, section 10).
++
++// The sites where the user answered "Don't remember": the bubble does not come
++// back there. "Remember this site" in the site panel still works.
++inline constexpr char kLoginAssistantDeclinedPref[] =
++    "fork.login_assistant_declined";
++
++void RegisterLoginAssistantPrefs(user_prefs::PrefRegistrySyncable* registry);
++
++enum class LoginKind {
++  kPassword,         // The password manager saw the form go through.
++  kExternalAccount,  // Back from an OAuth sign-in (Google, Apple...).
++  kPasskey,          // WebAuthn assertion.
++};
++
++enum class LoginVerdict {
++  kSafe,
++  kCaution,
++  kNotRecommended,
++};
++
++enum class ReasonTone {
++  kGood,
++  kWarn,
++  kBad,
++  kNeutral,
++};
++
++struct LoginReason {
++  std::u16string text;
++  ReasonTone tone;
++};
++
++struct LoginAssessment {
++  LoginAssessment();
++  LoginAssessment(const LoginAssessment&);
++  ~LoginAssessment();
++
++  std::string site;
++  LoginKind kind = LoginKind::kPassword;
++  LoginVerdict verdict = LoginVerdict::kSafe;
++  std::vector<LoginReason> reasons;
++};
++
++// From the sign-in hooks (password manager, login detection, WebAuthn).
++// `contents` can be a popup: then the tab that opened it is used.
++void OnLoginDetected(content::WebContents* contents,
++                     const GURL& url,
++                     LoginKind kind);
++
++// The browser window shows the bubble for `contents`, its active tab. Set by
++// the views code, which the browser code cannot include.
++using ShowLoginAssistantCallback =
++    base::RepeatingCallback<void(content::WebContents*)>;
++void SetShowLoginAssistantCallback(ShowLoginAssistantCallback callback);
++
++// Whether `site` is in the remembered sites (entries can be full addresses).
++bool IsSiteRemembered(Profile* profile, const std::string& site);
++
++class LoginAssistantTabHelper
++    : public content::WebContentsObserver,
++      public content::WebContentsUserData<LoginAssistantTabHelper> {
++ public:
++  LoginAssistantTabHelper(const LoginAssistantTabHelper&) = delete;
++  LoginAssistantTabHelper& operator=(const LoginAssistantTabHelper&) = delete;
++  ~LoginAssistantTabHelper() override;
++
++  void OnLoginDetected(const GURL& url, LoginKind kind);
++
++  // What the bubble shows; empty when there is nothing to ask.
++  const std::optional<LoginAssessment>& assessment() const {
++    return assessment_;
++  }
++
++  // The answers in the bubble.
++  void Remember();
++  void Decline();
++  void Dismiss();
++
++ private:
++  friend class content::WebContentsUserData<LoginAssistantTabHelper>;
++  explicit LoginAssistantTabHelper(content::WebContents* contents);
++
++  Profile* GetProfile();
++  void Evaluate();
++  void OnCookies(const std::string& site,
++                 const std::vector<net::CanonicalCookie>& cookies);
++
++  // content::WebContentsObserver:
++  void PrimaryPageChanged(content::Page& page) override;
++
++  std::string pending_site_;
++  GURL pending_url_;
++  LoginKind pending_kind_ = LoginKind::kPassword;
++  base::OneShotTimer timer_;
++  // Asked once per tab and site: several hooks can see the same sign-in.
++  std::set<std::string> asked_;
++  std::optional<LoginAssessment> assessment_;
++  base::WeakPtrFactory<LoginAssistantTabHelper> weak_factory_{this};
++
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++}  // namespace browser_fork
++
++#endif  // CHROME_BROWSER_FORK_LOGIN_ASSISTANT_H_
+diff --git a/chrome/browser/login_detection/login_detection_tab_helper.cc b/chrome/browser/login_detection/login_detection_tab_helper.cc
+index e0c9742f577eb5a65a66ad47a0441e8e8a6cdc78..fd2fe527fe747bc4401a48d2e8b3bb4a8d7b01a7 100644
+--- a/chrome/browser/login_detection/login_detection_tab_helper.cc
++++ b/chrome/browser/login_detection/login_detection_tab_helper.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/login_detection/login_detection_tab_helper.h"
+ 
++#include "chrome/browser/fork/login_assistant.h"
++
+ #include "base/metrics/histogram_functions.h"
+ #include "chrome/browser/login_detection/login_detection_keyed_service.h"
+ #include "chrome/browser/login_detection/login_detection_keyed_service_factory.h"
+@@ -175,6 +177,10 @@ void LoginDetectionTabHelper::WebContentsDestroyed() {
+ 
+ void LoginDetectionTabHelper::ProcessNewSignedInSite(
+     const GURL& signedin_site) {
++  // Fork: back from an external sign-in; the login assistant asks whether to
++  // stay signed in on the site.
++  browser_fork::OnLoginDetected(web_contents(), signedin_site,
++                                browser_fork::LoginKind::kExternalAccount);
+   prefs::SaveSiteToOAuthSignedInList(GetPrefs(web_contents()), signedin_site);
+   site_isolation::SiteIsolationPolicy::IsolateNewOAuthURL(
+       web_contents()->GetBrowserContext(), signedin_site);
+diff --git a/chrome/browser/password_manager/chrome_password_manager_client.cc b/chrome/browser/password_manager/chrome_password_manager_client.cc
+index d20c12c8167bb8bfac7f49a6b592f75eab45d68d..0199bc8d298ab46dd9d7d5af1b192ba54d560b7a 100644
+--- a/chrome/browser/password_manager/chrome_password_manager_client.cc
++++ b/chrome/browser/password_manager/chrome_password_manager_client.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/password_manager/chrome_password_manager_client.h"
+ 
++#include "chrome/browser/fork/login_assistant.h"
++
+ #include <memory>
+ #include <optional>
+ #include <string>
+@@ -858,6 +860,11 @@ bool ChromePasswordManagerClient::IsPasswordChangeOngoing() {
+ 
+ void ChromePasswordManagerClient::NotifyOnSuccessfulLogin(
+     const std::u16string& submitted_username) {
++  // Fork: a password sign-in went through (also with saving off, as in
++  // Cromite); the login assistant asks whether to stay signed in on the site.
++  browser_fork::OnLoginDetected(web_contents(),
++                                web_contents()->GetLastCommittedURL(),
++                                browser_fork::LoginKind::kPassword);
+ #if BUILDFLAG(IS_ANDROID)
+   if (!username_filled_by_touch_to_fill_) {
+     return;
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index 8b9dbff311b25a0f7d276ee216b655cdf3ed7564..e1ead4e28cb1fa639d26b1d7d0509a377908bb21 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -33,6 +33,7 @@
+ #include "chrome/browser/enterprise/reporting/prefs.h"
+ #include "chrome/browser/enterprise/util/managed_browser_utils.h"
+ #include "chrome/browser/external_protocol/external_protocol_handler.h"
++#include "chrome/browser/fork/login_assistant.h"
+ #include "chrome/browser/fork/site_dark_mode.h"
+ #include "chrome/browser/fork/site_redirect.h"
+ #include "chrome/browser/fork/temporary_site_data_service.h"
+@@ -1768,6 +1769,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+   browser_fork::VpnStatus::RegisterProfilePrefs(registry);
+   browser_fork::RegisterSiteRedirectPrefs(registry);
+   browser_fork::RegisterSiteDarkModePrefs(registry);
++  browser_fork::RegisterLoginAssistantPrefs(registry);
+   AccessibilityUIMessageHandler::RegisterProfilePrefs(registry);
+   accessibility_annotator::prefs::RegisterProfilePrefs(registry);
+   AimEligibilityService::RegisterProfilePrefs(registry);
+diff --git a/chrome/browser/resources/login_assistant.html b/chrome/browser/resources/login_assistant.html
+new file mode 100644
+index 0000000000000000000000000000000000000000..8ffc23116b80e240d44b75b6eb457746317661d8
+--- /dev/null
++++ b/chrome/browser/resources/login_assistant.html
+@@ -0,0 +1,69 @@
++<!doctype html>
++<html dir="$i18n{textdirection}" lang="$i18n{language}">
++<head>
++<meta charset="utf-8">
++<title>$i18n{forkLoginPanelLabel}</title>
++<style>
++:root {
++  --text: #1d1d1f; --sub: #5a5a60; --field: rgba(0,0,0,0.07); --sep: rgba(0,0,0,0.12);
++  --panel: #fafafc; --group: rgba(0,0,0,0.04); --accent: #0066d6; --on-accent: #ffffff;
++  --green: #157038; --green-bg: rgba(21,112,56,0.13); --orange: #9a4f00; --orange-bg: rgba(201,105,0,0.15);
++  --red: #c4001a; --red-bg: rgba(196,0,26,0.11); --grey: #8a8a90;
++}
++@media (prefers-color-scheme: dark) {
++  :root {
++    --text: #f5f5f7; --sub: #b3b3ba; --field: rgba(255,255,255,0.1); --sep: rgba(255,255,255,0.12);
++    --panel: #28282c; --group: rgba(255,255,255,0.05); --accent: #5aa9ff; --on-accent: #0b0b0d;
++    --green: #4cd27f; --green-bg: rgba(76,210,127,0.15); --orange: #ffad33; --orange-bg: rgba(255,173,51,0.15);
++    --red: #ff6b6b; --red-bg: rgba(255,107,107,0.15); --grey: #8a8a90;
++  }
++}
++html, body { margin: 0; width: 340px; background: var(--panel); }
++body { font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--text); text-align: left; }
++button { font: inherit; cursor: pointer; }
++#panel { box-sizing: border-box; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
++header { display: flex; align-items: flex-start; gap: 10px; }
++header > div { flex: 1; min-width: 0; }
++h1 { margin: 0; font-size: 15px; font-weight: 600; }
++#subtitle { margin-top: 2px; font-size: 12px; color: var(--sub); overflow-wrap: anywhere; }
++#subtitle strong { color: var(--text); font-weight: 600; }
++#close { width: 24px; height: 24px; flex-shrink: 0; border: 0; border-radius: 12px; background: var(--field); color: var(--sub); display: flex; align-items: center; justify-content: center; padding: 0; }
++#verdict { padding: 8px 10px; border-radius: 10px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
++#verdict span { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: currentColor; }
++#verdict.safe { background: var(--green-bg); color: var(--green); }
++#verdict.caution { background: var(--orange-bg); color: var(--orange); }
++#verdict.bad { background: var(--red-bg); color: var(--red); }
++.group { border-radius: 12px; background: var(--group); }
++.reason { padding: 7px 10px; display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.4; }
++.reason + .reason { border-top: 1px solid var(--sep); }
++.reason i { margin-top: 5px; width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; }
++.reason i.good { background: var(--green); }
++.reason i.warn { background: var(--orange); }
++.reason i.bad { background: var(--red); }
++.reason i.neutral { background: var(--grey); }
++#note { margin: 0; font-size: 11.5px; line-height: 1.4; color: var(--sub); }
++#buttons { display: flex; gap: 8px; }
++#buttons button { flex: 1; min-height: 30px; border: 0; border-radius: 15px; font-size: 13px; font-weight: 600; }
++.secondary { background: var(--field); color: var(--text); }
++.secondary.danger { color: var(--red); }
++.primary { background: var(--accent); color: var(--on-accent); }
++[hidden] { display: none !important; }
++</style>
++<script type="module" src="login_assistant.js"></script>
++</head>
++<body>
++<section id="panel" role="dialog" aria-labelledby="title">
++  <header>
++    <div>
++      <h1 id="title">$i18n{forkLoginTitle}</h1>
++      <div id="subtitle"></div>
++    </div>
++    <button id="close" aria-label="$i18n{forkClose}"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
++  </header>
++  <div id="verdict" role="status"><span aria-hidden="true"></span><b id="verdict-text"></b></div>
++  <div class="group" id="reasons"></div>
++  <p id="note"></p>
++  <div id="buttons"><button id="left"></button><button id="right"></button></div>
++</section>
++</body>
++</html>
+diff --git a/chrome/browser/resources/login_assistant.js b/chrome/browser/resources/login_assistant.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..555f6a17667fe17df072991bf378ea85128ca145
+--- /dev/null
++++ b/chrome/browser/resources/login_assistant.js
+@@ -0,0 +1,70 @@
++import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
++
++import './strings.m.js';
++
++// The login assistant's bubble, as in the board "Fumetto Ricorda".
++window.LoginAssistant = (function() {
++  'use strict';
++
++  const $ = (id) => document.getElementById(id);
++
++  // "You just signed in to $1", with the site in bold wherever it falls.
++  function subtitle(site) {
++    const parts = loadTimeData.getString('forkLoginSubtitle').split('$1');
++    const box = $('subtitle');
++    box.textContent = '';
++    parts.forEach((text, i) => {
++      if (i) {
++        const strong = document.createElement('strong');
++        strong.textContent = site;
++        box.appendChild(strong);
++      }
++      box.appendChild(document.createTextNode(text));
++    });
++  }
++
++  function loaded(s) {
++    subtitle(s.site);
++    $('verdict').className = s.verdict;
++    $('verdict-text').textContent = s.verdictText;
++    const list = $('reasons');
++    list.textContent = '';
++    for (const r of s.reasons) {
++      const row = document.createElement('div');
++      row.className = 'reason';
++      const dot = document.createElement('i');
++      dot.className = r.tone;
++      dot.setAttribute('aria-hidden', 'true');
++      const text = document.createElement('span');
++      text.textContent = r.text;
++      row.append(dot, text);
++      list.appendChild(row);
++    }
++    const bad = s.verdict === 'bad';
++    $('note').textContent = loadTimeData.getString(
++        bad ? 'forkLoginNoteNotRecommended' : 'forkLoginNoteRemember');
++    // Not recommended: "Don't remember" becomes the main button.
++    const left = $('left');
++    const right = $('right');
++    left.textContent = loadTimeData.getString(bad ? 'forkLoginRememberAnyway' : 'forkLoginDontRemember');
++    left.className = bad ? 'secondary danger' : 'secondary';
++    left.onclick = () => chrome.send(bad ? 'loginRemember' : 'loginDecline');
++    right.textContent = loadTimeData.getString(bad ? 'forkLoginDontRemember' : 'forkLoginRemember');
++    right.className = 'primary';
++    right.onclick = () => chrome.send(bad ? 'loginDecline' : 'loginRemember');
++  }
++
++  document.addEventListener('DOMContentLoaded', () => {
++    $('close').onclick = () => chrome.send('loginClose');
++    chrome.send('loginReady');
++  });
++
++  // The bubble stays in memory for a while: when it comes back, ask again.
++  document.addEventListener('visibilitychange', () => {
++    if (document.visibilityState === 'visible') {
++      chrome.send('loginReady');
++    }
++  });
++
++  return {loaded};
++})();
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+index 907e9edbaa7ed1cc4a663cc42c07a949562b5630..83a5942a73cb910afef5f1632f5c10e5ed1e4c2a 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -28,6 +28,7 @@
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/command_updater.h"
+ #include "chrome/browser/fork/fingerprinting_counter.h"
++#include "chrome/browser/fork/login_assistant.h"
+ #include "chrome/browser/page_info/merchant_trust_service_factory.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/search_engines/template_url_service_factory.h"
+@@ -67,6 +68,8 @@
+ #include "chrome/browser/ui/views/chrome_typography.h"
+ #include "chrome/browser/ui/view_ids.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "components/tabs/public/tab_interface.h"
+ #include "chrome/browser/ui/views/location_bar/content_setting_image_view.h"
+ #include "chrome/browser/ui/views/location_bar/location_bar_actions.h"
+ #include "chrome/browser/ui/views/location_bar/location_bar_layout.h"
+@@ -203,6 +206,25 @@ using views::View;
+ 
+ // LocationBarView -----------------------------------------------------------
+ 
++namespace {
++
++// The login assistant asks in the window of the tab, only when the tab is the
++// one in front.
++void ShowLoginAssistantForContents(content::WebContents* contents) {
++  tabs::TabInterface* tab = tabs::TabInterface::MaybeGetFromContents(contents);
++  if (!tab || !tab->IsActivated()) {
++    return;
++  }
++  BrowserWindowInterface* window = tab->GetBrowserWindowInterface();
++  BrowserView* view =
++      window ? BrowserView::GetBrowserViewForBrowser(window) : nullptr;
++  if (view && view->GetLocationBarView()) {
++    view->GetLocationBarView()->ShowLoginAssistant();
++  }
++}
++
++}  // namespace
++
+ LocationBarView::LocationBarView(Browser* browser,
+                                  Profile* profile,
+                                  CommandUpdater* command_updater,
+@@ -214,6 +236,12 @@ LocationBarView::LocationBarView(Browser* browser,
+       profile_(profile),
+       delegate_(delegate),
+       is_popup_mode_(is_popup_mode) {
++  static bool login_assistant_registered = false;
++  if (!login_assistant_registered) {
++    login_assistant_registered = true;
++    browser_fork::SetShowLoginAssistantCallback(
++        base::BindRepeating(&ShowLoginAssistantForContents));
++  }
+   if (browser_) {
+     pref_registrar_ = std::make_unique<PrefChangeRegistrar>();
+     pref_registrar_->Init(browser_->GetProfile()->GetPrefs());
+@@ -2236,6 +2264,27 @@ void LocationBarView::ShowSitePanel() {
+   site_panel_->ShowBubble(anchor, views::BubbleBorder::TOP_LEFT);
+ }
+ 
++void LocationBarView::ShowLoginAssistant() {
++  if (!browser_) {
++    return;
++  }
++  if (!login_assistant_) {
++    login_assistant_ = WebUIBubbleManager::Create<SitePanelUI>(
++        browser_.get(),
++        GURL(std::string(chrome::kChromeUISitePanelURL) +
++             "login_assistant.html"),
++        IDS_TOOLTIP_LOCATION_ICON);
++  }
++  if (site_panel_ && site_panel_->GetBubbleWidget()) {
++    site_panel_->CloseBubble();
++  }
++  // In the same place as the site panel.
++  gfx::Rect anchor = GetBoundsInScreen();
++  anchor.set_x(anchor.x() - 4);
++  anchor.set_size(gfx::Size(1, 42));
++  login_assistant_->ShowBubble(anchor, views::BubbleBorder::TOP_LEFT);
++}
++
+ void LocationBarView::UpdateUBlockButton() {
+   if (ublock_button_) {
+     ublock_button_->Update(GetWebContents(), ShouldUseSitePanel());
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.h b/chrome/browser/ui/views/location_bar/location_bar_view.h
+index def0bbe4eb6d0df90c8a0b52ff4d37432df09aa7..54115f1215ba6ad1f748e8e9dc7d4802ad85d9eb 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.h
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.h
+@@ -186,6 +186,9 @@ class LocationBarView
+   void UpdateUBlockButton();
+   void ShowUBlockPanel();
+ 
++  // The login assistant's bubble, from the shield (chrome/browser/fork/login_assistant.h).
++  void ShowLoginAssistant();
++
+   SelectedKeywordView* selected_keyword_view() {
+     return selected_keyword_view_;
+   }
+@@ -528,6 +531,7 @@ class LocationBarView
+ 
+   // The panel of the shield in the address field, created when first opened.
+   std::unique_ptr<WebUIBubbleManager> site_panel_;
++  std::unique_ptr<WebUIBubbleManager> login_assistant_;
+ 
+   // May be nullptr in tests.
+   const raw_ptr<Profile> profile_;
+diff --git a/chrome/browser/ui/webui/site_panel_ui.cc b/chrome/browser/ui/webui/site_panel_ui.cc
+index b820e1d1e84026b16b0a4e5ddc768e0b2afa6493..a8f2857042de8a0e42e1147ab742f533c85ee71b 100644
+--- a/chrome/browser/ui/webui/site_panel_ui.cc
++++ b/chrome/browser/ui/webui/site_panel_ui.cc
+@@ -11,6 +11,7 @@
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/browser/fork/fingerprinting_counter.h"
++#include "chrome/browser/fork/login_assistant.h"
+ #include "chrome/browser/fork/site_dark_mode.h"
+ #include "chrome/browser/fork/site_redirect.h"
+ #include "chrome/browser/fork/temporary_site_data_service.h"
+@@ -438,16 +439,138 @@ class SitePanelHandler : public content::WebUIMessageHandler {
+   base::CallbackListSubscription fingerprinting_subscription_;
+ };
+ 
++// The login assistant's bubble (login_assistant.html), on the same host as the
++// panel: what to answer about the sign-in in the active tab.
++class LoginAssistantHandler : public content::WebUIMessageHandler {
++ public:
++  LoginAssistantHandler() = default;
++  LoginAssistantHandler(const LoginAssistantHandler&) = delete;
++  LoginAssistantHandler& operator=(const LoginAssistantHandler&) = delete;
++  ~LoginAssistantHandler() override = default;
++
++  // content::WebUIMessageHandler:
++  void RegisterMessages() override {
++    const auto add = [this](const char* name,
++                            void (LoginAssistantHandler::*method)(
++                                const base::ListValue&)) {
++      web_ui()->RegisterMessageCallback(
++          name, base::BindRepeating(method, base::Unretained(this)));
++    };
++    add("loginReady", &LoginAssistantHandler::OnReady);
++    add("loginRemember", &LoginAssistantHandler::OnRemember);
++    add("loginDecline", &LoginAssistantHandler::OnDecline);
++    add("loginClose", &LoginAssistantHandler::OnClose);
++  }
++
++ private:
++  browser_fork::LoginAssistantTabHelper* GetHelper() {
++    BrowserWindowInterface* browser =
++        webui::GetBrowserWindowInterface(web_ui()->GetWebContents());
++    tabs::TabInterface* tab =
++        browser ? browser->GetActiveTabInterface() : nullptr;
++    content::WebContents* contents = tab ? tab->GetContents() : nullptr;
++    return contents
++               ? browser_fork::LoginAssistantTabHelper::FromWebContents(contents)
++               : nullptr;
++  }
++
++  void Close() {
++    if (auto embedder =
++            web_ui()->GetController()->GetAs<SitePanelUI>()->embedder()) {
++      embedder->CloseUI();
++    }
++  }
++
++  static const char* Tone(browser_fork::ReasonTone tone) {
++    switch (tone) {
++      case browser_fork::ReasonTone::kGood:
++        return "good";
++      case browser_fork::ReasonTone::kWarn:
++        return "warn";
++      case browser_fork::ReasonTone::kBad:
++        return "bad";
++      case browser_fork::ReasonTone::kNeutral:
++        return "neutral";
++    }
++  }
++
++  void OnReady(const base::ListValue& args) {
++    browser_fork::LoginAssistantTabHelper* helper = GetHelper();
++    if (!helper || !helper->assessment()) {
++      Close();
++      return;
++    }
++    const browser_fork::LoginAssessment& assessment = *helper->assessment();
++    base::DictValue state;
++    state.Set("site", assessment.site);
++    switch (assessment.verdict) {
++      case browser_fork::LoginVerdict::kSafe:
++        state.Set("verdict", "safe");
++        state.Set("verdictText",
++                  l10n_util::GetStringUTF16(IDS_FORK_LOGIN_VERDICT_SAFE));
++        break;
++      case browser_fork::LoginVerdict::kCaution:
++        state.Set("verdict", "caution");
++        state.Set("verdictText",
++                  l10n_util::GetStringUTF16(IDS_FORK_LOGIN_VERDICT_CAUTION));
++        break;
++      case browser_fork::LoginVerdict::kNotRecommended:
++        state.Set("verdict", "bad");
++        state.Set("verdictText", l10n_util::GetStringUTF16(
++                                     IDS_FORK_LOGIN_VERDICT_NOT_RECOMMENDED));
++        break;
++    }
++    base::ListValue reasons;
++    for (const browser_fork::LoginReason& reason : assessment.reasons) {
++      base::DictValue entry;
++      entry.Set("text", reason.text);
++      entry.Set("tone", Tone(reason.tone));
++      reasons.Append(std::move(entry));
++    }
++    state.Set("reasons", std::move(reasons));
++    AllowJavascript();
++    web_ui()->CallJavascriptFunctionUnsafe("LoginAssistant.loaded", state);
++    if (auto embedder =
++            web_ui()->GetController()->GetAs<SitePanelUI>()->embedder()) {
++      embedder->ShowUI();
++    }
++  }
++
++  void OnRemember(const base::ListValue& args) {
++    if (browser_fork::LoginAssistantTabHelper* helper = GetHelper()) {
++      helper->Remember();
++    }
++    Close();
++  }
++
++  void OnDecline(const base::ListValue& args) {
++    if (browser_fork::LoginAssistantTabHelper* helper = GetHelper()) {
++      helper->Decline();
++    }
++    Close();
++  }
++
++  void OnClose(const base::ListValue& args) {
++    if (browser_fork::LoginAssistantTabHelper* helper = GetHelper()) {
++      helper->Dismiss();
++    }
++    Close();
++  }
++};
++
+ }  // namespace
+ 
+ SitePanelUI::SitePanelUI(content::WebUI* web_ui)
+     : TopChromeWebUIController(web_ui, /*enable_chrome_send=*/true) {
+   web_ui->AddMessageHandler(std::make_unique<SitePanelHandler>());
++  web_ui->AddMessageHandler(std::make_unique<LoginAssistantHandler>());
+   content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+       Profile::FromWebUI(web_ui), chrome::kChromeUISitePanelHost);
+   source->AddLocalizedStrings(browser_fork::kForkSitePanelStrings);
+   source->UseStringsJs();
+   source->AddResourcePath("site_panel.js", IDR_SITE_PANEL_JS);
++  source->AddResourcePath("login_assistant.html", IDR_LOGIN_ASSISTANT_HTML);
++  source->AddResourcePath("login_assistant.js", IDR_LOGIN_ASSISTANT_JS);
+   source->SetDefaultResource(IDR_SITE_PANEL_HTML);
+ }
+ 
+diff --git a/chrome/browser/webauthn/chrome_authenticator_request_delegate.cc b/chrome/browser/webauthn/chrome_authenticator_request_delegate.cc
+index e3db47f1bacb3cbe0e19056379ad9791318c8ba2..e576fc8073e5a9e80f4f35b080978b86b7795f67 100644
+--- a/chrome/browser/webauthn/chrome_authenticator_request_delegate.cc
++++ b/chrome/browser/webauthn/chrome_authenticator_request_delegate.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/webauthn/chrome_authenticator_request_delegate.h"
+ 
++#include "chrome/browser/fork/login_assistant.h"
++
+ #include <algorithm>
+ #include <array>
+ #include <cstdint>
+@@ -414,6 +416,16 @@ void ChromeAuthenticatorRequestDelegate::OnTransactionSuccessful(
+   if (request_source != RequestSource::kWebAuthentication) {
+     return;
+   }
++  // Fork: a passkey sign-in; the login assistant asks whether to stay signed
++  // in on the site.
++  if (request_type == device::FidoRequestType::kGetAssertion) {
++    if (content::RenderFrameHost* rfh = GetRenderFrameHost()) {
++      browser_fork::OnLoginDetected(
++          content::WebContents::FromRenderFrameHost(rfh),
++          rfh->GetMainFrame()->GetLastCommittedURL(),
++          browser_fork::LoginKind::kPasskey);
++    }
++  }
+ #if BUILDFLAG(IS_MAC)
+   if (authenticator_type == device::AuthenticatorType::kTouchID) {
+     base::Time::Exploded exploded;

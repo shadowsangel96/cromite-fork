@@ -247,6 +247,30 @@
       <message name="IDS_FORK_SITE_PANEL_SITE_DARK" desc="Interface of the fork.">Site dark theme</message>
       <message name="IDS_FORK_SITE_DARK_ON_HERE" desc="Interface of the fork.">On for this site</message>
       <message name="IDS_FORK_SITE_DARK_OFF_HERE" desc="Interface of the fork.">Off for this site</message>
+      <message name="IDS_FORK_LOGIN_PANEL_LABEL" desc="Interface of the fork.">Stay signed in</message>
+      <message name="IDS_FORK_LOGIN_TITLE" desc="Interface of the fork.">Stay signed in?</message>
+      <message name="IDS_FORK_LOGIN_SUBTITLE" desc="Interface of the fork.">You just signed in to <ph name="SITE">$1</ph></message>
+      <message name="IDS_FORK_LOGIN_NOTE_REMEMBER" desc="Interface of the fork.">If you remember it, its cookies stay even when you leave the site. You can change your mind from the site panel.</message>
+      <message name="IDS_FORK_LOGIN_NOTE_NOT_RECOMMENDED" desc="Interface of the fork.">The browser doesn't remember it by itself: with temporary cookies, the sign-in is deleted as soon as you leave the site.</message>
+      <message name="IDS_FORK_LOGIN_REMEMBER" desc="Interface of the fork.">Remember</message>
+      <message name="IDS_FORK_LOGIN_DONT_REMEMBER" desc="Interface of the fork.">Don't remember</message>
+      <message name="IDS_FORK_LOGIN_REMEMBER_ANYWAY" desc="Interface of the fork.">Remember anyway</message>
+      <message name="IDS_FORK_LOGIN_VERDICT_SAFE" desc="Interface of the fork.">Safe to remember</message>
+      <message name="IDS_FORK_LOGIN_VERDICT_CAUTION" desc="Interface of the fork.">Remember with care</message>
+      <message name="IDS_FORK_LOGIN_VERDICT_NOT_RECOMMENDED" desc="Interface of the fork.">Not recommended</message>
+      <message name="IDS_FORK_LOGIN_REASON_REGULAR" desc="Interface of the fork.">Regular address: it doesn't imitate a known site</message>
+      <message name="IDS_FORK_LOGIN_REASON_LOOKALIKE" desc="Interface of the fork.">The address looks like <ph name="DOMAIN">$1</ph> but is different: it could be a fake site. Check the address before entering other data.</message>
+      <message name="IDS_FORK_LOGIN_REASON_TRACKER_NETWORK" desc="Interface of the fork.">Part of <ph name="COMPANY">$1</ph>, a tracking network present on many sites. Here its cookies stay separate for each site.</message>
+      <message name="IDS_FORK_LOGIN_REASON_NO_TRACKERS" desc="Interface of the fork.">No trackers on the page</message>
+      <message name="IDS_FORK_LOGIN_REASON_ONE_TRACKER" desc="Interface of the fork.">1 tracker blocked on this page</message>
+      <message name="IDS_FORK_LOGIN_REASON_TRACKERS" desc="Interface of the fork."><ph name="COUNT">$1</ph> trackers blocked on this page</message>
+      <message name="IDS_FORK_LOGIN_REASON_NO_COOKIES" desc="Interface of the fork.">No cookies saved yet</message>
+      <message name="IDS_FORK_LOGIN_REASON_COOKIES" desc="Interface of the fork.">Cookies: <ph name="LIST">$1</ph></message>
+      <message name="IDS_FORK_LOGIN_COOKIES_SITE" desc="Interface of the fork."><ph name="COUNT">$1</ph> of the site</message>
+      <message name="IDS_FORK_LOGIN_COOKIES_ANALYTICS" desc="Interface of the fork."><ph name="COUNT">$1</ph> for analytics</message>
+      <message name="IDS_FORK_LOGIN_COOKIES_ADS" desc="Interface of the fork."><ph name="COUNT">$1</ph> for advertising</message>
+      <message name="IDS_FORK_LOGIN_COOKIES_ONE_AD" desc="Interface of the fork.">1 for advertising</message>
+      <message name="IDS_FORK_LOGIN_COOKIES_NO_ADS" desc="Interface of the fork.">none for advertising</message>
       <message name="IDS_FORK_UBLOCK_INTEGRATED" desc="Interface of the fork."><ph name="NAME">$1</ph>, built into the browser</message>
       <message name="IDS_FORK_UBLOCK_INTRO" desc="Interface of the fork.">Blocks ads, trackers and dangerous sites on every page. To turn it off on a single site, use the button to the right of the address.</message>
       <message name="IDS_FORK_UBLOCK_FILTER_COUNT" desc="Interface of the fork."><ph name="NETWORK">$1</ph> network filters and <ph name="COSMETIC">$2</ph> cosmetic filters in use.</message>

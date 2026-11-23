@@ -496,22 +496,29 @@ siti"):
 sincronizza con il sync sul proprio server (task 5), come le altre impostazioni. Un elenco iniziale
 personale si importa al primo avvio da un file privato, fuori dal repo.
 
-**Assistente all'accesso.** Quando il browser riconosce che hai fatto l'accesso a un sito non
+**Assistente all'accesso** (fatto sul Mac, patch `common/0026`, tavola "Fumetto Ricorda"; manca
+"Ricorda solo l'accesso"). Quando il browser riconosce che hai fatto l'accesso a un sito non
 ricordato, chiede con un fumetto accanto all'indirizzo (come per "Salva password") se vuoi restare
 collegato, con un giudizio e il perché.
 
 - **Come riconosce l'accesso:** le euristiche del gestore delle password di Chromium (modulo con
-  la password inviato e poi sparito), più passkey/WebAuthn e il ritorno da un login esterno
-  (Google, Apple e simili).
+  la password inviato e poi sparito: arrivano anche con il salvataggio spento di Cromite), più
+  passkey/WebAuthn e il ritorno da un login esterno (Google, Apple e simili, il rilevatore OAuth
+  di Chromium).
 - **Come valuta, tutto in locale** (nessun sito visitato esce dal browser):
   - indirizzo simile a un marchio noto ma diverso (i controlli "lookalike" che Chromium ha già):
-    possibile sito falso, quindi sconsigliato e con avviso;
-  - il sito è anche una rete di tracciamento presente su molti altri siti (elenchi aperti come
-    quello di Disconnect, GPL-3.0): si può ricordare, perché da noi i cookie restano separati per
-    sito, ma l'assistente lo segnala;
+    possibile sito falso, quindi sconsigliato e con avviso. Il servizio di Chromium si ferma senza
+    la configurazione Safety Tips, che arriva dagli aggiornamenti dei componenti spenti in
+    Cromite: l'assistente chiama direttamente i controlli con una configurazione vuota. Per lo
+    stesso motivo in Shannon manca anche l'avviso di Chromium aprendo un indirizzo simile;
+  - il sito è anche una rete di tracciamento presente su molti altri siti: si può ricordare,
+    perché da noi i cookie restano separati per sito, ma l'assistente lo segnala. Gli elenchi
+    pronti (Disconnect, Ghostery, DuckDuckGo Tracker Radar) sono tutti CC BY-NC-SA 4.0, quindi
+    non utilizzabili in un browser open source: serve un elenco nostro dei grandi tracciatori;
   - quanti tracker ha cercato di caricare la pagina (li blocca già l'adblock);
-  - che cookie ha salvato il sito: di accesso, di analisi o pubblicitari, riconosciuti per nome
-    con l'Open Cookie Database (Apache-2.0).
+  - che cookie ha salvato il sito: del sito, di analisi o pubblicitari, riconosciuti per nome
+    con l'Open Cookie Database (Apache-2.0, `tools/dati_accesso.py`); i nomi generici (SID,
+    uid...) contano solo sul dominio dell'azienda che li usa.
 - **Risposta:** "Sicuro da ricordare", "Ricordabile con attenzione" o "Sconsigliato", con i
   motivi, e i pulsanti "Ricorda" e "Non ricordare".
 - **"Ricorda solo l'accesso":** tiene i cookie di accesso e cancella comunque quelli di analisi e

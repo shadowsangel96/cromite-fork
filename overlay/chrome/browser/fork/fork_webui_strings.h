@@ -107,6 +107,14 @@ inline constexpr webui::LocalizedString kForkSitePanelStrings[] = {
     {"forkSitePanelNoCookies", IDS_FORK_SITE_PANEL_NO_COOKIES},
     {"forkSitePanelNoPermissions", IDS_FORK_SITE_PANEL_NO_PERMISSIONS},
     {"forkSitePanelSiteDark", IDS_FORK_SITE_PANEL_SITE_DARK},
+    {"forkLoginPanelLabel", IDS_FORK_LOGIN_PANEL_LABEL},
+    {"forkLoginTitle", IDS_FORK_LOGIN_TITLE},
+    {"forkLoginSubtitle", IDS_FORK_LOGIN_SUBTITLE},
+    {"forkLoginNoteRemember", IDS_FORK_LOGIN_NOTE_REMEMBER},
+    {"forkLoginNoteNotRecommended", IDS_FORK_LOGIN_NOTE_NOT_RECOMMENDED},
+    {"forkLoginRemember", IDS_FORK_LOGIN_REMEMBER},
+    {"forkLoginDontRemember", IDS_FORK_LOGIN_DONT_REMEMBER},
+    {"forkLoginRememberAnyway", IDS_FORK_LOGIN_REMEMBER_ANYWAY},
 };
 
 // The strings of the page "profilo", for loadTimeData and $i18n{}.

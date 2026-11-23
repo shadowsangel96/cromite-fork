@@ -61,9 +61,17 @@ reports/             report di ogni aggiornamento
 tools/forkctl.py     lo strumento che gestisce tutto
 tools/fork_strings.py  dalle scritte di strings/ ai file di traduzione di Chromium
 tools/genera_icona.py  l'icona (Mac chiara e scura, pagine del browser, Windows) in overlay/
+tools/dati_accesso.py  i cookie di analisi e pubblicitari per l'assistente all'accesso, da Open Cookie Database
+licenze/             licenze dei dati di terze parti inclusi (Open Cookie Database, Apache-2.0)
 tools/build/         script di build completa per piattaforma
 tests/               test offline di forkctl
 ```
+
+## Dati di terze parti
+
+- `overlay/chrome/browser/fork/login_cookie_data.inc`: i cookie di analisi e pubblicitari di
+  [Open Cookie Database](https://github.com/jkwakman/Open-Cookie-Database), convertiti da
+  `tools/dati_accesso.py`. Licenza Apache-2.0, in `licenze/open-cookie-database/LICENSE`.
 
 ## Uso
 

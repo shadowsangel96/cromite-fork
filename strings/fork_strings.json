@@ -997,6 +997,174 @@
       "en": "Off for this site",
       "it": "Spento su questo sito"
     },
+    "loginPanelLabel": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Stay signed in",
+      "it": "Restare collegato"
+    },
+    "loginTitle": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Stay signed in?",
+      "it": "Vuoi restare collegato?"
+    },
+    "loginSubtitle": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "You just signed in to {SITE}",
+      "it": "Hai appena fatto l'accesso a {SITE}"
+    },
+    "loginNoteRemember": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "If you remember it, its cookies stay even when you leave the site. You can change your mind from the site panel.",
+      "it": "Se lo ricordi, i suoi cookie restano anche quando lasci il sito. Puoi cambiare idea dal pannello del sito."
+    },
+    "loginNoteNotRecommended": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "The browser doesn't remember it by itself: with temporary cookies, the sign-in is deleted as soon as you leave the site.",
+      "it": "Il browser non lo ricorda da solo: con i cookie temporanei, l'accesso si cancella appena lasci il sito."
+    },
+    "loginRemember": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Remember",
+      "it": "Ricorda"
+    },
+    "loginDontRemember": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Don't remember",
+      "it": "Non ricordare"
+    },
+    "loginRememberAnyway": {
+      "pages": [
+        "site_panel"
+      ],
+      "en": "Remember anyway",
+      "it": "Ricorda lo stesso"
+    },
+    "loginVerdictSafe": {
+      "pages": [
+        "native"
+      ],
+      "en": "Safe to remember",
+      "it": "Sicuro da ricordare"
+    },
+    "loginVerdictCaution": {
+      "pages": [
+        "native"
+      ],
+      "en": "Remember with care",
+      "it": "Ricordabile con attenzione"
+    },
+    "loginVerdictNotRecommended": {
+      "pages": [
+        "native"
+      ],
+      "en": "Not recommended",
+      "it": "Sconsigliato"
+    },
+    "loginReasonRegular": {
+      "pages": [
+        "native"
+      ],
+      "en": "Regular address: it doesn't imitate a known site",
+      "it": "Indirizzo regolare: non imita un sito noto"
+    },
+    "loginReasonLookalike": {
+      "pages": [
+        "native"
+      ],
+      "en": "The address looks like {DOMAIN} but is different: it could be a fake site. Check the address before entering other data.",
+      "it": "L'indirizzo somiglia a {DOMAIN} ma è diverso: potrebbe essere un sito falso. Controlla l'indirizzo prima di inserire altri dati."
+    },
+    "loginReasonTrackerNetwork": {
+      "pages": [
+        "native"
+      ],
+      "en": "Part of {COMPANY}, a tracking network present on many sites. Here its cookies stay separate for each site.",
+      "it": "Fa parte di {COMPANY}, una rete di tracciamento presente su molti siti. Da noi i suoi cookie restano separati per sito."
+    },
+    "loginReasonNoTrackers": {
+      "pages": [
+        "native"
+      ],
+      "en": "No trackers on the page",
+      "it": "Nessun tracker sulla pagina"
+    },
+    "loginReasonOneTracker": {
+      "pages": [
+        "native"
+      ],
+      "en": "1 tracker blocked on this page",
+      "it": "1 tracker bloccato su questa pagina"
+    },
+    "loginReasonTrackers": {
+      "pages": [
+        "native"
+      ],
+      "en": "{COUNT} trackers blocked on this page",
+      "it": "{COUNT} tracker bloccati su questa pagina"
+    },
+    "loginReasonNoCookies": {
+      "pages": [
+        "native"
+      ],
+      "en": "No cookies saved yet",
+      "it": "Ancora nessun cookie salvato"
+    },
+    "loginReasonCookies": {
+      "pages": [
+        "native"
+      ],
+      "en": "Cookies: {LIST}",
+      "it": "Cookie: {LIST}"
+    },
+    "loginCookiesSite": {
+      "pages": [
+        "native"
+      ],
+      "en": "{COUNT} of the site",
+      "it": "{COUNT} del sito"
+    },
+    "loginCookiesAnalytics": {
+      "pages": [
+        "native"
+      ],
+      "en": "{COUNT} for analytics",
+      "it": "{COUNT} di analisi"
+    },
+    "loginCookiesAds": {
+      "pages": [
+        "native"
+      ],
+      "en": "{COUNT} for advertising",
+      "it": "{COUNT} pubblicitari"
+    },
+    "loginCookiesOneAd": {
+      "pages": [
+        "native"
+      ],
+      "en": "1 for advertising",
+      "it": "1 pubblicitario"
+    },
+    "loginCookiesNoAds": {
+      "pages": [
+        "native"
+      ],
+      "en": "none for advertising",
+      "it": "nessuno pubblicitario"
+    },
     "ublockIntegrated": {
       "pages": [
         "settings"

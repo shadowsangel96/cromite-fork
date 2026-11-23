@@ -141,6 +141,30 @@
 <translation id="3007453032908061382">Tema scuro del sito</translation>
 <translation id="4218582337288390134">Acceso su questo sito</translation>
 <translation id="1224146699641109893">Spento su questo sito</translation>
+<translation id="8728502606594168500">Restare collegato</translation>
+<translation id="2168544276398163961">Vuoi restare collegato?</translation>
+<translation id="9109275248784156891">Hai appena fatto l'accesso a <ph name="SITE"/></translation>
+<translation id="4763948630812884873">Se lo ricordi, i suoi cookie restano anche quando lasci il sito. Puoi cambiare idea dal pannello del sito.</translation>
+<translation id="7491267243101664674">Il browser non lo ricorda da solo: con i cookie temporanei, l'accesso si cancella appena lasci il sito.</translation>
+<translation id="5017633213534173756">Ricorda</translation>
+<translation id="8301866536771671037">Non ricordare</translation>
+<translation id="320657072888803833">Ricorda lo stesso</translation>
+<translation id="3763516644050317209">Sicuro da ricordare</translation>
+<translation id="7265327716489490187">Ricordabile con attenzione</translation>
+<translation id="2405478748614624043">Sconsigliato</translation>
+<translation id="5935376290867663412">Indirizzo regolare: non imita un sito noto</translation>
+<translation id="1065026131704340169">L'indirizzo somiglia a <ph name="DOMAIN"/> ma è diverso: potrebbe essere un sito falso. Controlla l'indirizzo prima di inserire altri dati.</translation>
+<translation id="5389546076730489015">Fa parte di <ph name="COMPANY"/>, una rete di tracciamento presente su molti siti. Da noi i suoi cookie restano separati per sito.</translation>
+<translation id="5249072131834195399">Nessun tracker sulla pagina</translation>
+<translation id="3631874337731266360">1 tracker bloccato su questa pagina</translation>
+<translation id="6987230878790882611"><ph name="COUNT"/> tracker bloccati su questa pagina</translation>
+<translation id="3640846098451351345">Ancora nessun cookie salvato</translation>
+<translation id="3100432776583290814">Cookie: <ph name="LIST"/></translation>
+<translation id="1208501107416687623"><ph name="COUNT"/> del sito</translation>
+<translation id="1927867864480054543"><ph name="COUNT"/> di analisi</translation>
+<translation id="7557358219910302375"><ph name="COUNT"/> pubblicitari</translation>
+<translation id="5608564558272688707">1 pubblicitario</translation>
+<translation id="2677089480893268551">nessuno pubblicitario</translation>
 <translation id="4809667394477755111"><ph name="NAME"/>, integrato nel browser</translation>
 <translation id="6228324901909974185">Blocca pubblicità, tracker e siti pericolosi in tutte le pagine. Per spegnerlo su un solo sito c'è il pulsante a destra dell'indirizzo.</translation>
 <translation id="1624108739569780787"><ph name="NETWORK"/> filtri di rete e <ph name="COSMETIC"/> filtri cosmetici in uso.</translation>
