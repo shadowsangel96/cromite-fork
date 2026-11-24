@@ -318,9 +318,37 @@ geometria della tastiera...), userscript e altre impostazioni.
 
 ## 5. Sync sul proprio server
 
-- Server: `go-sync` di Brave (MPL-2.0) in Docker sul proprio NAS o server.
+- **Server: fatto (24 novembre 2026).** `go-sync` di Brave (MPL-2.0) in Docker, in
+  `server/go-sync`: go-sync a un commit fisso con la patch "solo le catene ammesse"
+  (`ALLOWED_CLIENT_IDS`; le altre catene vengono rifiutate e la loro chiave finisce nel log),
+  DynamoDB Local per i dati e Redis come cache. Acceso sul NAS, chiuso a tutti finché la
+  propria catena non esiste. Provato con `server/go-sync/prova.py` su un server di prova: la
+  catena ammessa legge i dati; una catena estranea, un token scaduto e una firma sbagliata sono
+  rifiutati; i dati restano dopo un riavvio completo.
 - Nel browser: indirizzo del server impostato nelle impostazioni di ogni dispositivo (mai nel
   codice), login Google sostituito da una chiave nostra, cifratura con passphrase.
+- **Nel browser, il piano (studiato su Brave 1.95, che usa Chromium 153 come noi; file MPL-2.0,
+  compatibili con le patch GPL di Cromite).** Codice della catena: 24 parole BIP39 → 32 byte →
+  HKDF-SHA512 → chiave Ed25519 (BoringSSL, niente Rust); token = timestamp firmato, come si
+  aspetta go-sync. Il servizio di sync di Chromium riceve un "account" finto ricavato dalla
+  chiave, senza Google: i criteri di Cromite che spengono l'accesso non danno fastidio, quello
+  che spegne la sync (`SyncDisabled`) va tolto. Gli indirizzi dei server di Google nel codice
+  diventano vuoti: la sync parla solo con l'indirizzo scelto nelle impostazioni (HTTP solo per
+  indirizzi di casa o Tailscale). La frase di cifratura (le parole stesse) si imposta in C++
+  prima di attivare qualsiasi tipo di dato; Brave la imposta dall'interfaccia, e per un attimo
+  i dati sarebbero protetti solo da una chiave nota. Tappe, circa 3.000 righe in tutto:
+  1. servizio di sync, account finto, token, indirizzo dalle impostazioni, via il criterio
+     `SyncDisabled` (circa 1.000 righe);
+  2. creare una catena e unirsi con le parole (circa 400);
+  3. segnalibri, cronologia, impostazioni e schede aperte, con cronologia e dispositivi
+     cifrati (circa 300);
+  4. elenco dei dispositivi, "Rimuovi dispositivo", uscire dalla catena (circa 350);
+  5. impostazioni sul Mac, partendo dalla tela (circa 1.000);
+  6. Windows (meno di 100).
+  Restano fuori: statistiche P3A, codici QR, la 25ª parola a scadenza di Brave, cancellazione
+  dell'account sul server.
+- **Finché Shannon non è firmato** (Developer ID, vedi 11) il codice della catena non può stare
+  nel portachiavi iCloud: sugli altri dispositivi si inserisce a mano, una volta.
 - Sicurezza: `go-sync` accetta qualunque client che si firmi da solo con una chiave ed25519,
   quindi va raggiungibile solo dalla rete privata (LAN o VPN come Tailscale) e accetta una sola
   catena di sync, la propria (vedi sotto); i dati restano cifrati anche sul server.

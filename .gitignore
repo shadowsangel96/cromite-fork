@@ -9,3 +9,6 @@ __pycache__/
 # impostazioni personali (siti da ricordare, ecc.): mai nel repo
 /.privato/
 /dist/
+# impostazioni del server di sync (indirizzi, chiavi): solo sul server
+/server/go-sync/.env
+/server/go-sync/*.chiave

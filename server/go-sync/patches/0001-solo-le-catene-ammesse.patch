@@ -1,0 +1,51 @@
+--- a/auth/auth.go
++++ b/auth/auth.go
+@@ -85,6 +85,16 @@
+ 		return "", errors.New("this client ID is blocked")
+ 	}
+ 
++	// Shannon: a private server serves only its own sync chain. When
++	// ALLOWED_CLIENT_IDS is set, every other client is refused, and its ID
++	// goes into the log so the owner can add a new chain on purpose.
++	if allowed := os.Getenv("ALLOWED_CLIENT_IDS"); allowed != "" {
++		allowedIDs := strings.Split(strings.ToLower(allowed), ",")
++		if !slices.Contains(allowedIDs, strings.ToLower(token.PublicKeyHex)) {
++			return "", fmt.Errorf("client ID not allowed: %s", strings.ToLower(token.PublicKeyHex))
++		}
++	}
++
+ 	return token.PublicKeyHex, nil
+ }
+ 
+--- a/auth/auth_test.go
++++ b/auth/auth_test.go
+@@ -39,6 +39,29 @@
+ 	suite.Require().Empty(id)
+ }
+ 
++func (suite *AuthTestSuite) TestAllowedClientIDs() {
++	tkn, _, publicKeyHex, err := authtest.GenerateToken(time.Now().UnixMilli())
++	suite.Require().NoError(err)
++	other, _, _, err := authtest.GenerateToken(time.Now().UnixMilli())
++	suite.Require().NoError(err)
++
++	// Only the listed chain gets in, whatever the hex casing.
++	suite.T().Setenv("ALLOWED_CLIENT_IDS", "nessuna,"+strings.ToUpper(publicKeyHex))
++	id, err := auth.Authenticate(tkn)
++	suite.Require().NoError(err)
++	suite.Require().Equal(publicKeyHex, id)
++
++	id, err = auth.Authenticate(other)
++	suite.Require().Error(err, "a chain that is not listed must be refused")
++	suite.Require().Empty(id)
++
++	// A list with no real chain refuses everyone.
++	suite.T().Setenv("ALLOWED_CLIENT_IDS", "nessuna")
++	id, err = auth.Authenticate(tkn)
++	suite.Require().Error(err)
++	suite.Require().Empty(id)
++}
++
+ func (suite *AuthTestSuite) TestAuthenticate() {
+ 	// invalid token format
+ 	id, err := auth.Authenticate(base64.URLEncoding.EncodeToString([]byte("||")))

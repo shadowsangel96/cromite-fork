@@ -1,0 +1,65 @@
+# Server di sync di Shannon. Le impostazioni stanno in .env, accanto a questo
+# file e mai nel repo (vedi .env.example). Va raggiungibile solo dalla rete di
+# casa e da Tailscale: nessuna porta aperta verso internet.
+name: ${NOME:-go-sync}
+
+x-dynamodb: &dynamodb
+  AWS_ACCESS_KEY_ID: locale
+  AWS_SECRET_ACCESS_KEY: locale
+  AWS_REGION: us-west-2
+  AWS_ENDPOINT: http://dynamodb:8000
+  TABLE_NAME: client-entity
+
+services:
+  sync:
+    build: .
+    image: shannon-go-sync:local
+    restart: unless-stopped
+    depends_on:
+      tabella:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    environment:
+      <<: *dynamodb
+      REDIS_URL: redis:6379
+      # Le catene ammesse; "nessuna" finché non c'è la propria.
+      ALLOWED_CLIENT_IDS: ${ALLOWED_CLIENT_IDS:?manca ALLOWED_CLIENT_IDS in .env}
+    ports:
+      - "${PORTA:-8295}:8295"
+
+  tabella:
+    image: shannon-go-sync:local
+    command: ["crea-tabella"]
+    restart: "no"
+    depends_on:
+      - dynamodb
+    environment:
+      <<: *dynamodb
+
+  # Il volume nuovo appartiene a root: lo si dà all'utente di DynamoDB Local (uid 1000).
+  permessi:
+    image: alpine:3.24
+    restart: "no"
+    command: ["chown", "1000:1000", "/dati"]
+    volumes:
+      - dati:/dati
+
+  dynamodb:
+    image: amazon/dynamodb-local:3.3.2
+    restart: unless-stopped
+    depends_on:
+      permessi:
+        condition: service_completed_successfully
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/home/dynamodblocal/data"]
+    volumes:
+      - dati:/home/dynamodblocal/data
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    # Solo cache: niente da salvare su disco.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+volumes:
+  dati:
