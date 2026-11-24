@@ -548,6 +548,15 @@ spento come già in Cromite (`Do-not-store-passwords-by-default.patch`,
   Browser Public Key Credential Entitlement" (lo apre solo il titolare dell'account Developer).
   Finché non c'è, non funziona nemmeno la riserva con l'estensione ufficiale: il programma
   partirebbe sempre da Shannon.
+- **Come si chiede:** il modulo è https://developer.apple.com/contact/request/macos-browsers-passkeys/.
+  La documentazione di Apple dice che serve il ruolo di titolare dell'account di
+  un'organizzazione; per gli account individuali non c'è una risposta ufficiale. Apple valuta
+  l'app con dei criteri: http e https registrati, all'avvio una barra per gli indirizzi o la
+  ricerca e, nella configurazione predefinita, andare dritti all'indirizzo chiesto senza
+  reindirizzare altrove. I redirect di Instagram e TikTok (patch `common/0020`) oggi sono accesi
+  di predefinito: se Apple chiede di provare Shannon vanno spenti di predefinito prima. Dopo il
+  sì il permesso compare tra le capacità dell'App ID; serve poi un profilo di provisioning
+  Developer ID con quel permesso, inserito nell'app e firmato sul Mac (mai nella CI pubblica).
 - **macOS, integrazione nativa:** il browser parla direttamente con il programma di Apple che fa
   da ponte verso le password (`PasswordManagerBrowserExtensionHelper`), lo stesso che usa
   l'estensione ufficiale "Password di iCloud". Le password compaiono nel menu di compilazione di
